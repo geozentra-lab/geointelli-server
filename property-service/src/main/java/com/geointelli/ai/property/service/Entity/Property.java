@@ -121,14 +121,13 @@ public class Property {
     parcel.setProperty(this);
 }
 
-public void setParcels(List<Parcel> parcels) {
-    if (parcels == null) {
-        this.parcels = new ArrayList<>();
-    } else {
-        // This creates a fresh, MUTABLE copy of whatever list was passed in
-        this.parcels = new ArrayList<>(parcels);
+    public void setParcels(List<Parcel> parcels) {
+        if (parcels == null) {
+            this.parcels = new ArrayList<>();
+        } else {
+            this.parcels = new ArrayList<>(parcels);
+        }
     }
-}
 
     private boolean isImmutable(List<?> list) {
         return list.getClass().getName().contains("Immutable") || 

@@ -177,5 +177,12 @@ public class PropertyServiceImpl implements PropertyService {
         property.getBuildings().addAll(buildings);
         // property.setBuildings(buildings);
     }
+
+    @Override
+    public List<String> getAllFolios() {
+        return propertyRepository.findAllFolios();
+    }
+
+
     
 }

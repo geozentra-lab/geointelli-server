@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.client.MiameDadeApiClient;
 import com.geointelli.ai.property.service.client.dto.PropertyApiResponse;
-import com.geointelli.ai.property.service.client.dto.PropertyInfo;
 import com.geointelli.ai.property.service.client.dto.SiteAddress;
 import com.geointelli.ai.property.service.entity.Address;
 import com.geointelli.ai.property.service.entity.Assessment;
@@ -45,7 +44,6 @@ import com.geointelli.ai.property.service.service.PropertyService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Mono;
 
 @Service
 @RequiredArgsConstructor
@@ -114,18 +112,16 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     //             .retrieve()
     //             .bodyToMono(PropertyInfo.class)
 
-    //             // 🔥 retry with backoff
     //             .retryWhen(
     //                 Retry.backoff(3, Duration.ofSeconds(2))
     //                     .maxBackoff(Duration.ofSeconds(10))
     //             )
 
     //             .doOnNext(propertyInfo -> {
-    //                 // map + save
     //                 saveProperty(propertyInfo);
     //             })
 
-    //             .then(); // return Mono<Void>
+    //             .then();
     // }
 
     private Property mapProperty(PropertyApiResponse api) {
@@ -240,6 +236,32 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
             property.setBuildings(new ArrayList<>());
         property.getBuildings().addAll(buildings);
         // property.setBuildings(buildings);
+    }
+
+    @Override
+    @Transactional
+    public void ingestBuildings(String folio){
+        try {
+            Property property = propertyRepository.findByFolio(folio).orElse(null);
+        if(property != null && property.getBuildings() == null){
+            String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
+            PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
+            List<Building> buildings = api.getBuilding().getBuildingInfos().stream()
+                .map(externalBuildingMapper::toDTO)
+                .map(buildingMapper::toEntity)
+                .peek(b -> b.setProperty(property))
+                .collect(Collectors.toList());
+            if(property.getBuildings() == null)
+                property.setBuildings(new ArrayList<>());
+            property.getBuildings().addAll(buildings); 
+            
+            propertyRepository.save(property);
+
+            log.info("Buildings refreshed for folio {}", folio);
+        }
+        } catch (Exception e) {
+            log.error("failed to ingest buildings", e);
+        }
     }
 
     private void attachParcel(String folio, Property property) {

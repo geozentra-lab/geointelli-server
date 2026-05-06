@@ -7,6 +7,6 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @Data
 @AllArgsConstructor
-public class ParcelNotFoundException extends Exception {
-    private Long parcelId;
+public class PropertyValuePredictionNotFoundException extends Exception {
+    private Long propertyId;
 }

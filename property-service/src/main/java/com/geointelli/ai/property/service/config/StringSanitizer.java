@@ -12,7 +12,6 @@ public class StringSanitizer {
     @AfterMapping
     public void sanitize(@MappingTarget Object target) {
         if (target == null) return;
-        // Your reflection logic here
         Field[] fields = target.getClass().getDeclaredFields();
         for (Field field : fields) {
             if (field.getType().equals(String.class)) {

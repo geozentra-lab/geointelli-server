@@ -5,36 +5,22 @@ import com.geointelli.ai.property.service.dto.GeometryDTO;
 import org.locationtech.jts.geom.*;
 import org.mapstruct.Mapper;
 import org.mapstruct.Named;
-import org.mapstruct.factory.Mappers;
-
 import java.util.ArrayList;
 import java.util.List;
 
 @Mapper(componentModel = "spring")
 public interface GeometryMapper {
 
-    // ================== Entity → DTO ==================
     @Named("toDTO")
-    default GeometryDTO toDTO(Geometry geom) {
+    default GeometryDTO toDTO(MultiPolygon geom) {
         if (geom == null) return null;
 
         GeometryDTO dto = new GeometryDTO();
         dto.setType(geom.getGeometryType());
-
-        if (geom instanceof Point p) {
-            dto.setCoordinates(new double[]{p.getX(), p.getY()});
-        } else if (geom instanceof Polygon polygon) {
-            dto.setCoordinates(convertPolygon(polygon));
-        } else if (geom instanceof MultiPolygon multiPolygon) {
-            dto.setCoordinates(convertMultiPolygon(multiPolygon));
-        } else if (geom instanceof LineString line) {
-            dto.setCoordinates(convertCoordinates(line.getCoordinates()));
-        }
-
+        dto.setCoordinates(convertMultiPolygon(geom));
         return dto;
     }
 
-    // ================== DTO → MultiPolygon ==================
     @Named("fromDTO")
     default MultiPolygon fromDTO(GeometryDTO dto) {
         if (dto == null) return null;
@@ -62,7 +48,6 @@ public interface GeometryMapper {
         return factory.createMultiPolygon(polygons);
     }
 
-    // ================== HELPERS ==================
     default LinearRing toLinearRing(List<double[]> coords, GeometryFactory factory) {
         Coordinate[] coordinates = coords.stream()
                 .map(c -> new Coordinate(c[0], c[1]))

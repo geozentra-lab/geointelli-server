@@ -1,8 +1,6 @@
 package com.geointelli.ai.property.service.mapper.external;
 
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-
 import com.geointelli.ai.property.service.client.dto.SalesInfo;
 import com.geointelli.ai.property.service.config.IgnoreUnmappedMapperConfig;
 import com.geointelli.ai.property.service.config.StringSanitizer;

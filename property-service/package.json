@@ -1,0 +1,15 @@
+{
+  "name": "property-service",
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "start:local": "dotenv -e .env -- mvn spring-boot:run -Dspring-boot.run.profiles=local",
+    "start:docker": "docker-compose up --build",
+    "stop:docker": "docker-compose down",
+    "restart:docker": "docker-compose down && docker-compose up --build",
+    "logs": "docker-compose logs -f",
+    "clean": "mvn clean"
+  },
+  "dependencies": {
+    "dotenv-cli": "^11.0.0"
+  }
+}
