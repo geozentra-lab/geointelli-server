@@ -15,7 +15,7 @@ import lombok.ToString;
 @Table(name = "buildings")
 @Getter
 @Setter
-@ToString
+@ToString(exclude = "property")
 public class Building {
 
     @Id

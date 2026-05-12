@@ -55,6 +55,55 @@ public interface GeometryMapper {
         return factory.createLinearRing(coordinates);
     }
 
+    /*
+    {
+        "type": "MultiPolygon",
+        "coordinates": [
+            [  // First Polygon
+            [  // Exterior ring of first polygon
+                [0, 0],
+                [4, 0],
+                [4, 4],
+                [0, 4],
+                [0, 0]
+            ],
+            [  // Interior ring (hole) of first polygon
+                [1, 1],
+                [2, 1],
+                [2, 2],
+                [1, 2],
+                [1, 1]
+            ]
+            ],
+            [  // Second Polygon
+            [  // Exterior ring of second polygon
+                [10, 10],
+                [12, 10],
+                [12, 12],
+                [10, 12],
+                [10, 10]
+            ],
+            [  // Interior ring (hole) of second polygon
+                [10.5, 10.5],
+                [11, 10.5],
+                [11, 11],
+                [10.5, 11],
+                [10.5, 10.5]
+            ]
+            ],
+            [  // Third Polygon (no holes)
+            [  // Exterior ring of third polygon
+                [20, 20],
+                [23, 20],
+                [23, 23],
+                [20, 23],
+                [20, 20]
+            ]
+            // No interior rings here
+            ]
+        ]
+    } */
+
     default List<double[]> convertCoordinates(Coordinate[] coordinates) {
         List<double[]> list = new ArrayList<>();
         for (Coordinate c : coordinates) list.add(new double[]{c.getX(), c.getY()});

@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.geointelli.ai.property.service.client.dto.PropertyApiResponse;
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.mapper.PropertyMapper;
-import com.geointelli.ai.property.service.mapper.PropertyMapperImpl;
 import com.geointelli.ai.property.service.mapper.external.ExternalPropertyMapper;
 import lombok.AllArgsConstructor;
 

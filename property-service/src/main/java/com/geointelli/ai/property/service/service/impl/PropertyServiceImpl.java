@@ -183,6 +183,8 @@ public class PropertyServiceImpl implements PropertyService {
         return propertyRepository.findAllFolios();
     }
 
-
-    
+    @Override
+    public List<Long> getAllIds() {
+        return propertyRepository.findAllIds();
+    }
 }

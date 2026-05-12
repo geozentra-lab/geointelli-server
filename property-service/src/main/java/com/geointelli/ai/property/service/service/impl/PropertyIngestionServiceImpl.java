@@ -240,6 +240,31 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
 
     @Override
     @Transactional
+    public void ingestAddresses(String folio){
+        try {
+            Property property = propertyRepository.findByFolio(folio).orElse(null);
+        if(property != null && property.getAddress() == null){
+            String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
+            PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
+            List<SiteAddress> addresses = api.getSiteAddress();     
+            if(!addresses.isEmpty()){
+                Address address = addressMapper.toEntity(externalAddressMapper.toDTO(addresses.get(0)));
+                property.setAddress(address);
+                address.setProperty(property);
+                System.out.println("----------------------address:---------"+address);
+            }
+            
+            propertyRepository.save(property);
+
+            log.info("Buildings refreshed for folio {}", folio);
+        }
+        } catch (Exception e) {
+            log.error("failed to ingest buildings", e);
+        }
+    }
+
+    @Override
+    @Transactional
     public void ingestBuildings(String folio){
         try {
             Property property = propertyRepository.findByFolio(folio).orElse(null);

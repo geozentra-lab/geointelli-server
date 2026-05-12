@@ -17,9 +17,9 @@ import lombok.ToString;
 @Table(name = "owners")
 @Getter
 @Setter
-@ToString
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = "property")
 public class Owner {
 
     @Id

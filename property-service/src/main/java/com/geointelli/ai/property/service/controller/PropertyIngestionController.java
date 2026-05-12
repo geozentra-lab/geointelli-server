@@ -3,14 +3,19 @@ package com.geointelli.ai.property.service.controller;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.manager.PropertyIngestionManager;
+import com.geointelli.ai.property.service.repository.PropertyRepository;
+import com.geointelli.ai.property.service.service.AddressService;
 import com.geointelli.ai.property.service.service.ParcelService;
 import com.geointelli.ai.property.service.service.PropertyIngestionService;
 import com.geointelli.ai.property.service.service.PropertyService;
@@ -27,6 +32,8 @@ public class PropertyIngestionController {
     private final PropertyIngestionManager propertyIngestionManager;
     private final ParcelService parcelService;
     private final PropertyService propertyService;
+    private final AddressService addressService;
+    private final PropertyRepository propertyRepository;
     private final PropertyIngestionService propertyIngestionService;
 
     @PostMapping("/run")
@@ -53,5 +60,25 @@ public class PropertyIngestionController {
         //     propertyIngestionService.ingest(folio);
         // }
         return ResponseEntity.ok("Property ingestion started");
+    }
+
+    @PostMapping("/ingestbuildings")
+    public ResponseEntity<String> runBuildingsIngestion() {
+        log.info("Buildings ingestion triggered via API");
+        propertyIngestionManager.ingestAllBuildings(propertyService.getAllFolios());
+        return ResponseEntity.ok("Buildings ingestion started");
+    }
+
+    @PostMapping("/ingestaddresses")
+    public ResponseEntity<String> runAddressesIngestion() {
+        List<Long> allPropertiesId = propertyService.getAllIds();
+        Set<Long> currentAddressesPropertyId = new HashSet<>(addressService.getAllPropertiesId());
+        List<Long> nonExistingIds = allPropertiesId.stream().filter(propertyId -> !currentAddressesPropertyId.contains(propertyId))
+                                                    .toList();
+        List<String> nonExistingFolios = nonExistingIds.stream().map(propertyRepository::findById)
+                                                            .flatMap(Optional::stream).map(Property::getFolio).collect(Collectors.toList());                                                    
+        log.info("Addresses ingestion triggered via API");
+        propertyIngestionManager.ingestAllAddresses(nonExistingFolios);
+        return ResponseEntity.ok("Addresses ingestion started");
     }
 }

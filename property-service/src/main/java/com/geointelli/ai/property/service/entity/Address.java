@@ -15,9 +15,9 @@ import lombok.ToString;
 @Table(name = "addresses")
 @Getter
 @Setter
-@ToString
 @AllArgsConstructor
 @NoArgsConstructor
+@ToString(exclude = "property")
 public class Address {
 
     @Id

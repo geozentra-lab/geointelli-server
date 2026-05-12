@@ -83,6 +83,59 @@ public class PropertyIngestionManager {
         }
     }
 
+    public void ingestAllAddresses(List<String> folios) {
+        
+        if (!running.compareAndSet(false, true)) {
+            log.warn("Addresses ingestion already running. Skipping...");
+            return;
+        }
+
+        try {
+            int batchSize = 50;
+
+            for (int i = 0; i < folios.size(); i += batchSize) {
+                List<String> batch = folios.subList(i, Math.min(i + batchSize, folios.size()));
+
+                List<Future<?>> futures = batch.stream()
+                    .map(folio -> executor.submit(() -> {
+                        int attempts = 0;
+
+                        while (attempts < 3) {
+                            try {
+                                semaphore.acquire();
+                                propertyIngestionService.ingestAddresses(folio);
+                                log.info("Success folio {}", folio);
+                                return;
+                            } catch (Exception e) {
+                                attempts++;
+                                log.warn("Retry {} for folio {}", attempts, folio);
+                            } finally {
+                                semaphore.release();
+                            }
+                        }
+
+                        log.error("Failed permanently for folio {}", folio);
+                    }))
+                    .collect(Collectors.toList());
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (Exception e) {
+                        log.error("Batch execution error", e);
+                    }
+                }
+
+                Thread.sleep(2000);
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            running.set(false);
+        }
+    }
+
     public void ingestAllFolios(List<String> folios) {
 
         if (!running.compareAndSet(false, true)) {

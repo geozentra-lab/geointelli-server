@@ -15,4 +15,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long>{
 
     @Query("SELECT folio FROM Property p")
     List<String> findAllFolios();
+
+    @Query("SELECT p.id from Property p")
+    List<Long> findAllIds();
 }

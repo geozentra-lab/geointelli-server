@@ -8,4 +8,5 @@ public interface PropertyService {
     public Property saveProperty(Property property);
     public Property getByFolio(String folio);
     public List<String> getAllFolios();
+    public List<Long> getAllIds();
 }

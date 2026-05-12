@@ -1,8 +1,7 @@
 package com.geointelli.ai.property.service.service;
 
-import org.springframework.stereotype.Service;
+import java.util.List;
 
-@Service
 public interface AddressService {
-
+    public List<Long> getAllPropertiesId();
 }

@@ -13,7 +13,7 @@ import lombok.ToString;
 @Table(name = "extra_features")
 @Getter
 @Setter
-@ToString
+@ToString(exclude = "property")
 public class ExtraFeature {
 
     @Id
