@@ -84,7 +84,7 @@ public class PropertyServiceImpl implements PropertyService {
     @Override
     public Property getByFolio(String folio) {
         try {
-             String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
+            String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
 
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
             Property property = propertyMapper.toEntity(externalPropertyMapper.toDTO(api.getPropertyInfo()));

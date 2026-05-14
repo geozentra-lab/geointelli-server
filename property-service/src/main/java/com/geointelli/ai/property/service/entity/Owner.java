@@ -19,7 +19,7 @@ import lombok.ToString;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = "property")
+@ToString(exclude = "properties")
 public class Owner {
 
     @Id

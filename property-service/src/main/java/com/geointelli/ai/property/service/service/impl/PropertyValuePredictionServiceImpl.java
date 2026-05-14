@@ -21,6 +21,6 @@ public class PropertyValuePredictionServiceImpl implements PropertyValuePredicti
     @Override
     public PropertyValuePrediction getPropertyValuePredictionById(Long propertyId) throws PropertyValuePredictionNotFoundException{
         return propertyValuePredictionRepository.findByPropertyId(propertyId)
-                .orElseThrow(() -> new PropertyValuePredictionNotFoundException(propertyId));
+                .orElseThrow(() -> new PropertyValuePredictionNotFoundException("prrediction value not found for property with id : " + propertyId));
     }
 }
