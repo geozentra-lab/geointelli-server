@@ -1,12 +1,12 @@
 package com.geointelli.ai.property.service.exception;
 
-import lombok.AllArgsConstructor;
+import com.geointelli.ai.property.service.exception.base.ResourceNotFoundException;
+
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
-@AllArgsConstructor
-public class PropertyNotFoundException extends Exception {
-    private Long propertyId;
+public class PropertyNotFoundException extends ResourceNotFoundException {
+    public PropertyNotFoundException(String message) { super(message); }
 }
