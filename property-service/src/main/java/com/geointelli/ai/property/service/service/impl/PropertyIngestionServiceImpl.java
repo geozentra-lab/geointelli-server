@@ -256,10 +256,10 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
             
             propertyRepository.save(property);
 
-            log.info("Buildings refreshed for folio {}", folio);
+            log.info("Addresses refreshed for folio {}", folio);
         }
         } catch (Exception e) {
-            log.error("failed to ingest buildings", e);
+            log.error("failed to ingest addresses", e);
         }
     }
 

@@ -14,6 +14,7 @@ import com.geointelli.ai.property.service.entity.Owner;
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.entity.Sale;
 import com.geointelli.ai.property.service.entity.Tax;
+import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.mapper.AddressMapper;
 import com.geointelli.ai.property.service.mapper.AssessmentMapper;
 import com.geointelli.ai.property.service.mapper.BuildingMapper;
@@ -38,6 +39,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.client.MiameDadeApiClient;
 import com.geointelli.ai.property.service.client.dto.PropertyApiResponse;
 import com.geointelli.ai.property.service.client.dto.SiteAddress;
+import com.geointelli.ai.property.service.dto.PropertyDTO;
 
 import jakarta.transaction.Transactional;
 import lombok.Data;
@@ -82,14 +84,20 @@ public class PropertyServiceImpl implements PropertyService {
     }
 
     @Override
-    public Property getByFolio(String folio) {
+    public PropertyDTO getByFolio(String folio) {
+        Property property = propertyRepository.findByFolio(folio).orElseThrow(() -> new PropertyNotFoundException("No property found with folio: "+ folio));
+        return propertyMapper.toDTO(property);
+    }
+
+    @Override
+    public PropertyDTO getByFolioAPI(String folio) {
         try {
             String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
 
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
             Property property = propertyMapper.toEntity(externalPropertyMapper.toDTO(api.getPropertyInfo()));
             linkEntities(property, api);
-            return property;
+            return propertyMapper.toDTO(property);
         } 
         catch (Exception e) {
             log.error(e.getMessage());

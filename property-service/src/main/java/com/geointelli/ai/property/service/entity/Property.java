@@ -113,6 +113,9 @@ public class Property {
     @OneToOne(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
     private Address address;
 
+    @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PropertyImage> images = new ArrayList<>();
+
     public void addParcel(Parcel parcel) {
     if (this.parcels == null || isImmutable(this.parcels)) {
         this.parcels = new ArrayList<>();

@@ -20,15 +20,20 @@ import org.springframework.web.bind.annotation.PathVariable;
 @AllArgsConstructor
 public class PropertyController {
     private final PropertyService propertyService;
-    private final PropertyMapper propertyMapper;
 
-    @GetMapping("/{folio}")
-    public ResponseEntity<PropertyDTO> getPropertyById(@PathVariable String folio) {
-        Property property = propertyService.getByFolio(folio);
+    @GetMapping("/external/{folio}")
+    public ResponseEntity<PropertyDTO> getPropertyByFolioAPI(@PathVariable String folio) {
+        PropertyDTO property = propertyService.getByFolioAPI(folio);
         if (property == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(propertyMapper.toDTO(property));
+        return ResponseEntity.ok(property);
+    }
+
+    @GetMapping("/{folio}")
+    public ResponseEntity<PropertyDTO> getPropertyByFolio(@PathVariable String folio) {
+        PropertyDTO property = propertyService.getByFolio(folio);
+        return ResponseEntity.ok(property);
     }
     
 }

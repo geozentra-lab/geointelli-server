@@ -18,4 +18,9 @@ public interface PropertyRepository extends JpaRepository<Property, Long>{
 
     @Query("SELECT p.id from Property p")
     List<Long> findAllIds();
+
+    @Query("SELECT p.folio FROM Property p WHERE p.address IS NULL")
+    List<String> findFoliosWithoutAddress();
+
+    Optional<Property> findByAddress_ZipAndAddress_Address(String zip, String address);
 }

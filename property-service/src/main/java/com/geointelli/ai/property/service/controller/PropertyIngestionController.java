@@ -71,12 +71,13 @@ public class PropertyIngestionController {
 
     @PostMapping("/ingestaddresses")
     public ResponseEntity<String> runAddressesIngestion() {
-        List<Long> allPropertiesId = propertyService.getAllIds();
-        Set<Long> currentAddressesPropertyId = new HashSet<>(addressService.getAllPropertiesId());
-        List<Long> nonExistingIds = allPropertiesId.stream().filter(propertyId -> !currentAddressesPropertyId.contains(propertyId))
-                                                    .toList();
-        List<String> nonExistingFolios = nonExistingIds.stream().map(propertyRepository::findById)
-                                                            .flatMap(Optional::stream).map(Property::getFolio).collect(Collectors.toList());                                                    
+        // List<Long> allPropertiesId = propertyService.getAllIds();
+        // Set<Long> currentAddressesPropertyId = new HashSet<>(addressService.getAllPropertiesId());
+        // List<Long> nonExistingIds = allPropertiesId.stream().filter(propertyId -> !currentAddressesPropertyId.contains(propertyId))
+        //                                             .toList();
+        // List<String> nonExistingFolios = nonExistingIds.stream().map(propertyRepository::findById)
+        //                                                     .flatMap(Optional::stream).map(Property::getFolio).collect(Collectors.toList());        
+        List<String> nonExistingFolios = propertyRepository.findFoliosWithoutAddress();                                            
         log.info("Addresses ingestion triggered via API");
         propertyIngestionManager.ingestAllAddresses(nonExistingFolios);
         return ResponseEntity.ok("Addresses ingestion started");

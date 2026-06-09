@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.geointelli.ai.property.service.exception.ImageDownloadException;
+import com.geointelli.ai.property.service.exception.ImageStorageException;
 import com.geointelli.ai.property.service.exception.base.ResourceNotFoundException;
 
 @RestControllerAdvice
@@ -19,6 +21,30 @@ public class GlobalExceptionHandler {
             .body(ApiError.builder()
                 .status(404)
                 .error("Not Found")
+                .message(ex.getMessage())
+                .timestamp(Instant.now())
+                .build());
+    }
+
+    @ExceptionHandler(ImageStorageException.class)
+    public ResponseEntity<ApiError> handleImageStorage(ImageStorageException ex) {
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiError.builder()
+                .status(500)
+                .error("Image Storage Error")
+                .message(ex.getMessage())
+                .timestamp(Instant.now())
+                .build());
+    }
+
+    @ExceptionHandler(ImageDownloadException.class)
+    public ResponseEntity<ApiError> handleImageDownload(ImageDownloadException ex) {
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiError.builder()
+                .status(500)
+                .error("Image Download Error")
                 .message(ex.getMessage())
                 .timestamp(Instant.now())
                 .build());
@@ -38,7 +64,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneric(Exception ex) {
-        ex.printStackTrace(); // ← add this temporarily
+        // ex.printStackTrace();
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(ApiError.builder()

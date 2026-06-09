@@ -58,4 +58,13 @@ public interface AddressRepository extends JpaRepository<Address, Long> {
         )
         """)    
         List<Property> findPropertiesByRawAddress(@Param("raw") String raw);
+
+        @Query(value = """
+        SELECT a.address
+        FROM addresses a
+        WHERE :raw <% a.address
+        ORDER BY word_similarity(:raw, a.address) DESC
+        LIMIT 10
+        """, nativeQuery = true)
+        List<String> findAddressSuggestions(@Param("raw") String raw);
 }

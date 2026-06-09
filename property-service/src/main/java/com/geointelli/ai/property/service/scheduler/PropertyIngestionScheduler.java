@@ -19,6 +19,6 @@ public class PropertyIngestionScheduler {
     @Scheduled(cron = "0 0 2 * * ?")
     public void run() {
         log.info("Scheduled ingestion started");
-        manager.ingestAllFolios(parcelService.getAllFolios());
+        // manager.ingestAllFolios(parcelService.getAllFolios());
     }
 }

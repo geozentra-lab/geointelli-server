@@ -5,6 +5,8 @@ import lombok.Data;
 public class ParcelDTO {
 
     private Long id;
+
+    private Long propertyId;
     
     private String folio;
 
