@@ -1,11 +1,3 @@
-CREATE INDEX idx_addresses_address
-ON addresses(LOWER(address));
+CREATE INDEX IF NOT EXISTS idx_address_zip_address ON address(zip, address);
 
-CREATE INDEX idx_addresses_lower_address
-ON addresses(address);
-
-CREATE INDEX idx_addresses_property_id
-ON addresses(property_id);
-
-CREATE INDEX idx_images_property_id
-ON property_images(property_id);
+CREATE INDEX IF NOT EXISTS idx_property_image_hash ON property_image(property_id, image_hash);
