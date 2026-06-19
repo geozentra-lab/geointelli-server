@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -29,6 +30,7 @@ public class PropertyImage {
 
     private String storagePath;
 
+    @Column(unique = true)
     private String imageHash;
 
     private Boolean primaryImage;

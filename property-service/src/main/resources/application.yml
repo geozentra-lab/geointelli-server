@@ -10,7 +10,9 @@ server:
   port: 8080
 
 aws:
-  region: us-east-1
+  region: ${AWS_REGION}
+  access_key: ${AWS_ACCESS_KEY}
+  secret_key: ${AWS_SECRET_ACCESS_KEY}
 
   s3:
-    bucket: my-image-bucket  
+    bucket: geozentra-images-prod-286528690180-us-east-1-an

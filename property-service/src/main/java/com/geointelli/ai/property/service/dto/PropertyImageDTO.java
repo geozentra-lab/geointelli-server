@@ -1,14 +1,16 @@
 package com.geointelli.ai.property.service.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
+@AllArgsConstructor
 public class PropertyImageDTO {
     private Long id;
 
-    private String imageUrl;
+    private String storagePath;
 
-    private Integer imageOrder;
+    private Integer displayOrder;
 
     private Boolean primaryImage;
 }

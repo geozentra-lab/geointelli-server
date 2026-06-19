@@ -1,15 +1,19 @@
 package com.geointelli.ai.property.service.controller;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geointelli.ai.property.service.dto.PropertyImageDTO;
 import com.geointelli.ai.property.service.service.PropertyImageImportService;
+import com.geointelli.ai.property.service.service.PropertyImageService;
 
 import lombok.AllArgsConstructor;
 
@@ -18,6 +22,7 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class PropertyImageController {
     private final PropertyImageImportService propertyImageImportService; 
+    private final PropertyImageService propertyImageService; 
 
     @PostMapping("/import/csv") 
     public ResponseEntity<String> importCsv( @RequestParam String filePath) {
@@ -37,5 +42,11 @@ public class PropertyImageController {
         propertyImageImportService.importCsv(csv);
         return ResponseEntity.ok(
                 "Import completed for zip " + zip);
+    }
+
+    @GetMapping("/property/{propertyId}")
+    public List<PropertyImageDTO> getImages(@PathVariable Long propertyId) {
+
+        return propertyImageService.getImages(propertyId);
     }
 }

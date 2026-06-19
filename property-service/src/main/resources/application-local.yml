@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/geointelli
+    url: jdbc:postgresql://localhost:5432/geozentra
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -25,6 +25,24 @@ spring:
         jwt:
           issuer-uri: http://localhost:8090/realms/geointelli
 
+  flyway:
+    enabled: false
+    # baseline-on-migrate: true
+    # baseline-version: 1
 server:
   port: 8081
   
+logging:
+  level:
+    root: INFO
+    com:
+      geointelli: DEBUG
+    org:
+      springframework: WARN
+      hibernate: WARN # DEBUG
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"  
+  file:
+    name: /logs/springboot.log   
