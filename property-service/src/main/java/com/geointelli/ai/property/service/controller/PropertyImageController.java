@@ -33,7 +33,7 @@ public class PropertyImageController {
     @PostMapping("/import/folder") 
     public ResponseEntity<String> importFolder( @RequestParam String folderPath) { 
         propertyImageImportService.importFolder(Path.of(folderPath));
-        return ResponseEntity.ok( "Folder import completed");
+        return ResponseEntity.accepted().body("Import started in background");
     }
 
     @PostMapping("/import/zip/{zip}")

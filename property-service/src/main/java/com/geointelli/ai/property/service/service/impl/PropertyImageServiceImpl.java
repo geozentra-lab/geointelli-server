@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -34,7 +35,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     public PropertyImageServiceImpl(ImageDownloadService imageDownloadService,
             PropertyImageRepository propertyImageRepository,
-            @Qualifier("s3Storage") ImageStorageService imageStorageService,
+            @Qualifier("localStorage") ImageStorageService imageStorageService,
             PropertyImageMapper propertyImageMapper, S3Service s3Service) {
 
         this.imageDownloadService = imageDownloadService;
@@ -46,17 +47,24 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     @Transactional
     @Override
-    public PropertyImage processAndSave(Property property, Set<String> existingHashes,
+    public PropertyImage processAndSave(Property property,
                                      String imageUrl, boolean primary, int order) {
         if (imageUrl == null || imageUrl.isBlank()) return null;
         try {
+            boolean urlAlreadyProcessed = property.getImages().stream()
+                    .anyMatch(img -> imageUrl.equals(img.getOriginalUrl()));
+            if (urlAlreadyProcessed) {
+                log.info("Image URL already processed {}", imageUrl);
+                return null;
+            }
+
             byte[] imageBytes = imageDownloadService.download(imageUrl);
             String hash = HashUtil.sha256(imageBytes);
 
-            if (existingHashes.contains(hash)) {
-                log.info("Image already exists {}", hash);
-                return null;
-            }
+            // if (existingHashes.contains(hash)) {
+            //     log.info("Image already exists {}", hash);
+            //     return null;
+            // }
 
             String fileName = property.getId() + "_" + hash + ".jpg";
             String storagePath = imageStorageService.store(imageBytes, fileName);
@@ -68,8 +76,9 @@ public class PropertyImageServiceImpl implements PropertyImageService {
             image.setImageHash(hash);
             image.setPrimaryImage(primary);
             image.setDisplayOrder(order);
-            property.getImages().add(image);
-            existingHashes.add(hash); // update in-memory set
+            synchronized (property) {
+                property.getImages().add(image);
+            }
             return propertyImageRepository.save(image);
         } catch (ImageDownloadException e) {
             log.warn("Skipping broken image URL {} for property {}", imageUrl, property.getId());
@@ -79,19 +88,17 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     @Override
     public void processPrimaryImage(Property property, String primaryPhotoUrl) {
-        Set<String> hashes = propertyImageRepository.findHashesByProperty(property);
-        processAndSave(property, hashes, primaryPhotoUrl, true, 0);
+        processAndSave(property, primaryPhotoUrl, true, 0);
     }
 
     @Override
     public void processAltPhotos(Property property, String altPhotos) {
         if (altPhotos == null || altPhotos.isBlank()) return;
-        Set<String> hashes = propertyImageRepository.findHashesByProperty(property);
         String[] urls = altPhotos.split(",");
         int order = 1, count = 0;
         for (String url : urls) {
             if (count++ > 8) return;
-            processAndSave(property, hashes, url.trim(), false, order++);
+            processAndSave(property, url.trim(), false, order++);
         }
     }
 

@@ -21,7 +21,7 @@ import lombok.ToString;
 @Table(name = "taxes")
 @NoArgsConstructor
 @AllArgsConstructor
-public class Tax {
+public class Tax extends AuditableEntity {
 
     @Id
     @GeneratedValue

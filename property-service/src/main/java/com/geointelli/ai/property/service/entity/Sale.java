@@ -22,7 +22,7 @@ import lombok.ToString;
 @Table(name = "sales")
 @NoArgsConstructor
 @AllArgsConstructor
-public class Sale {
+public class Sale extends AuditableEntity {
 
     @Id
     @GeneratedValue

@@ -20,7 +20,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString(exclude = "properties")
-public class Owner {
+public class Owner extends AuditableEntity {
 
     @Id
     @GeneratedValue

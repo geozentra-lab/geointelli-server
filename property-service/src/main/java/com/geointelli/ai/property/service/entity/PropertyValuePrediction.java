@@ -14,7 +14,7 @@ import lombok.Data;
 @Entity
 @Table(name = "property_value_predictions")
 @Data
-public class PropertyValuePrediction {
+public class PropertyValuePrediction extends AuditableEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

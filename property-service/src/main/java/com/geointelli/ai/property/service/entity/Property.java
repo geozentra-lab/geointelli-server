@@ -27,7 +27,7 @@ import lombok.ToString;
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
-public class Property {
+public class Property extends AuditableEntity {
 
     @Id
     @GeneratedValue

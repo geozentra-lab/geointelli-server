@@ -14,7 +14,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString(exclude = "property")
-public class ExtraFeature {
+public class ExtraFeature extends AuditableEntity {
 
     @Id
     @GeneratedValue

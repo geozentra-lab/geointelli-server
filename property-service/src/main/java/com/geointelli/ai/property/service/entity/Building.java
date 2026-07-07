@@ -16,7 +16,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString(exclude = "property")
-public class Building {
+public class Building extends AuditableEntity {
 
     @Id
     @GeneratedValue

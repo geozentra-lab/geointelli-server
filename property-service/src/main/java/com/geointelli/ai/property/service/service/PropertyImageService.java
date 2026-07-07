@@ -10,8 +10,7 @@ import com.geointelli.ai.property.service.entity.PropertyImage;
 public interface PropertyImageService {
     void processPrimaryImage(Property property, String primaryPhotoUrl);
     void processAltPhotos(Property property, String altPhotos);
-    PropertyImage processAndSave(Property property, Set<String> existingHashes,
-                                     String imageUrl, boolean primary, int order);
+    PropertyImage processAndSave(Property property,String imageUrl, boolean primary, int order);
 
     public List<PropertyImageDTO> getImages(Long propertyId);                                 
 }

@@ -1,6 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/geozentra
+    url: jdbc:postgresql://localhost:5432/zentratest
+    # url: jdbc:postgresql://localhost:5432/geozentra
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -45,4 +46,4 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"  
   file:
-    name: /logs/springboot.log   
+    name: logs/springboot.log   

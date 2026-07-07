@@ -30,6 +30,9 @@ public interface PropertyRepository extends JpaRepository<Property, Long>{
     """)
     Optional<Property> findByAddress_ZipAndAddress_Address(String zip, String address);
 
-    @Query("SELECT p FROM Property p JOIN FETCH p.images LEFT JOIN FETCH p.address")
+    @Query("SELECT p FROM Property p LEFT JOIN FETCH p.images LEFT JOIN FETCH p.address")
     List<Property> findAllWithImagesAndAddress();
+
+    @Query("SELECT p FROM Property p LEFT JOIN FETCH p.address")
+    List<Property> findAllWithAddress();
 }
