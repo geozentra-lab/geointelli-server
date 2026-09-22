@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.dto;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,27 +15,27 @@ public class PropertyDTO {
 
     private String parentFolio;
 
-    private Integer bathroomCount;
+    private BigDecimal bathroomCount;
 
-    private Integer bedroomCount;
+    private BigDecimal bedroomCount;
 
     private Double halfBathroomCount;
 
-    private Integer buildingActualArea;
+    private BigDecimal buildingActualArea;
 
-    private Integer buildingBaseArea;
+    private BigDecimal buildingBaseArea;
 
-    private Integer buildingEffectiveArea;
+    private BigDecimal buildingEffectiveArea;
 
-    private Integer buildingGrossArea;
+    private BigDecimal buildingGrossArea;
 
-    private Integer buildingHeatedArea;
+    private BigDecimal buildingHeatedArea;
 
     private String dorCode;
 
     private String dorDescription;
 
-    private Integer neighborhood;
+    private String neighborhood;
 
     private String neighborhoodDescription;
 

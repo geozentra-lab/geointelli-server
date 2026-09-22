@@ -38,7 +38,7 @@ public class Building extends AuditableEntity {
 
     private Integer grossArea;
 
-    private Integer heatedArea;
+    private BigDecimal heatedArea;
 
     private String message;
 

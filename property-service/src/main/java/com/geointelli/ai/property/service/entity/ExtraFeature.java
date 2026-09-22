@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.entity;
 
+import java.math.BigDecimal;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -20,11 +22,23 @@ public class ExtraFeature extends AuditableEntity {
     @GeneratedValue
     private Long id;
 
-    private String featureType;
+    private Integer actualYearBuilt;
 
-    private Double area;
+    private Double adjustedUnitPrice;
 
-    private Double value;
+    private BigDecimal depreciatedValue;
+
+    private String description;
+
+    private String message;
+
+    private Double percentCondition;
+
+    private Integer rollYear;
+
+    private Integer units;
+
+    private String useCode;
 
     @ManyToOne
     private Property property;

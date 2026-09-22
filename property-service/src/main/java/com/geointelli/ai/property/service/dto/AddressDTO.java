@@ -8,7 +8,7 @@ public class AddressDTO {
 
     private String address;
 
-    private int buildingNumber;
+    private Integer buildingNumber;
 
     private String city;
 
@@ -18,7 +18,7 @@ public class AddressDTO {
 
     private String streetName;
 
-    private int streetNumber;
+    private Integer streetNumber;
 
     private String streetPrefix;
 

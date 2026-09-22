@@ -7,12 +7,13 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.geointelli.ai.property.service.client.MiameDadeApiClient;
+import com.geointelli.ai.property.service.client.MiamiDadeApiClient;
 import com.geointelli.ai.property.service.client.dto.PropertyApiResponse;
 import com.geointelli.ai.property.service.client.dto.SiteAddress;
 import com.geointelli.ai.property.service.entity.Address;
 import com.geointelli.ai.property.service.entity.Assessment;
 import com.geointelli.ai.property.service.entity.Building;
+import com.geointelli.ai.property.service.entity.ExtraFeature;
 import com.geointelli.ai.property.service.entity.Land;
 import com.geointelli.ai.property.service.entity.Owner;
 import com.geointelli.ai.property.service.entity.Parcel;
@@ -22,6 +23,7 @@ import com.geointelli.ai.property.service.entity.Tax;
 import com.geointelli.ai.property.service.mapper.AddressMapper;
 import com.geointelli.ai.property.service.mapper.AssessmentMapper;
 import com.geointelli.ai.property.service.mapper.BuildingMapper;
+import com.geointelli.ai.property.service.mapper.ExtraFeatureMapper;
 import com.geointelli.ai.property.service.mapper.LandMapper;
 import com.geointelli.ai.property.service.mapper.OwnerMapper;
 import com.geointelli.ai.property.service.mapper.PropertyMapper;
@@ -30,6 +32,7 @@ import com.geointelli.ai.property.service.mapper.TaxMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalAddressMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalAssessmentMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalBuildingMapper;
+import com.geointelli.ai.property.service.mapper.external.ExternalExtraFeatureMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalLandMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalOwnerMapper;
 import com.geointelli.ai.property.service.mapper.external.ExternalPropertyMapper;
@@ -49,7 +52,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Slf4j
 public class PropertyIngestionServiceImpl implements PropertyIngestionService {
-    private final MiameDadeApiClient miameDadaApiClient;
+    private final MiamiDadeApiClient miameDadaApiClient;
     private final ObjectMapper objectMapper;
     private final ParcelRepository parcelRepository;
     private final OwnerRepository ownerRepository;
@@ -70,6 +73,8 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     private final ExternalBuildingMapper externalBuildingMapper;
     private final AddressMapper addressMapper;
     private final ExternalAddressMapper externalAddressMapper;
+    private final ExtraFeatureMapper extraFeatureMapper;
+    private final ExternalExtraFeatureMapper externalExtraFeatureMapper;
     private final PropertyService propertyService;
 
     @Override
@@ -268,24 +273,94 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     public void ingestBuildings(String folio){
         try {
             Property property = propertyRepository.findByFolio(folio).orElse(null);
-        if(property != null && property.getBuildings() == null){
+            if(property != null && property.getBuildings() == null){
+                String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
+                PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
+                List<Building> buildings = api.getBuilding().getBuildingInfos().stream()
+                    .map(externalBuildingMapper::toDTO)
+                    .map(buildingMapper::toEntity)
+                    .peek(b -> b.setProperty(property))
+                    .collect(Collectors.toList());
+                if(property.getBuildings() == null)
+                    property.setBuildings(new ArrayList<>());
+                property.getBuildings().addAll(buildings); 
+                
+                propertyRepository.save(property);
+
+                log.info("Buildings refreshed for folio {}", folio);
+            }
+        } catch (Exception e) {
+            log.error("failed to ingest buildings", e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void ingestExtraFeatures(String folio){
+        try {
+            Property property = propertyRepository.findByFolio(folio).orElse(null);
+            if(property != null && (property.getExtraFeatures() == null || property.getExtraFeatures().isEmpty())){
+                String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
+                PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
+                List<ExtraFeature> extraFeatures = api.getExtraFeature().getExtraFeatureInfos().stream()
+                    .map(externalExtraFeatureMapper::toDTO)
+                    .map(extraFeatureMapper::toEntity)
+                    .peek(e -> e.setProperty(property))
+                    .collect(Collectors.toList());
+                log.info("extra feature ingested {}", extraFeatures);
+                if(property.getExtraFeatures() == null)
+                    property.setExtraFeatures(new ArrayList<>());
+                property.getExtraFeatures().addAll(extraFeatures); 
+
+                if(property.getExtraFeatures().isEmpty()){
+                    ExtraFeature feature = new ExtraFeature();
+                    feature.setProperty(property);
+                    feature.setDescription("no feature for this property");
+                    feature.setMessage("no feature for this property");
+                    property.getExtraFeatures().add(feature); 
+                    log.info("inserting a temporarily feature");
+                }
+                else{
+                    for(ExtraFeature e:property.getExtraFeatures()){
+                        
+                    }
+                }
+
+                log.info("property extra features {}", property.getExtraFeatures());
+                
+                propertyRepository.save(property);
+
+                log.info("extra features refreshed for folio {}", folio);
+            }
+        } catch (Exception e) {
+            log.error("failed to ingest extra features", e);
+            throw new RuntimeException("Failed to ingest extra features for folio " + folio, e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void ingestSales(String folio){
+        try {
+            Property property = propertyRepository.findByFolio(folio).orElse(null);
+        if(property != null && (property.getSales() == null || property.getSales().isEmpty())){
             String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
-            List<Building> buildings = api.getBuilding().getBuildingInfos().stream()
-                .map(externalBuildingMapper::toDTO)
-                .map(buildingMapper::toEntity)
+            List<Sale> sales = api.getSalesInfos().stream()
+                .map(externalSaleMapper::toDTO)
+                .map(saleMapper::toEntity)
                 .peek(b -> b.setProperty(property))
                 .collect(Collectors.toList());
-            if(property.getBuildings() == null)
-                property.setBuildings(new ArrayList<>());
-            property.getBuildings().addAll(buildings); 
+            if(property.getExtraFeatures() == null)
+                property.setExtraFeatures(new ArrayList<>());
+            property.getSales().addAll(sales); 
             
             propertyRepository.save(property);
 
-            log.info("Buildings refreshed for folio {}", folio);
+            log.info("sales refreshed for folio {}", folio);
         }
         } catch (Exception e) {
-            log.error("failed to ingest buildings", e);
+            log.error("failed to ingest sales", e);
         }
     }
 

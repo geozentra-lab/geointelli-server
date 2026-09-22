@@ -4,7 +4,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect

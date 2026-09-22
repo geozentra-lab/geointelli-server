@@ -95,13 +95,13 @@ public class PropertyImageImportServiceImpl implements PropertyImageImportServic
             CSVParser parser = CSVFormat.DEFAULT.builder()
                 .setHeader().setSkipHeaderRecord(true).get().parse(reader)) {
 
-            for (CSVRecord record : parser) {
-                final CSVRecord r = record;
-                futures.add(imageExecutor.submit(() -> processRecord(r, propertyMap)));
-            }
-            for (Future<?> future : futures) {
-                try { future.get(); } catch (Exception e) { log.error("Task failed", e); }
-            }
+                for (CSVRecord record : parser) {
+                    final CSVRecord r = record;
+                    futures.add(imageExecutor.submit(() -> processRecord(r, propertyMap)));
+                }
+                for (Future<?> future : futures) {
+                    try { future.get(); } catch (Exception e) { log.error("Task failed", e); }
+                }
         } catch (IOException e) {
             throw new RuntimeException("Failed to import image CSV: " + csvFile, e);
         }
@@ -129,7 +129,8 @@ public class PropertyImageImportServiceImpl implements PropertyImageImportServic
             }
             propertyImageService.processPrimaryImage(property, record.get("primary_photo"));
             propertyImageService.processAltPhotos(property, record.get("alt_photos"));
-        } catch (Exception e) {
+        } 
+        catch (Exception e) {
             log.error("Failed processing record {}", record.getRecordNumber(), e);
         }
     }

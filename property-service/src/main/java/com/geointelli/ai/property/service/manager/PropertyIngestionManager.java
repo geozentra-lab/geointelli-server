@@ -27,11 +27,10 @@ public class PropertyIngestionManager {
     private final PropertyService propertyService;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final ExecutorService executor = Executors.newFixedThreadPool(5);
-    private final Semaphore semaphore = new Semaphore(5);
+    private final ExecutorService executor = Executors.newFixedThreadPool(10);
+    private final Semaphore semaphore = new Semaphore(10);
 
     public void ingestAllBuildings(List<String> folios) {
-        
         if (!running.compareAndSet(false, true)) {
             log.warn("Buildings ingestion already running. Skipping...");
             return;
@@ -51,6 +50,58 @@ public class PropertyIngestionManager {
                             try {
                                 semaphore.acquire();
                                 propertyIngestionService.ingestBuildings(folio);
+                                log.info("Success folio {}", folio);
+                                return;
+                            } catch (Exception e) {
+                                attempts++;
+                                log.warn("Retry {} for folio {}", attempts, folio);
+                            } finally {
+                                semaphore.release();
+                            }
+                        }
+
+                        log.error("Failed permanently for folio {}", folio);
+                    }))
+                    .collect(Collectors.toList());
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (Exception e) {
+                        log.error("Batch execution error", e);
+                    }
+                }
+
+                Thread.sleep(2000);
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            running.set(false);
+        }
+    }
+
+    public void ingestAllSales(List<String> folios) {
+        if (!running.compareAndSet(false, true)) {
+            log.warn("Sales ingestion already running. Skipping...");
+            return;
+        }
+
+        try {
+            int batchSize = 50;
+
+            for (int i = 0; i < folios.size(); i += batchSize) {
+                List<String> batch = folios.subList(i, Math.min(i + batchSize, folios.size()));
+
+                List<Future<?>> futures = batch.stream()
+                    .map(folio -> executor.submit(() -> {
+                        int attempts = 0;
+
+                        while (attempts < 3) {
+                            try {
+                                semaphore.acquire();
+                                propertyIngestionService.ingestSales(folio);
                                 log.info("Success folio {}", folio);
                                 return;
                             } catch (Exception e) {
@@ -136,6 +187,64 @@ public class PropertyIngestionManager {
         }
     }
 
+    public void ingestAllExtraFeatures(List<String> folios) {
+        if (!running.compareAndSet(false, true)) {
+            log.warn("ُExtra features ingestion already running. Skipping...");
+            return;
+        }
+
+        try {
+            int batchSize = 50;
+
+            for (int i = 0; i < folios.size(); i += batchSize) {
+                List<String> batch = folios.subList(i, Math.min(i + batchSize, folios.size()));
+
+                List<Future<?>> futures = batch.stream().map(folio -> executor.submit(() -> {
+                        int attempts = 0;
+                        while (attempts < 3) {
+                            boolean acquired = false;
+                            try {
+                                semaphore.acquire();
+                                acquired = true;
+
+                                propertyIngestionService.ingestExtraFeatures(folio);
+
+                                log.info("Success folio {}", folio);
+                                return;
+
+                            } 
+                            catch (Exception e) {
+                                attempts++;
+                                log.warn("Attempt {} failed for folio {}", attempts, folio, e);
+                            } 
+                            finally {
+                                if (acquired) {
+                                    semaphore.release();
+                                }
+                            }
+                        }
+
+                        log.error("Failed permanently for folio {}", folio);
+                    })).collect(Collectors.toList());
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (Exception e) {
+                        log.error("Batch execution error", e);
+                    }
+                }
+
+                Thread.sleep(2000);
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            running.set(false);
+        }
+    }
+
     public void ingestAllFolios(List<String> folios) {
 
         if (!running.compareAndSet(false, true)) {
@@ -154,16 +263,32 @@ public class PropertyIngestionManager {
                         int attempts = 0;
 
                         while (attempts < 3) {
+                            boolean acquired = false;
+
                             try {
                                 semaphore.acquire();
+                                acquired = true;
+
                                 propertyIngestionService.ingest(folio);
+
                                 log.info("Success folio {}", folio);
                                 return;
+
                             } catch (Exception e) {
                                 attempts++;
-                                log.warn("Retry {} for folio {}", attempts, folio);
-                            } finally {
-                                semaphore.release();
+
+                                log.warn(
+                                    "Attempt {} failed for folio {}",
+                                    attempts,
+                                    folio,
+                                    e
+                                );
+
+                            } 
+                            finally {
+                                if (acquired) {
+                                    semaphore.release();
+                                }
                             }
                         }
 

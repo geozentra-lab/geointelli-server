@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 
-import org.antlr.v4.runtime.dfa.DFAState.PredPrediction;
 import org.springframework.stereotype.Service;
 
 import com.geointelli.ai.property.service.dto.PropertyValuePredictionDTO;
@@ -43,9 +42,7 @@ public class PropertyValuePredictionServiceImpl implements PropertyValuePredicti
             propertyValuePredictionRepository.findByPropertyIdIn(uniqueIds);
 
         if (predictions.isEmpty()) {
-            throw new PropertyValuePredictionNotFoundException(
-                    "No predictions found for given property ids"
-            );
+            throw new PropertyValuePredictionNotFoundException("No predictions found for given property ids");
         }
         return predictions.stream().map(p -> {
             PropertyValuePredictionDTO dto = propertyValuePredictionMapper.toDTO(p);

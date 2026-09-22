@@ -22,6 +22,12 @@ public interface PropertyRepository extends JpaRepository<Property, Long>{
     @Query("SELECT p.folio FROM Property p WHERE p.address IS NULL")
     List<String> findFoliosWithoutAddress();
 
+    @Query("SELECT p.folio FROM Property p WHERE p.extraFeatures IS EMPTY")
+    List<String> findFoliosWithoutExtraFeature();
+
+    @Query("SELECT p.folio FROM Property p WHERE p.sales IS EMPTY")
+    List<String> findFoliosWithoutSales();
+
     @Query("""
         SELECT a.property
         FROM Address a

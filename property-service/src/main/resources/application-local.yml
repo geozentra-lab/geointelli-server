@@ -1,17 +1,16 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/geozentra
+    url: jdbc:postgresql://localhost:5432/geointelli
+    # url: jdbc:postgresql://localhost:5432/zentratest
     # url: jdbc:postgresql://localhost:5432/geozentra
     driver-class-name: org.postgresql.Driver
 
   jpa:
-    hibernate:
-      ddl-auto: update
     defer-datasource-initialization: true
     show-sql: true
     properties:
       hibernate:
-        ddl-auto: update
+        ddl-auto: validate
         dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect
         jdbc:
           fetch_size: 10

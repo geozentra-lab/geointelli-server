@@ -36,7 +36,7 @@ import com.geointelli.ai.property.service.repository.ParcelRepository;
 import com.geointelli.ai.property.service.repository.PropertyRepository;
 import com.geointelli.ai.property.service.service.PropertyService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.geointelli.ai.property.service.client.MiameDadeApiClient;
+import com.geointelli.ai.property.service.client.MiamiDadeApiClient;
 import com.geointelli.ai.property.service.client.dto.PropertyApiResponse;
 import com.geointelli.ai.property.service.client.dto.SiteAddress;
 import com.geointelli.ai.property.service.dto.PropertyDTO;
@@ -52,7 +52,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class PropertyServiceImpl implements PropertyService {
     private final PropertyRepository propertyRepository;
-    private final MiameDadeApiClient miameDadaApiClient;
+    private final MiamiDadeApiClient miameDadaApiClient;
     private final ObjectMapper objectMapper;
     private final PropertyMapper propertyMapper;
     private final ExternalPropertyMapper externalPropertyMapper;
@@ -190,9 +190,15 @@ public class PropertyServiceImpl implements PropertyService {
     public List<String> getAllFolios() {
         return propertyRepository.findAllFolios();
     }
+    
 
     @Override
     public List<Long> getAllIds() {
         return propertyRepository.findAllIds();
+    }
+
+    @Override
+    public List<String> getAllFoliosForPropertyWithoutExtraFeatures() {
+        return propertyRepository.findFoliosWithoutExtraFeature();
     }
 }

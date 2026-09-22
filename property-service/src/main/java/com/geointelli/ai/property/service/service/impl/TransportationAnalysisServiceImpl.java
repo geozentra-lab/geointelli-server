@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 import com.geointelli.ai.property.service.dto.TransportationAnalysisDTO;
 import com.geointelli.ai.property.service.entity.TransportationAnalysis;
 import com.geointelli.ai.property.service.mapper.TransportationAnalysisMapper;
-import com.geointelli.ai.property.service.repository.PropertyTransportationAnalysisRepository;
+import com.geointelli.ai.property.service.repository.TransportationAnalysisRepository;
 import com.geointelli.ai.property.service.service.TransportationAnalysisService;
 
 import jakarta.transaction.Transactional;
@@ -21,7 +21,7 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class TransportationAnalysisServiceImpl implements TransportationAnalysisService {
 
-    private final PropertyTransportationAnalysisRepository propertyTransportationAnalysisRepository;
+    private final TransportationAnalysisRepository propertyTransportationAnalysisRepository;
     private final TransportationAnalysisMapper propertyTransportationAnalysisMapper;
 
     @Override

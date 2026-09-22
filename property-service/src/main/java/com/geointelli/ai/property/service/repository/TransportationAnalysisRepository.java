@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.geointelli.ai.property.service.entity.TransportationAnalysis;
 
-public interface PropertyTransportationAnalysisRepository extends JpaRepository<TransportationAnalysis, Long> {
+public interface TransportationAnalysisRepository extends JpaRepository<TransportationAnalysis, Long> {
     
     Optional<TransportationAnalysis> findByPropertyId(Long propertyId);
     List<TransportationAnalysis> findByPropertyIdIn(List<Long> propertyIds);

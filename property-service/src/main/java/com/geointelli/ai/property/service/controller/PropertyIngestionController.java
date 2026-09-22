@@ -69,6 +69,40 @@ public class PropertyIngestionController {
         return ResponseEntity.ok("Buildings ingestion started");
     }
 
+    @PostMapping("/ingest_extrafeatures")
+    public ResponseEntity<String> runExtraFeaturesIngestion() {
+        log.info("Extra features ingestion triggered via API");
+        List<String> folios = propertyService.getAllFoliosForPropertyWithoutExtraFeatures();
+        // List<String> folios = new ArrayList<>(List.of(
+        //     "3040310170020",
+        //     "3059100050100",
+        //     "3059100050110",
+        //     "3059100042800",
+        //     "3059100050120",
+        //     "3059100060480",
+        //     "3059100110020",
+        //     "3059100110120",
+        //     "3059100110310",
+        //     "3059100110370",
+        //     "3059100110560",
+        //     "3059100110620",
+        //     "3059100110750",
+        //     "3059100110240",
+        //     "3059100110010",
+        //     "3530070031460"
+        // ));
+        log.info("count of folios without extra features {}", folios.size());
+        propertyIngestionManager.ingestAllExtraFeatures(folios);
+        return ResponseEntity.ok("Extra features ingestion started");
+    }
+
+    @PostMapping("/ingest_sales")
+    public ResponseEntity<String> runSalesIngestion() {
+        log.info("Sales ingestion triggered via API");
+        propertyIngestionManager.ingestAllSales(propertyRepository.findFoliosWithoutSales());
+        return ResponseEntity.ok("Sales ingestion started");
+    }
+
     @PostMapping("/ingestaddresses")
     public ResponseEntity<String> runAddressesIngestion() {
         // List<Long> allPropertiesId = propertyService.getAllIds();
