@@ -62,6 +62,21 @@ public class GlobalExceptionHandler {
                 .build());
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParameter(
+            org.springframework.web.bind.MissingServletRequestParameterException ex) {
+        return handleBadRequest(new IllegalArgumentException(ex.getParameterName() + " is required"));
+    }
+
+    @ExceptionHandler(org.springframework.validation.BindException.class)
+    public ResponseEntity<ApiError> handleInvalidParameters(org.springframework.validation.BindException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+            .map(error -> error.getField() + ": " + (error.isBindingFailure()
+                ? "invalid value" : error.getDefaultMessage()))
+            .collect(java.util.stream.Collectors.joining("; "));
+        return handleBadRequest(new IllegalArgumentException(message.isEmpty() ? "Invalid parameters" : message));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneric(Exception ex) {
         // ex.printStackTrace();

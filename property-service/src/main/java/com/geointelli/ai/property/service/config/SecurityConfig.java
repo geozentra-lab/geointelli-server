@@ -32,7 +32,7 @@ public class SecurityConfig {
         });
 
         http.authorizeHttpRequests(requests -> {
-            requests.requestMatchers("/api/properties/**", "/api/users/**").hasRole("USER");
+            // requests.requestMatchers("/api/properties/**", "/api/users/**").hasRole("USER");
             requests.anyRequest().permitAll();
         });
 

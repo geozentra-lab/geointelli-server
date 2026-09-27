@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.entity;
 
+import jakarta.persistence.UniqueConstraint;
+
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,8 @@ import lombok.Setter;
 import lombok.ToString;
 
 @Entity
-@Table(name = "properties")
+@Table(name = "properties", uniqueConstraints = @UniqueConstraint(
+    name = "uq_properties_county_folio", columnNames = {"county_id", "folio"}))
 @Getter
 @Setter
 @ToString
@@ -36,8 +39,13 @@ public class Property extends AuditableEntity {
     @GeneratedValue
     private Long id;
 
-    @Column(unique = true)
+    @Column
     private String folio;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "county_id")
+    @ToString.Exclude
+    private County county;
 
     private String parentFolio;
 
@@ -131,9 +139,11 @@ public class Property extends AuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_property_id")
+    @ToString.Exclude
     private Property parentProperty;
 
     @OneToMany(mappedBy = "parentProperty", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
     private List<Property> childProperties = new ArrayList<>();
 
     public void addParcel(Parcel parcel) {

@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.service.CountyService;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -52,6 +54,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class PropertyServiceImpl implements PropertyService {
     private final PropertyRepository propertyRepository;
+    private final CountyService countyService;
     private final MiamiDadeApiClient miameDadaApiClient;
     private final ObjectMapper objectMapper;
     private final PropertyMapper propertyMapper;
@@ -76,7 +79,11 @@ public class PropertyServiceImpl implements PropertyService {
     @Transactional
     @Override
     public Property saveProperty(Property property) {
-        Property existing = propertyRepository.findByFolio(property.getFolio()).orElse(null);
+        if (property.getCounty() == null || property.getCounty().getId() == null) {
+            throw new IllegalArgumentException("A county is required to save a property");
+        }
+        Property existing = propertyRepository.findByFolioAndCounty_Id(
+            property.getFolio(), property.getCounty().getId()).orElse(null);
         if (existing != null) {
             property.setId(existing.getId());
         }
@@ -84,8 +91,11 @@ public class PropertyServiceImpl implements PropertyService {
     }
 
     @Override
-    public PropertyDTO getByFolio(String folio) {
-        Property property = propertyRepository.findByFolio(folio).orElseThrow(() -> new PropertyNotFoundException("No property found with folio: "+ folio));
+    public PropertyDTO getByFolio(String folio, Long countyId) {
+        if (countyId == null) {
+            throw new IllegalArgumentException("countyId is required for folio lookup");
+        }
+        Property property = propertyRepository.findByFolioAndCounty_Id(folio, countyId).orElseThrow(() -> new PropertyNotFoundException("No property found with folio: "+ folio));
         return propertyMapper.toDTO(property);
     }
 
@@ -96,6 +106,7 @@ public class PropertyServiceImpl implements PropertyService {
 
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
             Property property = propertyMapper.toEntity(externalPropertyMapper.toDTO(api.getPropertyInfo()));
+            property.setCounty(countyService.miamiDade());
             linkEntities(property, api);
             return propertyMapper.toDTO(property);
         } 
@@ -187,8 +198,8 @@ public class PropertyServiceImpl implements PropertyService {
     }
 
     @Override
-    public List<String> getAllFolios() {
-        return propertyRepository.findAllFolios();
+    public List<String> getAllFolios(Long countyId) {
+        return propertyRepository.findAllFolios(countyId);
     }
     
 
@@ -198,7 +209,7 @@ public class PropertyServiceImpl implements PropertyService {
     }
 
     @Override
-    public List<String> getAllFoliosForPropertyWithoutExtraFeatures() {
-        return propertyRepository.findFoliosWithoutExtraFeature();
+    public List<String> getAllFoliosForPropertyWithoutExtraFeatures(Long countyId) {
+        return propertyRepository.findFoliosWithoutExtraFeature(countyId);
     }
 }

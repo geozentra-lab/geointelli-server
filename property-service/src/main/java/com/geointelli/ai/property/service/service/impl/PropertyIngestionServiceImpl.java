@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.service.CountyService;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -76,12 +78,13 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     private final ExtraFeatureMapper extraFeatureMapper;
     private final ExternalExtraFeatureMapper externalExtraFeatureMapper;
     private final PropertyService propertyService;
+    private final CountyService countyService;
 
     @Override
     @Transactional
     public void ingest(String folio) {
         try {
-            Property existingProperty = propertyRepository.findByFolio(folio).orElse(null);
+            Property existingProperty = propertyRepository.findByFolioAndCounty_Id(folio, countyService.miamiDade().getId()).orElse(null);
             if(existingProperty != null){
                 log.info("property already found with this folio");
                 return;
@@ -93,6 +96,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
             System.out.println("------------response property:---------------" + api.getPropertyInfo());
 
             Property property = mapProperty(api);
+            property.setCounty(countyService.miamiDade());
             System.out.println("--------------------property:-----------------" + property);
             linkEntities(property, api);
             
@@ -247,7 +251,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     @Transactional
     public void ingestAddresses(String folio){
         try {
-            Property property = propertyRepository.findByFolio(folio).orElse(null);
+            Property property = propertyRepository.findByFolioAndCounty_Id(folio, countyService.miamiDade().getId()).orElse(null);
         if(property != null && property.getAddress() == null){
             String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
@@ -272,7 +276,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     @Transactional
     public void ingestBuildings(String folio){
         try {
-            Property property = propertyRepository.findByFolio(folio).orElse(null);
+            Property property = propertyRepository.findByFolioAndCounty_Id(folio, countyService.miamiDade().getId()).orElse(null);
             if(property != null && property.getBuildings() == null){
                 String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
                 PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
@@ -298,7 +302,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     @Transactional
     public void ingestExtraFeatures(String folio){
         try {
-            Property property = propertyRepository.findByFolio(folio).orElse(null);
+            Property property = propertyRepository.findByFolioAndCounty_Id(folio, countyService.miamiDade().getId()).orElse(null);
             if(property != null && (property.getExtraFeatures() == null || property.getExtraFeatures().isEmpty())){
                 String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
                 PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
@@ -342,7 +346,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
     @Transactional
     public void ingestSales(String folio){
         try {
-            Property property = propertyRepository.findByFolio(folio).orElse(null);
+            Property property = propertyRepository.findByFolioAndCounty_Id(folio, countyService.miamiDade().getId()).orElse(null);
         if(property != null && (property.getSales() == null || property.getSales().isEmpty())){
             String response = miameDadaApiClient.importMiameDadePropertyDetails(folio).block();
             PropertyApiResponse api = objectMapper.readValue(response, PropertyApiResponse.class);
@@ -372,7 +376,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
             return;
         }
 
-        List<Parcel> parcels = parcelRepository.findAllByFolio(folio);
+        List<Parcel> parcels = parcelRepository.findByFolioAndProperty_County_Id(folio, property.getCounty().getId());
 
         if (parcels.isEmpty()) {
             log.warn("No parcels found for folio {}", folio);

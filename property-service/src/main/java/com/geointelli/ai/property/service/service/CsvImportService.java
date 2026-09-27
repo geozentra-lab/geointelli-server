@@ -13,6 +13,7 @@ import java.nio.file.Path;
  * Link CSV timestamp columns are ignored; the many-to-many association has no audit fields.
  */
 public interface CsvImportService {
+
     void importProperties(Path csvPath, String sourceCounty, String sourceState) throws IOException;
     
     void importAddresses(Path csvPath, String sourceCounty, String sourceState) throws IOException;

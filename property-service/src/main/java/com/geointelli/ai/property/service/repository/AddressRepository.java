@@ -17,12 +17,14 @@ public interface AddressRepository extends JpaRepository<Address, Long> {
 
     @Query("""
         SELECT a.property FROM Address a
+        LEFT JOIN a.property.county c
+        LEFT JOIN c.state s
         WHERE (:streetNumber IS NULL OR a.streetNumber = :streetNumber)
         AND (:streetName IS NULL OR LOWER(a.streetName) LIKE CONCAT('%', :streetName, '%'))
         AND (:city IS NULL OR LOWER(a.city) LIKE CONCAT('%', :city, '%'))
         AND (:zip IS NULL OR a.zip = :zip)
         AND (:unit IS NULL OR LOWER(a.unit) LIKE CONCAT('%', :unit, '%'))
-        AND (:state IS NULL OR LOWER(a.streetPrefix) LIKE CONCAT('%', :state, '%'))
+        AND (:state IS NULL OR (LOWER(s.code) = :state OR LOWER(s.name) = :state))
         """)
     List<Property> findPropertyByAddressFields(
             @Param("streetNumber") Integer streetNumber,

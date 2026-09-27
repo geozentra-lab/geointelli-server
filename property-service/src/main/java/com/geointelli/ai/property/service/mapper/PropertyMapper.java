@@ -1,8 +1,10 @@
 package com.geointelli.ai.property.service.mapper;
 
-import org.mapstruct.CollectionMappingStrategy; // Import this
+import org.mapstruct.Mapping;
+
+import org.mapstruct.CollectionMappingStrategy;
 import org.mapstruct.Mapper;
-import org.mapstruct.NullValueCheckStrategy; // Import this
+import org.mapstruct.NullValueCheckStrategy; 
 
 import com.geointelli.ai.property.service.config.IgnoreUnmappedMapperConfig;
 import com.geointelli.ai.property.service.dto.PropertyDTO;
@@ -10,9 +12,7 @@ import com.geointelli.ai.property.service.entity.Property;
 
 @Mapper(
     componentModel = "spring",
-    // 1. Tell MapStruct to use your addParcel() method instead of setParcels()
     collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED, 
-    // 2. Ensure it doesn't try to map null collections from the DTO
     nullValueCheckStrategy = NullValueCheckStrategy.ALWAYS,
     uses = {
         OwnerMapper.class,
@@ -28,6 +28,15 @@ import com.geointelli.ai.property.service.entity.Property;
 )
 public interface PropertyMapper {
 
+    @Mapping(target = "countyId", source = "county.id")
+    @Mapping(target = "countyName", source = "county.name")
+    @Mapping(target = "stateId", source = "county.state.id")
+    @Mapping(target = "stateCode", source = "county.state.code")
+    @Mapping(target = "stateName", source = "county.state.name")
+    @Mapping(target = "parentPropertyId", source = "parentProperty.id")
     PropertyDTO toDTO(Property property);
+    
+    @Mapping(target = "county", ignore = true)
+    @Mapping(target = "parentProperty", ignore = true)
     Property toEntity(PropertyDTO propertyDTO);
 }

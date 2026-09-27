@@ -8,8 +8,8 @@ import com.geointelli.ai.property.service.entity.Property;
 public interface PropertyService {
     Property saveProperty(Property property);
     PropertyDTO getByFolioAPI(String folio);
-    PropertyDTO getByFolio(String folio);
-    List<String> getAllFolios();
+    PropertyDTO getByFolio(String folio, Long countyId);
+    List<String> getAllFolios(Long countyId);
     List<Long> getAllIds();
-    List<String> getAllFoliosForPropertyWithoutExtraFeatures();
+    List<String> getAllFoliosForPropertyWithoutExtraFeatures(Long countyId);
 }

@@ -14,3 +14,12 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://keycloak:8080/realms/geozentra
+
+logging:
+  level:
+    root: INFO
+    com.geointelli: INFO 
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"          

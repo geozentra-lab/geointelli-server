@@ -10,9 +10,7 @@ import com.geointelli.ai.property.service.entity.Parcel;
 
 @Repository
 public interface ParcelRepository extends JpaRepository<Parcel,Long>{
-    List<Parcel> findByFolio(String folio);
-
-    List<Parcel> findAllByFolio(String folio);
+    List<Parcel> findByFolioAndProperty_County_Id(String folio, Long countyId);
 
     @Query(value = """
                     SELECT *
@@ -23,6 +21,6 @@ public interface ParcelRepository extends JpaRepository<Parcel,Long>{
                     """, nativeQuery = true)
     List<Parcel> findWithinBoundingBox(@Param("xmin") double xmin,@Param("ymin") double ymin,@Param("xmax") double xmax,@Param("ymax") double ymax);
 
-    @Query("SELECT folio from Parcel p")
-    List<String> findAllFolios();
+    @Query("SELECT DISTINCT p.folio FROM Parcel p WHERE p.property.county.id = :countyId")
+    List<String> findAllFolios(@Param("countyId") Long countyId);
 }

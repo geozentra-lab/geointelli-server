@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.repository;
 
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -11,22 +13,22 @@ import com.geointelli.ai.property.service.entity.Property;
 
 @Repository
 public interface PropertyRepository extends JpaRepository<Property, Long>{
-    Optional<Property> findByFolio(String folio);
+    Optional<Property> findByFolioAndCounty_Id(String folio, Long countyId);
 
-    @Query("SELECT p.folio FROM Property p")
-    List<String> findAllFolios();
+    @Query("SELECT p.folio FROM Property p WHERE p.county.id = :countyId")
+    List<String> findAllFolios(@Param("countyId") Long countyId);
 
     @Query("SELECT p.id from Property p")
     List<Long> findAllIds();
 
-    @Query("SELECT p.folio FROM Property p WHERE p.address IS NULL")
-    List<String> findFoliosWithoutAddress();
+    @Query("SELECT p.folio FROM Property p WHERE p.county.id = :countyId AND p.address IS NULL")
+    List<String> findFoliosWithoutAddress(@Param("countyId") Long countyId);
 
-    @Query("SELECT p.folio FROM Property p WHERE p.extraFeatures IS EMPTY")
-    List<String> findFoliosWithoutExtraFeature();
+    @Query("SELECT p.folio FROM Property p WHERE p.county.id = :countyId AND p.extraFeatures IS EMPTY")
+    List<String> findFoliosWithoutExtraFeature(@Param("countyId") Long countyId);
 
-    @Query("SELECT p.folio FROM Property p WHERE p.sales IS EMPTY")
-    List<String> findFoliosWithoutSales();
+    @Query("SELECT p.folio FROM Property p WHERE p.county.id = :countyId AND p.sales IS EMPTY")
+    List<String> findFoliosWithoutSales(@Param("countyId") Long countyId);
 
     @Query("""
         SELECT a.property

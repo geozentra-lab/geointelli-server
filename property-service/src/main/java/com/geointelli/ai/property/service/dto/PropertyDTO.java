@@ -13,7 +13,15 @@ public class PropertyDTO {
 
     private String folio;
 
+    private Long countyId;
+    private String countyName;
+    private Long stateId;
+    private String stateCode;
+    private String stateName;
+
     private String parentFolio;
+
+    private Long parentPropertyId;
 
     private BigDecimal bathroomCount;
 

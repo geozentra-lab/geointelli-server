@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.service.CountyService;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -35,12 +37,13 @@ public class PropertyIngestionController {
     private final AddressService addressService;
     private final PropertyRepository propertyRepository;
     private final PropertyIngestionService propertyIngestionService;
+    private final CountyService countyService;
 
     @PostMapping("/run")
     public ResponseEntity<String> runIngestion() {
         log.info("Manual ingestion triggered via API");
-        List<String> folios = parcelService.getAllFolios();
-        Set<String> foliosSet = new HashSet<>(propertyService.getAllFolios());
+        List<String> folios = parcelService.getAllFolios(countyService.miamiDade().getId());
+        Set<String> foliosSet = new HashSet<>(propertyService.getAllFolios(countyService.miamiDade().getId()));
         List<String> nonExistingFolios = new ArrayList<>();
         for(String folio: folios){
             if (!foliosSet.contains(folio)) {
@@ -53,9 +56,9 @@ public class PropertyIngestionController {
         System.out.println("Non Existing Folios length: "+ nonExistingFolios.size());
 
         propertyIngestionManager.ingestAllFolios(nonExistingFolios);
-        // propertyIngestionManager.ingestAllFolios(parcelService.getAllFolios());
-        // propertyIngestionManager.ingestAllBuildings(propertyService.getAllFolios());
-        // List<String> folios = parcelService.getAllFolios();
+        // propertyIngestionManager.ingestAllFolios(parcelService.getAllFolios(countyService.miamiDade().getId()));
+        // propertyIngestionManager.ingestAllBuildings(propertyService.getAllFolios(countyService.miamiDade().getId()));
+        // List<String> folios = parcelService.getAllFolios(countyService.miamiDade().getId());
         // for(String folio : folios){
         //     propertyIngestionService.ingest(folio);
         // }
@@ -65,14 +68,14 @@ public class PropertyIngestionController {
     @PostMapping("/ingestbuildings")
     public ResponseEntity<String> runBuildingsIngestion() {
         log.info("Buildings ingestion triggered via API");
-        propertyIngestionManager.ingestAllBuildings(propertyService.getAllFolios());
+        propertyIngestionManager.ingestAllBuildings(propertyService.getAllFolios(countyService.miamiDade().getId()));
         return ResponseEntity.ok("Buildings ingestion started");
     }
 
     @PostMapping("/ingest_extrafeatures")
     public ResponseEntity<String> runExtraFeaturesIngestion() {
         log.info("Extra features ingestion triggered via API");
-        List<String> folios = propertyService.getAllFoliosForPropertyWithoutExtraFeatures();
+        List<String> folios = propertyService.getAllFoliosForPropertyWithoutExtraFeatures(countyService.miamiDade().getId());
         // List<String> folios = new ArrayList<>(List.of(
         //     "3040310170020",
         //     "3059100050100",
@@ -99,7 +102,7 @@ public class PropertyIngestionController {
     @PostMapping("/ingest_sales")
     public ResponseEntity<String> runSalesIngestion() {
         log.info("Sales ingestion triggered via API");
-        propertyIngestionManager.ingestAllSales(propertyRepository.findFoliosWithoutSales());
+        propertyIngestionManager.ingestAllSales(propertyRepository.findFoliosWithoutSales(countyService.miamiDade().getId()));
         return ResponseEntity.ok("Sales ingestion started");
     }
 
@@ -111,7 +114,7 @@ public class PropertyIngestionController {
         //                                             .toList();
         // List<String> nonExistingFolios = nonExistingIds.stream().map(propertyRepository::findById)
         //                                                     .flatMap(Optional::stream).map(Property::getFolio).collect(Collectors.toList());        
-        List<String> nonExistingFolios = propertyRepository.findFoliosWithoutAddress();                                            
+        List<String> nonExistingFolios = propertyRepository.findFoliosWithoutAddress(countyService.miamiDade().getId());
         log.info("Addresses ingestion triggered via API");
         propertyIngestionManager.ingestAllAddresses(nonExistingFolios);
         return ResponseEntity.ok("Addresses ingestion started");

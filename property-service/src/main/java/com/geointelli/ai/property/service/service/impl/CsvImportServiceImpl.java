@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.service.CountyService;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.function.BiConsumer;
@@ -13,9 +15,6 @@ import com.geointelli.ai.property.service.entity.Sale;
 import com.geointelli.ai.property.service.entity.Tax;
 import com.geointelli.ai.property.service.entity.ExtraFeature;
 import com.geointelli.ai.property.service.entity.Parcel;
-import com.geointelli.ai.property.service.entity.PropertyImage;
-import com.geointelli.ai.property.service.entity.SchoolAnalysis;
-import com.geointelli.ai.property.service.entity.TransportationAnalysis;
 import com.geointelli.ai.property.service.entity.PropertyValuePrediction;
 
 import java.io.IOException;
@@ -26,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -55,17 +56,18 @@ public class CsvImportServiceImpl implements CsvImportService {
         private PropertyImportMappingRepository propertyImportMappingRepository;
         private EntityManager entityManager;
         private PlatformTransactionManager transactionManager;
-        
+        private CountyService countyService;
+
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importProperties(Path csvPath, String sourceCounty, String sourceState) throws IOException {
                 importRecords(csvPath, record -> {
                         Long sourcePropertyId = Long.valueOf(record.get("id").trim());
-                        if (propertyImportMappingRepository.findBySourceCountyAndSourceStateAndSourcePropertyId(
-                                sourceCounty, sourceState, sourcePropertyId).isPresent()) {
-                                return;
-                        }
+                        countyService.ensureExists(sourceCounty, sourceState);
+                        var existingMapping = propertyImportMappingRepository.findBySourceCountyAndSourceStateAndSourcePropertyId(
+                                sourceCounty, sourceState, sourcePropertyId);
                         Property property = new Property();
+                        assignCounty(property, sourceCounty, sourceState);
                         property.setBathroomCount(parseBigDecimal(record.get("bathroom_count")));
                         property.setBedroomCount(parseBigDecimal(record.get("bedroom_count")));
                         property.setBuildingActualArea(parseBigDecimal(record.get("building_actual_area")));
@@ -83,7 +85,9 @@ public class CsvImportServiceImpl implements CsvImportService {
                         property.setMunicipality(emptyToNull(record.get("municipality")));
                         property.setNeighborhood(record.get("neighborhood"));
                         property.setNeighborhoodDescription(emptyToNull(record.get("neighborhood_description")));
-                        property.setParentFolio(emptyToNull(record.get("parent_folio")));
+                        if (record.isMapped("parent_folio")) {
+                                property.setParentFolio(emptyToNull(record.get("parent_folio")));
+                        }
                         property.setPrimaryZone(emptyToNull(record.get("primary_zone")));
                         property.setPrimaryZoneDescription(emptyToNull(record.get("primary_zone_description")));
                         property.setShowCurrentValuesFlag(emptyToNull(record.get("show_current_values_flag")));
@@ -91,14 +95,62 @@ public class CsvImportServiceImpl implements CsvImportService {
                         property.setSubdivision(emptyToNull(record.get("subdivision")));
                         property.setUnitCount(parseInteger(record.get("unit_count")));
                         property.setYearBuilt(emptyToNull(record.get("year_built"))); 
+                        log.info("inserting property with folio {}", property.getFolio());
                         entityManager.persist(property);
-                        PropertyImportMapping mapping = new PropertyImportMapping();
+                        PropertyImportMapping mapping = existingMapping.orElseGet(PropertyImportMapping::new);
                         mapping.setSourceCounty(sourceCounty);
                         mapping.setSourceState(sourceState);
                         mapping.setSourcePropertyId(sourcePropertyId);
                         mapping.setGeozentraProperty(property);
-                        entityManager.persist(mapping);
+                        // Existing mappings are managed; dirty checking saves their new target.
+                        if (existingMapping.isEmpty()) {
+                                entityManager.persist(mapping);
+                        }
                 });
+                importParentRelationships(csvPath, sourceCounty, sourceState);
+        }
+
+        private void importParentRelationships(Path csvPath, String sourceCounty, String sourceState)
+                        throws IOException {
+                try (Reader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8);
+                        CSVParser parser = CSVFormat.DEFAULT.builder().setHeader()
+                                .setSkipHeaderRecord(true).get().parse(reader)) {
+                        if (!parser.getHeaderMap().containsKey("parent_property_id")) {
+                                return;
+                        }
+                }
+                importRecords(csvPath, record -> {
+                        Long parentSourceId = parseLong(record.get("parent_property_id"));
+                        if (parentSourceId == null) {
+                                return;
+                        }
+                        Long childSourceId = Long.valueOf(record.get("id").trim());
+                        Property child = getMappedProperty(sourceCounty, sourceState, childSourceId);
+                        PropertyImportMapping parentMapping = propertyImportMappingRepository
+                                .findBySourceCountyAndSourceStateAndSourcePropertyId(
+                                        sourceCounty, sourceState, parentSourceId)
+                                .orElseThrow(() -> new IllegalArgumentException(
+                                        "No parent mapping for source property ID " + parentSourceId
+                                        + " in " + sourceCounty + ", " + sourceState
+                                        + " (child source ID " + childSourceId + ")"));
+                        Property parent = parentMapping.getGeozentraProperty();
+                        assignCounty(parent, sourceCounty, sourceState);
+                        validateParentRelationship(child, parent);
+                        child.setParentProperty(parent);
+                });
+        }
+
+        private void validateParentRelationship(Property child, Property parent) {
+                Set<Long> visitedIds = new HashSet<>();
+                visitedIds.add(child.getId());
+                Property ancestor = parent;
+                while (ancestor != null) {
+                        if (!visitedIds.add(ancestor.getId())) {
+                                throw new IllegalArgumentException(
+                                        "Parent relationship creates a cycle for property " + child.getId());
+                        }
+                        ancestor = ancestor.getParentProperty();
+                }
         }
 
         @Override
@@ -206,7 +258,6 @@ public class CsvImportServiceImpl implements CsvImportService {
                         boolean linked = property.getOwners().stream()
                                 .anyMatch(existing -> existing.getId().equals(ownerId));
                         if (!linked) {
-                                // Property owns the existing property_owner join table.
                                 property.getOwners().add(entityManager.getReference(Owner.class, ownerId));
                         }
                 });
@@ -445,6 +496,17 @@ public class CsvImportServiceImpl implements CsvImportService {
                                 new IllegalStateException("No property mapping found for source property ID: "
                                         + sourcePropertyId + " in " + sourceCounty + ", " + sourceState));
 
-                return mapping.getGeozentraProperty();
+                Property property = mapping.getGeozentraProperty();
+                assignCounty(property, sourceCounty, sourceState);
+                return property;
+        }
+
+        private void assignCounty(Property property, String sourceCounty, String sourceState) {
+                var county = countyService.resolve(sourceCounty, sourceState);
+                if (property.getCounty() != null
+                                && !county.getId().equals(property.getCounty().getId())) {
+                        throw new IllegalArgumentException("Source mapping points to a property in another county");
+                }
+                property.setCounty(county);
         }
 }
