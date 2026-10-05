@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import com.geointelli.ai.property.service.service.CountyService;
+import com.geointelli.ai.property.service.service.PropertyImageService;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public class CsvImportServiceImpl implements CsvImportService {
         private EntityManager entityManager;
         private PlatformTransactionManager transactionManager;
         private CountyService countyService;
+        private PropertyImageService propertyImageService;
 
         @Override
         @Transactional(rollbackOn = IOException.class)
@@ -390,6 +392,23 @@ public class CsvImportServiceImpl implements CsvImportService {
                         entity.setPredictionDate(parseLocalDate(record.get("prediction_date")));
                         entity.setModelVersion(emptyToNull(record.get("model_version")));
                         entityManager.persist(entity);
+                });
+        }
+
+        @Override
+        @Transactional(rollbackOn = IOException.class)
+        public void importPropertyImages(Path csvPath, String sourceCounty, String sourceState) throws IOException {
+                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
+                        String originalUrl = emptyToNull(record.get("original_url"));
+                        Boolean primary = parseBoolean(record.get("primary_image"));
+                        Integer displayOrder = parseInteger(record.get("display_order"));
+                        if(displayOrder == 1) {
+                                primary = true;
+                        }
+                        if (originalUrl == null || primary == null || displayOrder == null) {
+                                throw new IllegalArgumentException("original_url, primary_image and display_order are required");
+                        }
+                        propertyImageService.processAndSave(property, originalUrl, primary, displayOrder);
                 });
         }
 

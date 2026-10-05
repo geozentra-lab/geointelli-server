@@ -35,7 +35,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     public PropertyImageServiceImpl(ImageDownloadService imageDownloadService,
             PropertyImageRepository propertyImageRepository,
-            @Qualifier("localStorage") ImageStorageService imageStorageService,
+            @Qualifier("s3Storage") ImageStorageService imageStorageService,
             PropertyImageMapper propertyImageMapper, S3Service s3Service) {
 
         this.imageDownloadService = imageDownloadService;
@@ -47,8 +47,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     @Transactional
     @Override
-    public PropertyImage processAndSave(Property property,
-                                     String imageUrl, boolean primary, int order) {
+    public PropertyImage processAndSave(Property property, String imageUrl, boolean primary, int order) {
         if (imageUrl == null || imageUrl.isBlank()) return null;
         try {
             boolean urlAlreadyProcessed = property.getImages().stream()

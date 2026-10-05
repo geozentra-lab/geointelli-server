@@ -27,6 +27,13 @@ public class CsvImportController {
         return ResponseEntity.ok("CSV folder import completed");
     }
 
+    @PostMapping("/import/property-images")
+    public ResponseEntity<String> importPropertyImages(@RequestParam String filePath, @RequestParam String county,
+            @RequestParam String sourceState) throws IOException {
+        csvImportService.importPropertyImages(Path.of(filePath), county, sourceState);
+        return ResponseEntity.ok("Image CSV import completed");
+    }
+
     @PostMapping("/import/properties")
     public ResponseEntity<String> importCsv(@RequestParam String filePath, @RequestParam String county, @RequestParam String sourceState) throws IOException {
         csvImportService.importProperties(Path.of(filePath), county, sourceState);

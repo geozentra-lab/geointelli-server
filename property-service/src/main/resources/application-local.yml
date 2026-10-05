@@ -1,8 +1,8 @@
 spring:
   datasource:
-    # url: jdbc:postgresql://localhost:5432/geointelli
+    url: jdbc:postgresql://localhost:5432/geointelli
     # url: jdbc:postgresql://localhost:5432/zentratest
-    url: jdbc:postgresql://localhost:5432/geozentra
+    # url: jdbc:postgresql://localhost:5432/geozentra
     driver-class-name: org.postgresql.Driver
 
   jpa:
