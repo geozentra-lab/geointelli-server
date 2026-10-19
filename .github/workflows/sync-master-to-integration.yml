@@ -1,0 +1,60 @@
+
+name: Sync master to integration-testing
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches:
+      - integration-testing
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'master' &&
+      github.event.pull_request.base.ref == 'integration-testing' &&
+      github.event.pull_request.draft == false
+
+    runs-on: ubuntu-latest
+    environment: branch-sync
+
+    steps:
+      - name: Create GitHub App token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.SYNC_APP_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Verify PR and merge
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+
+          source=$(jq -r '.head.ref' <<< "$pr")
+          source_repo=$(jq -r '.head.repo.full_name' <<< "$pr")
+          target=$(jq -r '.base.ref' <<< "$pr")
+          state=$(jq -r '.state' <<< "$pr")
+          draft=$(jq -r '.draft' <<< "$pr")
+          sha=$(jq -r '.head.sha' <<< "$pr")
+
+          test "$source" = "master"
+          test "$source_repo" = "$GH_REPO"
+          test "$target" = "integration-testing"
+          test "$state" = "open"
+          test "$draft" = "false"
+
+          gh api --method PUT \
+            "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
+            -f merge_method=squash \
+            -f sha="$sha"
