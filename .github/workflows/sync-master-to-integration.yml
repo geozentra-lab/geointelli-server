@@ -56,5 +56,5 @@ jobs:
 
           gh api --method PUT \
             "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
-            -f merge_method=squash \
+            -f merge_method=merge \
             -f sha="$sha"
