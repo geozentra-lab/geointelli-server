@@ -9,7 +9,7 @@ import com.geointelli.ai.property.service.entity.Parcel;
 public interface ParcelService {
 
     public List<ParcelDTO> getParcelsWithinBoundingBox(double xmin,double ymin,double xmax,double ymax);
-    public Map<String, Parcel> preloadParcels();
-    public List<String> getAllFolios();
-    public List<ParcelDTO> getByFolio(String folio);
+    public Map<Long, Parcel> preloadParcels();
+    public List<String> getAllFolios(Long countyId);
+    public List<ParcelDTO> getByFolio(String folio, Long countyId);
 }

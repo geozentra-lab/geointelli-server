@@ -30,18 +30,21 @@ public class ParcelServiceImpl implements ParcelService {
     }
 
     @Override
-    public Map<String, Parcel> preloadParcels() {
+    public Map<Long, Parcel> preloadParcels() {
         return parcelRepository.findAll().stream()
-                .collect(Collectors.toMap(Parcel::getFolio, Function.identity()));
+                .collect(Collectors.toMap(Parcel::getId, Function.identity()));
     }
 
     @Override
-    public List<String> getAllFolios() {
-        return parcelRepository.findAllFolios();
+    public List<String> getAllFolios(Long countyId) {
+        return parcelRepository.findAllFolios(countyId);
     }
 
     @Override
-    public List<ParcelDTO> getByFolio(String folio) {
-        return parcelRepository.findByFolio(folio).stream().map(parcel -> parcelMapper.toDTO(parcel)).toList();
+    public List<ParcelDTO> getByFolio(String folio, Long countyId) {
+        if (countyId == null) {
+            throw new IllegalArgumentException("countyId is required for folio lookup");
+        }
+        return parcelRepository.findByFolioAndProperty_County_Id(folio, countyId).stream().map(parcel -> parcelMapper.toDTO(parcel)).toList();
     }
 }

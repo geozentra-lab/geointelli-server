@@ -21,7 +21,7 @@ import lombok.ToString;
 @ToString(exclude = "property")
 @NoArgsConstructor
 @AllArgsConstructor
-public class Parcel {
+public class Parcel extends AuditableEntity {
 
     @Id
     @Column(name = "fid")

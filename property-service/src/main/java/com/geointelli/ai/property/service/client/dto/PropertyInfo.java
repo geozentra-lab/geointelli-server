@@ -84,6 +84,30 @@ public class PropertyInfo {
     @JsonProperty("ShowCurrentValuesFlag")
     private String showCurrentValuesFlag;
 
+    @JsonProperty("DORDescriptionCurrent")
+    private String dorDescriptionCurrent;
+
+    @JsonProperty("EncodedFolioAndTaxYear")
+    private String encodedFolioAndTaxYear;
+
+    @JsonProperty("HxBaseYear")
+    private Integer hxBaseYear;
+
+    @JsonProperty("PercentHomesteadCapped")
+    private Double percentHomesteadCapped;
+
+    @JsonProperty("PlatBook")
+    private String platBook;
+
+    @JsonProperty("PlatPage")
+    private String platPage;
+
+    @JsonProperty("SubdivisionDescription")
+    private String subdivisionDescription;
+
+    @JsonProperty("YearAnnexed")
+    private Integer yearAnnexed;
+
     @JsonProperty("Message")
     private String message;
 

@@ -20,7 +20,7 @@ import lombok.ToString;
 @ToString(exclude = "property")
 @AllArgsConstructor
 @NoArgsConstructor
-public class Assessment {
+public class Assessment extends AuditableEntity {
 
     @Id
     @GeneratedValue

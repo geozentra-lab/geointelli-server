@@ -25,7 +25,7 @@ public class BuildingDTO {
 
     private Integer grossArea;
 
-    private Integer heatedArea;
+    private BigDecimal heatedArea;
 
     private String message;
 

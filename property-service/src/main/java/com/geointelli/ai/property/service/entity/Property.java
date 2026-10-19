@@ -1,16 +1,21 @@
 package com.geointelli.ai.property.service.entity;
 
+import jakarta.persistence.UniqueConstraint;
+
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -21,50 +26,56 @@ import lombok.Setter;
 import lombok.ToString;
 
 @Entity
-@Table(name = "properties")
+@Table(name = "properties", uniqueConstraints = @UniqueConstraint(
+    name = "uq_properties_county_folio", columnNames = {"county_id", "folio"}))
 @Getter
 @Setter
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor
-public class Property {
+public class Property extends AuditableEntity {
 
     @Id
     @GeneratedValue
     private Long id;
 
-    @Column(unique = true)
+    @Column
     private String folio;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "county_id")
+    @ToString.Exclude
+    private County county;
 
     private String parentFolio;
 
-    private Integer bathroomCount;
+    private BigDecimal bathroomCount;
 
-    private Integer bedroomCount;
+    private BigDecimal bedroomCount;
 
     private Double halfBathroomCount;
 
-    private Integer buildingActualArea;
+    private BigDecimal buildingActualArea;
 
-    private Integer buildingBaseArea;
+    private BigDecimal buildingBaseArea;
 
-    private Integer buildingEffectiveArea;
+    private BigDecimal buildingEffectiveArea;
 
-    private Integer buildingGrossArea;
+    private BigDecimal buildingGrossArea;
 
-    private Integer buildingHeatedArea;
+    private BigDecimal buildingHeatedArea;
 
     private String dorCode;
 
     private String dorDescription;
 
-    private Integer neighborhood;
+    private String neighborhood;
 
     private String neighborhoodDescription;
 
     private Double lotSize;
 
-    private Integer floorCount;
+    private BigDecimal floorCount;
 
     private Integer unitCount;
 
@@ -110,8 +121,30 @@ public class Property {
     @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Parcel> parcels = new ArrayList<>();
 
+    @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ExtraFeature> extraFeatures = new ArrayList<>();
+
     @OneToOne(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
     private Address address;
+
+    @OneToMany(mappedBy = "property", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PropertyImage> images = new ArrayList<>();
+
+    @OneToMany(
+        mappedBy = "property",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<Favorite> favorites = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_property_id")
+    @ToString.Exclude
+    private Property parentProperty;
+
+    @OneToMany(mappedBy = "parentProperty", cascade = CascadeType.ALL, orphanRemoval = true)
+    @ToString.Exclude
+    private List<Property> childProperties = new ArrayList<>();
 
     public void addParcel(Parcel parcel) {
     if (this.parcels == null || isImmutable(this.parcels)) {

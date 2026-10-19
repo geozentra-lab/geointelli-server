@@ -13,12 +13,12 @@ import lombok.AllArgsConstructor;
 
 @Component
 @AllArgsConstructor
-public class MiameDadeApiClientTest {
+public class MiamiDadeApiClientTest {
     public static void main(String[] args) throws Exception {
         // ExternalPropertyMapper externalPropertyMapper = new ExternalPropertyMapperImpl();
         // PropertyMapper propertyMapper = new PropertyMapperImpl();
-        // MiameDadeApiClient miameDadeApiClient = new MiameDadeApiClient();
-        // String response = miameDadeApiClient.importMiameDadePropertyDetails("0131330131540")
+        // MiamiDadeApiClient MiamiDadeApiClient = new MiamiDadeApiClient();
+        // String response = MiamiDadeApiClient.importMiameDadePropertyDetails("0131330131540")
         //                     .block();
         // ObjectMapper mapper = new ObjectMapper();
         // PropertyApiResponse property = mapper.readValue(response, PropertyApiResponse.class);

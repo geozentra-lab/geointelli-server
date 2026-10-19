@@ -16,10 +16,10 @@ import io.netty.handler.timeout.WriteTimeoutHandler;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
-public class MiameDadeApiClient {
+public class MiamiDadeApiClient {
     private final WebClient client;
     private String baseUrl;
-    public MiameDadeApiClient(){
+    public MiamiDadeApiClient(){
         HttpClient httpClient = HttpClient.create()
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000) // 10s max connect
             .responseTimeout(Duration.ofSeconds(20))             // 20s to get response
@@ -27,7 +27,7 @@ public class MiameDadeApiClient {
                 conn.addHandlerLast(new ReadTimeoutHandler(20, TimeUnit.SECONDS))
                     .addHandlerLast(new WriteTimeoutHandler(10, TimeUnit.SECONDS))
             );                                     
-        baseUrl = "https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx";  
+        baseUrl = "http://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx";  
         
         client = WebClient.builder().baseUrl(baseUrl)
                 .clientConnector(new ReactorClientHttpConnector(httpClient))

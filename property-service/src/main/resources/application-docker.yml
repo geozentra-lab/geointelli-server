@@ -3,6 +3,8 @@ spring:
     url: jdbc:postgresql://postgres:5432/geointelli
 
   jpa:
+    hibernate:
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect
@@ -11,4 +13,13 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://keycloak:8080/realms/geointelli
+          issuer-uri: http://keycloak:8080/realms/geozentra
+
+logging:
+  level:
+    root: INFO
+    com.geointelli: INFO 
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"          

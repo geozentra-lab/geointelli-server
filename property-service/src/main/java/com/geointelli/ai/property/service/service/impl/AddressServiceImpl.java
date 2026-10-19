@@ -54,4 +54,10 @@ public class AddressServiceImpl implements AddressService {
 
         return results;
     }
+
+    @Override
+    public List<String> suggest(String raw) {
+        if (raw == null || raw.trim().length() < 3) return List.of();
+        return addressRepository.findAddressSuggestions(raw.trim());
+    }
 }

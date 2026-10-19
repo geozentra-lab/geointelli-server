@@ -8,4 +8,5 @@ import com.geointelli.ai.property.service.entity.Property;
 public interface AddressService {
     public List<Long> getAllPropertiesId();
     public List<Property> search(AddressSearchRequest req);
+    public List<String> suggest(String raw);
 }

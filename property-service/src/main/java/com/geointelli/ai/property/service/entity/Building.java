@@ -16,7 +16,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString(exclude = "property")
-public class Building {
+public class Building extends AuditableEntity {
 
     @Id
     @GeneratedValue
@@ -38,7 +38,7 @@ public class Building {
 
     private Integer grossArea;
 
-    private Integer heatedArea;
+    private BigDecimal heatedArea;
 
     private String message;
 

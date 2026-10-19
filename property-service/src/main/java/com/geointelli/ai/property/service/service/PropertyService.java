@@ -2,11 +2,14 @@ package com.geointelli.ai.property.service.service;
 
 import java.util.List;
 
+import com.geointelli.ai.property.service.dto.PropertyDTO;
 import com.geointelli.ai.property.service.entity.Property;
 
 public interface PropertyService {
-    public Property saveProperty(Property property);
-    public Property getByFolio(String folio);
-    public List<String> getAllFolios();
-    public List<Long> getAllIds();
+    Property saveProperty(Property property);
+    PropertyDTO getByFolioAPI(String folio);
+    PropertyDTO getByFolio(String folio, Long countyId);
+    List<String> getAllFolios(Long countyId);
+    List<Long> getAllIds();
+    List<String> getAllFoliosForPropertyWithoutExtraFeatures(Long countyId);
 }

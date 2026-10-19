@@ -13,6 +13,7 @@ public class PropertyValuePredictionDTO {
     private BigDecimal predictedPrice;
     private BigDecimal predictedPriceLow;
     private BigDecimal predictedPriceHigh;
+    private BigDecimal growthPercentage;
 
     private BigDecimal lastSalePrice;
     private LocalDate lastSaleDate;
