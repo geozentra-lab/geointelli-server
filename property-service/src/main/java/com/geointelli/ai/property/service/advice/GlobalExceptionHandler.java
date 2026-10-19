@@ -62,6 +62,12 @@ public class GlobalExceptionHandler {
                 .build());
     }
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleInvalidParameterType(
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        return handleBadRequest(new IllegalArgumentException(ex.getName() + ": invalid value"));
+    }
+
     @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
     public ResponseEntity<ApiError> handleMissingParameter(
             org.springframework.web.bind.MissingServletRequestParameterException ex) {
@@ -75,6 +81,23 @@ public class GlobalExceptionHandler {
                 ? "invalid value" : error.getDefaultMessage()))
             .collect(java.util.stream.Collectors.joining("; "));
         return handleBadRequest(new IllegalArgumentException(message.isEmpty() ? "Invalid parameters" : message));
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleInvalidBody(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return handleBadRequest(new IllegalArgumentException("Invalid JSON body or unsupported field value"));
+    }
+
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatus(
+            org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(ApiError.builder()
+            .status(ex.getStatusCode().value())
+            .error(ex.getStatusCode().toString())
+            .message(ex.getReason())
+            .timestamp(Instant.now())
+            .build());
     }
 
     @ExceptionHandler(Exception.class)

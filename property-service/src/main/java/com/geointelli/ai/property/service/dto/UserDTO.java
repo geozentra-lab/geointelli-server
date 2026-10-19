@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.dto;
 
 import lombok.Data;
+import com.geointelli.ai.property.service.entity.UserPersona;
 
 @Data
 public class UserDTO {
@@ -15,4 +16,6 @@ public class UserDTO {
     private String firstName;
 
     private String lastName;
+
+    private UserPersona persona;
 }

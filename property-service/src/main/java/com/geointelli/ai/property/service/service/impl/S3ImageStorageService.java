@@ -1,16 +1,19 @@
 package com.geointelli.ai.property.service.service.impl;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.geointelli.ai.property.service.service.ImageStorageService;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Service("s3Storage")
+@Lazy
 public class S3ImageStorageService implements ImageStorageService {
     private final String bucket; 
 
@@ -24,8 +27,9 @@ public class S3ImageStorageService implements ImageStorageService {
     @Override
     public String store(byte[] content, String fileName) {
         s3Client.putObject(PutObjectRequest.builder().bucket(bucket).key(fileName).
-                contentType("image/jpeg").build(), RequestBody.fromBytes(content));
+                contentType(MediaTypeFactory.getMediaType(fileName)
+                    .orElse(MediaType.APPLICATION_OCTET_STREAM).toString()).build(), RequestBody.fromBytes(content));
         return "https://" + bucket + ".s3.amazonaws.com/" + fileName;
     }
-    
+
 }

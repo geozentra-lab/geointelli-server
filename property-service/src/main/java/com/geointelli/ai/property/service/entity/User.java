@@ -6,6 +6,8 @@ import java.util.List;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -33,6 +35,10 @@ public class User extends AuditableEntity {
     private String firstName;
 
     private String lastName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 40)
+    private UserPersona persona = UserPersona.USER;
     @OneToMany(
         mappedBy = "user",
         cascade = CascadeType.ALL,

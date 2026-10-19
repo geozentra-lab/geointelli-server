@@ -16,3 +16,11 @@ aws:
 
   s3:
     bucket: geozentra-images-prod-286528690180-us-east-1-an
+mapillary:
+  backfill:
+    workers: ${MAPILLARY_BACKFILL_WORKERS:2}
+  access-token: ${MAPILLARY_ACCESS_TOKEN:}
+  roads-file: ${MAPILLARY_ROADS_FILE:}
+
+images:
+  local-directory: ${IMAGES_LOCAL_DIRECTORY:images}

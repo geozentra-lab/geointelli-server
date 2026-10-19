@@ -14,6 +14,7 @@ import com.geointelli.ai.property.service.entity.PropertyImage;
         
 @Repository
 public interface PropertyImageRepository extends JpaRepository<PropertyImage, Long> {
+    boolean existsByPropertyId(Long propertyId);
     Optional<PropertyImage> findByImageHash(String hash);
     
     Optional<PropertyImage> findByPropertyAndImageHash(Property property, String hash);

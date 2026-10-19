@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.config;
 
+import org.springframework.context.annotation.Lazy;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +13,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @Configuration
+@Lazy
 public class AwsConfig {
     @Value("${aws.access_key}")
     private String accessKey;
@@ -36,7 +39,8 @@ public class AwsConfig {
     public S3Presigner s3Presigner() {
         
         return S3Presigner.builder()
-                .region(Region.US_EAST_1)
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
                 .build();
     }
 }

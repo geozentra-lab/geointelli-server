@@ -1,6 +1,8 @@
 package com.geointelli.ai.property.service.repository;
 
 import java.util.Optional;
+import java.util.List;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Modifying;
@@ -8,6 +10,12 @@ import org.springframework.data.repository.query.Param;
 import com.geointelli.ai.property.service.entity.County;
 
 public interface CountyRepository extends JpaRepository<County, Long> {
+    @EntityGraph(attributePaths = "state")
+    List<County> findByIdIn(List<Long> ids);
+
+    @EntityGraph(attributePaths = "state")
+    List<County> findByState_IdOrderByNameAsc(Long stateId);
+
     @Modifying
     @Query(value = """
         INSERT INTO states (code, name) VALUES (:code, :name)

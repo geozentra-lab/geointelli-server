@@ -1,36 +1,37 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-
-import org.springframework.beans.factory.annotation.Qualifier;
+import java.nio.file.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import com.geointelli.ai.property.service.exception.ImageStorageException;
 import com.geointelli.ai.property.service.service.ImageStorageService;
 
-import lombok.extern.slf4j.Slf4j;
-
+/** Writes images to a folder for manual inspection during development. */
 @Service("localStorage")
-@Slf4j
 public class LocalImageStorageServiceImpl implements ImageStorageService {
-    private final Path root = Paths.get("images");
+    private final Path root;
+
+    public LocalImageStorageServiceImpl(@Value("${images.local-directory:images}") String directory) {
+        this.root = Path.of(directory).toAbsolutePath().normalize();
+    }
 
     @Override
     public String store(byte[] content, String fileName) {
-        try{
-            Files.createDirectories(root);
-            Path filePath = root.resolve(fileName);
-            log.info("Saving image to {}", filePath.toAbsolutePath());
-            Files.write(filePath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            return filePath.toString();
+        if (!fileName.matches("[A-Za-z0-9_-]+\\.[A-Za-z0-9]+")) {
+            throw new IllegalArgumentException("Invalid image filename");
         }
-        catch (IOException e) {
-            throw new ImageStorageException("Failed to store image locally: " + fileName, e);
+        try {
+            Files.createDirectories(root);
+            Path temporary = Files.createTempFile(root, "upload-", ".tmp");
+            try {
+                Files.write(temporary, content);
+                Files.move(temporary, root.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+            } finally { Files.deleteIfExists(temporary); }
+            return root.resolve(fileName).toString();
+        } catch (IOException error) {
+            throw new ImageStorageException("Failed to store image locally", error);
         }
     }
-    
+
 }

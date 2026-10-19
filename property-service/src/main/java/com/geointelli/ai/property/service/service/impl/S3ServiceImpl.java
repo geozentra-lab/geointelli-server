@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import org.springframework.context.annotation.Lazy;
+
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +16,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 @Service
+@Lazy
 @RequiredArgsConstructor
 public class S3ServiceImpl implements S3Service {
 

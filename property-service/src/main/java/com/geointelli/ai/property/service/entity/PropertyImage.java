@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.entity;
 
+import java.time.Instant;
+
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -26,10 +28,21 @@ import lombok.Setter;
 @AllArgsConstructor
 public class PropertyImage extends AuditableEntity {
 
+    private String source;
+    private String sourceImageId;
+    @Column(columnDefinition = "text")
+    private String contributor;
+    private String license;
+    private Instant capturedAt;
+    private String matchStatus;
+    @Column(columnDefinition = "text")
+    private String processingNote;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(columnDefinition = "text")
     private String originalUrl;
 
     private String storagePath;

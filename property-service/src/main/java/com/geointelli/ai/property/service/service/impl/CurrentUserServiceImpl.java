@@ -4,6 +4,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.geointelli.ai.property.service.dto.UserDTO;
 import com.geointelli.ai.property.service.entity.User;
@@ -33,7 +35,8 @@ public class CurrentUserServiceImpl implements CurrentUserService {
     public Jwt getCurrentJwt() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
-            throw new RuntimeException("Authenticated user not found");
+            throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED, "A bearer token is required to identify the current user");
         }
         return jwt;
     }
@@ -41,6 +44,7 @@ public class CurrentUserServiceImpl implements CurrentUserService {
     @Override
     public User getCurrentUserEntity() {
         Jwt jwt = getCurrentJwt();
+        userService.getOrCreateUser(jwt);
         String keycloakId = jwt.getSubject();
         return userRepository.findByKeycloakUserId(keycloakId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
