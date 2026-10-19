@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
+import com.geointelli.ai.property.service.service.CountyService;
+import com.geointelli.ai.property.service.service.PropertyImageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,7 +37,8 @@ class CsvImportServiceImplTest {
         transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenAnswer(invocation -> mock(TransactionStatus.class));
-        service = new CsvImportServiceImpl(mappings, entityManager, transactionManager);
+        service = new CsvImportServiceImpl(mappings, entityManager, transactionManager,
+                mock(CountyService.class), mock(PropertyImageService.class));
         property = new Property();
         property.setId(900L);
         PropertyImportMapping mapping = new PropertyImportMapping();
