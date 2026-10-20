@@ -18,6 +18,8 @@ import org.springframework.transaction.TransactionStatus;
 
 import com.geointelli.ai.property.service.entity.*;
 import com.geointelli.ai.property.service.repository.*;
+import com.geointelli.ai.property.service.service.CountyService;
+import com.geointelli.ai.property.service.service.PropertyImageService;
 import jakarta.persistence.EntityManager;
 
 class CsvImportServiceImplTest {
@@ -27,6 +29,7 @@ class CsvImportServiceImplTest {
     private CsvImportServiceImpl service;
     private Property property;
     private PlatformTransactionManager transactionManager;
+    private PropertyImportMapping existingMapping;
 
     @BeforeEach
     void setUp() {
@@ -35,13 +38,14 @@ class CsvImportServiceImplTest {
         transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenAnswer(invocation -> mock(TransactionStatus.class));
-        service = new CsvImportServiceImpl(mappings, entityManager, transactionManager);
+        service = new CsvImportServiceImpl(mappings, entityManager, transactionManager,
+                mock(CountyService.class), mock(PropertyImageService.class));
         property = new Property();
         property.setId(900L);
-        PropertyImportMapping mapping = new PropertyImportMapping();
-        mapping.setGeozentraProperty(property);
+        existingMapping = new PropertyImportMapping();
+        existingMapping.setGeozentraProperty(property);
         when(mappings.findBySourceCountyAndSourceStateAndSourcePropertyId("county", "state", 12L))
-                .thenReturn(Optional.of(mapping));
+                .thenReturn(Optional.of(existingMapping));
     }
 
     private Path csv(String contents) throws Exception {
@@ -135,16 +139,19 @@ class CsvImportServiceImplTest {
         verify(entityManager).flush();
     }
 
-    @Test
-    void importsPropertyAndSourceMapping() throws Exception {
-        Path path = csv("id,bathroom_count,bedroom_count,building_actual_area,building_base_area,"
+    private Path propertyCsv(long sourceId) throws Exception {
+        return csv("id,bathroom_count,bedroom_count,building_actual_area,building_base_area,"
                 + "building_effective_area,building_gross_area,building_heated_area,dor_code,dor_description,"
                 + "floor_count,folio,half_bathroom_count,lot_size,message,municipality,neighborhood,"
                 + "neighborhood_description,parent_folio,primary_zone,primary_zone_description,"
                 + "show_current_values_flag,status,subdivision,unit_count,year_built\n"
-                + " 42 ,2.5,3,1500,1400,1450,1600,1300,01, Residential ,2, 001234 ,1,7500.5,"
+                + " " + sourceId + " ,2.5,3,1500,1400,1450,1600,1300,01, Residential ,2, 001234 ,1,7500.5,"
                 + " ,Baker,N1,North neighborhood,,R1,Residential zone,Y,ACTIVE,Oak Park,1,2005\n");
+    }
 
+    @Test
+    void importsPropertyAndSourceMapping() throws Exception {
+        Path path = propertyCsv(42L);
         service.importProperties(path, "county", "state");
 
         ArgumentCaptor<Object> persisted = ArgumentCaptor.forClass(Object.class);
@@ -188,9 +195,19 @@ class CsvImportServiceImplTest {
     }
 
     @Test
-    void skipsAlreadyMappedProperty() throws Exception {
-        service.importProperties(csv("id\n12\n"), "county", "state");
-        verify(entityManager, never()).persist(any());
+    void reusesExistingSourceMappingForImportedProperty() throws Exception {
+        service.importProperties(propertyCsv(12L), "county", "state");
+        ArgumentCaptor<Property> persisted = ArgumentCaptor.forClass(Property.class);
+        verify(entityManager).persist(persisted.capture());
+        Property imported = persisted.getValue();
+        assertNotSame(property, imported);
+        assertEquals("001234", imported.getFolio());
+        assertEquals(new java.math.BigDecimal("2.5"), imported.getBathroomCount());
+        assertSame(imported, existingMapping.getGeozentraProperty());
+        assertEquals(12L, existingMapping.getSourcePropertyId());
+        assertEquals("county", existingMapping.getSourceCounty());
+        assertEquals("state", existingMapping.getSourceState());
+        verify(entityManager, never()).persist(any(PropertyImportMapping.class));
         verify(entityManager).flush();
     }
 
