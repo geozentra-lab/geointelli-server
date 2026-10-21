@@ -50,6 +50,7 @@ public class PropertyController {
         PropertyDTO property = propertyService.getByFolio(folio, countyId);
         return ResponseEntity.ok(property);
     }
+  
     @GetMapping("/id/{id}/extra-features")
     public ResponseEntity<PropertyExtraFeaturesDTO> getExtraFeatures(
             @PathVariable Long id,
@@ -59,4 +60,17 @@ public class PropertyController {
             @RequestParam(defaultValue = "50") int size) {
         return ResponseEntity.ok(extraFeatureService.getExtraFeatures(id, year, history, page, size));
     }
+
+    /**
+     * Returns property details by internal ID.
+     *
+     * @param id internal property ID
+     * @return 200 with the property; 400 if the ID is invalid; 404 if not found
+     */
+    @GetMapping("/id/{id}")
+    public ResponseEntity<PropertyDTO> getPropertyById(@PathVariable Long id) {
+        PropertyDTO property = propertyService.getPropertyById(id);
+        return ResponseEntity.ok(property);
+    }
+    
 }
