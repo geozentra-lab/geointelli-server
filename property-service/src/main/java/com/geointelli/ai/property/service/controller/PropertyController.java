@@ -1,9 +1,9 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.*;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.geointelli.ai.property.service.dto.PropertyDTO;
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.mapper.PropertyMapper;
 import com.geointelli.ai.property.service.service.PropertyService;
@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import jakarta.validation.Valid;
-import com.geointelli.ai.property.service.dto.PropertySearchRequest;
-import com.geointelli.ai.property.service.dto.PropertySearchResponse;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 
 
@@ -58,6 +56,21 @@ public class PropertyController {
     public ResponseEntity<PropertyDTO> getPropertyById(@PathVariable Long id) {
         PropertyDTO property = propertyService.getPropertyById(id);
         return ResponseEntity.ok(property);
+    }
+
+    /**
+     * Returns a paginated list of the child properties of a parent property, ordered by ID.
+     *
+     * @param id        internal ID of the parent property
+     * @param pageQuery page (default 0) and size (default 20, max 100)
+     * @return 200 with a page of children (empty if the parent has none);
+     *         400 if the ID or paging parameters are invalid; 404 if the parent does not exist
+     */
+    @GetMapping("/id/{id}/children")
+    public ResponseEntity<PageResponse<ChildPropertyDTO>> getChildProperties(@PathVariable Long id, @Valid @ModelAttribute PageQuery pageQuery) {
+        PageResponse<ChildPropertyDTO> children =
+                propertyService.getChildPropertiesByParentId(id, pageQuery.getPage(), pageQuery.getSize());
+        return ResponseEntity.ok(children);
     }
     
 }
