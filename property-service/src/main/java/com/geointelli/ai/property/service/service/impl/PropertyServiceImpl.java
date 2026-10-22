@@ -212,4 +212,16 @@ public class PropertyServiceImpl implements PropertyService {
     public List<String> getAllFoliosForPropertyWithoutExtraFeatures(Long countyId) {
         return propertyRepository.findFoliosWithoutExtraFeature(countyId);
     }
+
+    @Override
+    @Transactional
+    public PropertyDTO getPropertyById(Long id) {
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException("id must be a positive number");
+        }
+
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new PropertyNotFoundException("No property found with id: " + id));
+        return propertyMapper.toDTO(property);
+    }
 }
