@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.dto;
 
 import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -42,6 +43,18 @@ public class PropertySearchRequest {
     private Integer minYearBuilt;
     @Min(1) @Max(9999)
     private Integer maxYearBuilt;
+    @DecimalMin("0")
+    private BigDecimal minLotSize;
+    @DecimalMin("0")
+    private BigDecimal maxLotSize;
+    @DecimalMin("-180") @DecimalMax("180")
+    private BigDecimal minLon;
+    @DecimalMin("-90") @DecimalMax("90")
+    private BigDecimal minLat;
+    @DecimalMin("-180") @DecimalMax("180")
+    private BigDecimal maxLon;
+    @DecimalMin("-90") @DecimalMax("90")
+    private BigDecimal maxLat;
     @Min(0)
     private int page = 0;
     @Min(1) @Max(100)
