@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.mapper;
 
+import com.geointelli.ai.property.service.dto.ChildPropertyDTO;
 import org.mapstruct.Mapping;
 
 import org.mapstruct.CollectionMappingStrategy;
@@ -39,4 +40,13 @@ public interface PropertyMapper {
     @Mapping(target = "county", ignore = true)
     @Mapping(target = "parentProperty", ignore = true)
     Property toEntity(PropertyDTO propertyDTO);
+
+
+    @Mapping(target = "countyId", source = "county.id")
+    @Mapping(target = "countyName", source = "county.name")
+    @Mapping(target = "stateId", source = "county.state.id")
+    @Mapping(target = "stateCode", source = "county.state.code")
+    @Mapping(target = "stateName", source = "county.state.name")
+    @Mapping(target = "parentPropertyId", source = "parentProperty.id")
+    ChildPropertyDTO toChildDTO(Property property);
 }
