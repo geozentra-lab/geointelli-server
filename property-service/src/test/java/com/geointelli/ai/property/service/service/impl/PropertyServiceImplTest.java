@@ -43,6 +43,7 @@ public class PropertyServiceImplTest {
     PropertyDTO propertyDTO;
     ChildPropertyDTO childPropertyDTO;
 
+
     @BeforeEach
     void setup() {
 
@@ -91,6 +92,7 @@ public class PropertyServiceImplTest {
                 null,
                 null
         );
+
     }
 
     @DisplayName("Test getPropertyById method")
@@ -157,6 +159,7 @@ public class PropertyServiceImplTest {
             verifyNoInteractions(propertyRepository);
             verifyNoInteractions(propertyMapper);
         }
+
 
         @Test
         void whenPropertyIdIsZero_thenThrowIllegalArgumentException() {

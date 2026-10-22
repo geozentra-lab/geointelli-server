@@ -72,5 +72,4 @@ public class PropertyController {
                 propertyService.getChildPropertiesByParentId(id, pageQuery.getPage(), pageQuery.getSize());
         return ResponseEntity.ok(children);
     }
-    
 }
