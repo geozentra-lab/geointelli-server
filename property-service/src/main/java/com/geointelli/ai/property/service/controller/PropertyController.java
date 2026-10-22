@@ -4,8 +4,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geointelli.ai.property.service.dto.PropertyDTO;
-import com.geointelli.ai.property.service.entity.Property;
-import com.geointelli.ai.property.service.mapper.PropertyMapper;
 import com.geointelli.ai.property.service.service.PropertyService;
 
 import lombok.AllArgsConstructor;
