@@ -42,7 +42,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
     public PropertyImageServiceImpl(ImageDownloadService imageDownloadService,
             PropertyImageRepository propertyImageRepository,
-            @Qualifier("localStorage") ImageStorageService imageStorageService,
+            @Qualifier("s3Storage") ImageStorageService imageStorageService,
             PropertyImageMapper propertyImageMapper, @Lazy S3Service s3Service) {
 
         this.imageDownloadService = imageDownloadService;

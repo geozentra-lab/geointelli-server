@@ -1,7 +1,4 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://postgres:5432/geointelli
-
   jpa:
     hibernate:
       ddl-auto: validate
@@ -22,4 +19,4 @@ logging:
     org.springframework.web: INFO
     org.hibernate.SQL: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"          
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
