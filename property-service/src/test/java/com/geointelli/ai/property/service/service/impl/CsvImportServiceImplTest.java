@@ -28,6 +28,7 @@ class CsvImportServiceImplTest {
     private PropertyImportMappingRepository mappings;
     private CsvImportServiceImpl service;
     private Property property;
+    private County county;
     private PlatformTransactionManager transactionManager;
     private PropertyImportMapping existingMapping;
 
@@ -38,8 +39,12 @@ class CsvImportServiceImplTest {
         transactionManager = mock(PlatformTransactionManager.class);
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenAnswer(invocation -> mock(TransactionStatus.class));
+        county = new County();
+        county.setId(1L);
+        CountyService countyService = mock(CountyService.class);
+        when(countyService.resolve("county", "state")).thenReturn(county);
         service = new CsvImportServiceImpl(mappings, entityManager, transactionManager,
-                mock(CountyService.class), mock(PropertyImageService.class));
+                countyService, mock(PropertyImageService.class));
         property = new Property();
         property.setId(900L);
         existingMapping = new PropertyImportMapping();
@@ -159,6 +164,7 @@ class CsvImportServiceImplTest {
         Property imported = assertInstanceOf(Property.class, persisted.getAllValues().get(0));
         assertNull(imported.getId());
         assertEquals("001234", imported.getFolio());
+        assertSame(county, imported.getCounty());
         assertEquals(new java.math.BigDecimal("2.5"), imported.getBathroomCount());
         assertEquals(new java.math.BigDecimal("3"), imported.getBedroomCount());
         assertEquals(new java.math.BigDecimal("1500"), imported.getBuildingActualArea());
@@ -209,6 +215,17 @@ class CsvImportServiceImplTest {
         assertEquals("state", existingMapping.getSourceState());
         verify(entityManager, never()).persist(any(PropertyImportMapping.class));
         verify(entityManager).flush();
+    }
+
+    @Test
+    void rejectsSourceMappingThatWouldMovePropertyToAnotherCounty() throws Exception {
+        County otherCounty = new County();
+        otherCounty.setId(99L);
+        property.setCounty(otherCounty);
+        assertThrows(IllegalArgumentException.class,
+                () -> service.importProperties(csv("id\n12\n"), "county", "state"));
+        assertSame(otherCounty, property.getCounty());
+        verify(entityManager, never()).persist(any());
     }
 
     @Test
