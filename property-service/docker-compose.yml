@@ -8,7 +8,7 @@ services:
     env_file:
       - .env
     environment:
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_DB: ${DB_NAME:-geozentra}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
@@ -24,7 +24,7 @@ services:
       - .env
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-geozentra}
       KC_DB_USERNAME: ${DB_USER}
       KC_DB_PASSWORD: ${DB_PASSWORD}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
@@ -38,14 +38,25 @@ services:
     build: .
     container_name: geointelli-app
     ports:
-      - "8081:8080"
+      - "${APP_PORT:-8081}:8080"
     depends_on:
       - postgres
       - keycloak
+    env_file:
+      - .env
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      # APP_PORT controls the published host port; the container listens on 8080.
+      SERVER_PORT: 8080
+      # Keep host-machine localhost settings out of the app container.
+      DB_HOST: ${DOCKER_DB_HOST:-postgres}
+      DB_PORT: ${DOCKER_DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-geozentra}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SSL_MODE: ${DB_SSL_MODE:-prefer}
+      # The RDS override supplies a container path and a read-only CA mount.
+      DB_SSL_ROOT_CERT: ""
 
 volumes:
   pgdata:

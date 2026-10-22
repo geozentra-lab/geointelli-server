@@ -2,7 +2,7 @@
   "name": "property-service",
   "packageManager": "yarn@4.6.0",
   "scripts": {
-    "start:local": "dotenv -e .env -- mvn spring-boot:run -Dspring-boot.run.profiles=local",
+    "start:local": "dotenv --no-expand -e .env -- mvn spring-boot:run -Dspring-boot.run.profiles=local",
     "start:docker": "docker-compose up --build",
     "stop:docker": "docker-compose down",
     "restart:docker": "docker-compose down && docker-compose up --build",

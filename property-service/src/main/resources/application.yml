@@ -3,11 +3,17 @@ spring:
     name: geointelli
 
   datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:geozentra}
+    driver-class-name: org.postgresql.Driver
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        sslmode: ${DB_SSL_MODE:prefer}
+        sslrootcert: ${DB_SSL_ROOT_CERT:}
 
 server:
-  port: 8080
+  port: ${APP_PORT:8080}
 
 aws:
   region: ${AWS_REGION}
