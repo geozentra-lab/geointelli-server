@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.mapper.PropertyMapper;
+import com.geointelli.ai.property.service.dto.PropertyDTO;
 import com.geointelli.ai.property.service.service.PropertyService;
 
 import lombok.AllArgsConstructor;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import jakarta.validation.Valid;
 import com.geointelli.ai.property.service.service.PropertySearchService;
+import com.geointelli.ai.property.service.dto.PropertyExtraFeaturesDTO;
+import com.geointelli.ai.property.service.service.ExtraFeatureService;
 
 
 @RestController
@@ -25,6 +28,7 @@ import com.geointelli.ai.property.service.service.PropertySearchService;
 public class PropertyController {
     private final PropertyService propertyService;
     private final PropertySearchService propertySearchService;
+    private final ExtraFeatureService extraFeatureService;
 
     @GetMapping("/search")
     public ResponseEntity<PropertySearchResponse> search(@Valid @ModelAttribute PropertySearchRequest request) {
@@ -44,6 +48,16 @@ public class PropertyController {
     public ResponseEntity<PropertyDTO> getPropertyByFolio(@PathVariable String folio, @RequestParam Long countyId) {
         PropertyDTO property = propertyService.getByFolio(folio, countyId);
         return ResponseEntity.ok(property);
+    }
+  
+    @GetMapping("/id/{id}/extra-features")
+    public ResponseEntity<PropertyExtraFeaturesDTO> getExtraFeatures(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "false") boolean history,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(extraFeatureService.getExtraFeatures(id, year, history, page, size));
     }
 
     /**
