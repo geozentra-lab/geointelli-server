@@ -31,30 +31,78 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Verify PR and merge
+      - name: Check PR and merge safely
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
         run: |
           set -euo pipefail
 
-          pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+          echo "Checking PR #$PR_NUMBER"
 
-          source=$(jq -r '.head.ref' <<< "$pr")
-          source_repo=$(jq -r '.head.repo.full_name' <<< "$pr")
-          target=$(jq -r '.base.ref' <<< "$pr")
-          state=$(jq -r '.state' <<< "$pr")
-          draft=$(jq -r '.draft' <<< "$pr")
-          sha=$(jq -r '.head.sha' <<< "$pr")
+          # GitHub may need time to calculate mergeability.
+          for attempt in {1..10}; do
+            pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
 
-          test "$source" = "master"
-          test "$source_repo" = "$GH_REPO"
-          test "$target" = "integration-testing"
-          test "$state" = "open"
-          test "$draft" = "false"
+            source=$(jq -r '.head.ref' <<< "$pr")
+            source_repo=$(jq -r '.head.repo.full_name' <<< "$pr")
+            target=$(jq -r '.base.ref' <<< "$pr")
+            state=$(jq -r '.state' <<< "$pr")
+            draft=$(jq -r '.draft' <<< "$pr")
+            sha=$(jq -r '.head.sha' <<< "$pr")
+            mergeable=$(jq -r '.mergeable' <<< "$pr")
+            mergeable_state=$(jq -r '.mergeable_state' <<< "$pr")
 
-          gh api --method PUT \
+            # Confirm that this is the intended sync PR.
+            if [[ "$source" != "master" ||
+                  "$source_repo" != "$GH_REPO" ||
+                  "$target" != "integration-testing" ||
+                  "$state" != "open" ||
+                  "$draft" != "false" ]]; then
+              echo "PR is no longer eligible. Skipping."
+              exit 0
+            fi
+
+            if [[ "$mergeable" != "null" ]]; then
+              break
+            fi
+
+            echo "Mergeability pending ($attempt/10)"
+            sleep 5
+          done
+
+          echo "Mergeable: $mergeable"
+          echo "Merge state: $mergeable_state"
+
+          if [[ "$mergeable" == "false" ]]; then
+            echo "::warning::PR #$PR_NUMBER has merge conflicts. Manual resolution required."
+
+            gh pr comment "$PR_NUMBER" \
+              --body "⚠️ Automatic synchronization skipped: master and integration-testing have merge conflicts. Please resolve the conflicts manually." \
+              || true
+
+            exit 0
+          fi
+
+          if [[ "$mergeable" != "true" ]]; then
+            echo "::warning::GitHub could not determine mergeability. Skipping."
+            exit 0
+          fi
+
+          # Check branch protection, CI and review requirements
+          # through GitHub's merge API. Do not bypass rules.
+          echo "Attempting merge..."
+
+          if gh api --method PUT \
             "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
             -f merge_method=merge \
-            -f sha="$sha"
+            -f sha="$sha"; then
+
+            echo "PR #$PR_NUMBER merged successfully."
+
+          else
+            echo "::warning::Merge rejected. Required checks, reviews, branch rules or concurrent updates may be blocking it."
+            exit 0
+          fi
