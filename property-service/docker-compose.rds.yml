@@ -1,0 +1,14 @@
+# Use with: docker compose -f docker-compose.yml -f docker-compose.rds.yml up --build
+services:
+  app:
+    environment:
+      DB_HOST: ${DOCKER_DB_HOST:?Set DOCKER_DB_HOST to the RDS DNS endpoint}
+      DB_SSL_MODE: verify-full
+      DB_SSL_ROOT_CERT: /run/certs/rds-global-bundle.pem
+    volumes:
+      - type: bind
+        source: ${RDS_CA_BUNDLE_PATH:?Set RDS_CA_BUNDLE_PATH to the existing host CA bundle}
+        target: /run/certs/rds-global-bundle.pem
+        read_only: true
+        bind:
+          create_host_path: false
