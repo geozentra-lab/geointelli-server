@@ -30,8 +30,18 @@ public class CsvFolderImportServiceImpl implements CsvFolderImportService {
         for (String filename : requiredFiles) {
             validateFile(folderPath.resolve(filename));
         }
+        List<String> optionalFiles = List.of("parcels.csv", "property_value_predictions.csv", "property_images.csv");
+        for (String filename : optionalFiles) {
+            Path path = folderPath.resolve(filename);
+            if (Files.exists(path)) {
+                validateFile(path);
+            }
+        }
 
         csvImportService.importProperties(folderPath.resolve("properties.csv"), county, sourceState);
+        if (Files.exists(folderPath.resolve("parcels.csv"))) {
+            csvImportService.importParcels(folderPath.resolve("parcels.csv"), county, sourceState);
+        }
         csvImportService.importAddresses(folderPath.resolve("addresses.csv"), county, sourceState);
         csvImportService.importAssessments(folderPath.resolve("assessments.csv"), county, sourceState);
         csvImportService.importBuildings(folderPath.resolve("buildings.csv"), county, sourceState);
@@ -40,6 +50,13 @@ public class CsvFolderImportServiceImpl implements CsvFolderImportService {
         csvImportService.importSales(folderPath.resolve("sales.csv"), county, sourceState);
         csvImportService.importTaxes(folderPath.resolve("taxes.csv"), county, sourceState);
         csvImportService.importExtraFeatures(folderPath.resolve("extra_features.csv"), county, sourceState);
+        if (Files.exists(folderPath.resolve("property_value_predictions.csv"))) {
+            csvImportService.importPropertyValuePredictions(
+                    folderPath.resolve("property_value_predictions.csv"), county, sourceState);
+        }
+        if (Files.exists(folderPath.resolve("property_images.csv"))) {
+            csvImportService.importPropertyImages(folderPath.resolve("property_images.csv"), county, sourceState);
+        }
     }
 
     private void validateFile(Path path) {
