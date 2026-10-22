@@ -127,7 +127,6 @@ public class PropertyServiceImplTest {
             verifyNoInteractions(propertyMapper);
         }
 
-
         @Test
         void whenPropertyIdIsNull_thenThrowIllegalArgumentException() {
 
@@ -158,7 +157,6 @@ public class PropertyServiceImplTest {
             verifyNoInteractions(propertyRepository);
             verifyNoInteractions(propertyMapper);
         }
-
 
         @Test
         void whenPropertyIdIsZero_thenThrowIllegalArgumentException() {
@@ -257,6 +255,5 @@ public class PropertyServiceImplTest {
             verifyNoInteractions(propertyRepository);
             verifyNoInteractions(propertyMapper);
         }
-
     }
 }

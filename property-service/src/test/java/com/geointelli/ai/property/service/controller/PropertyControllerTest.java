@@ -149,15 +149,6 @@ public class PropertyControllerTest {
 
             verify(propertyService).getPropertyById(negativeId);
         }
-
-
-
-
-
-
-
-
-
     }
 
     @Nested
@@ -190,7 +181,6 @@ public class PropertyControllerTest {
                     .andExpect(jsonPath("$.content[0].parentProperty").doesNotExist());
             verify(propertyService).getChildPropertiesByParentId(1L, 0, 20);
         }
-
 
         @Test
         void whenPageAndSizeGiven_thenPassThemToService() throws Exception {
