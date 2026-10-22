@@ -4,6 +4,7 @@ import com.geointelli.ai.property.service.dto.ChildPropertyDTO;
 import com.geointelli.ai.property.service.dto.PageResponse;
 import com.geointelli.ai.property.service.dto.PropertyDTO;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
+import com.geointelli.ai.property.service.service.ExtraFeatureService;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 import com.geointelli.ai.property.service.service.PropertyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,9 @@ public class PropertyControllerTest {
 
     @MockBean
     PropertySearchService propertySearchService;
+
+    @MockBean
+    ExtraFeatureService extraFeatureService;
 
     PropertyDTO propertyDTO;
 
