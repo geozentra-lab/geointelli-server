@@ -85,7 +85,7 @@ public class PropertyImageServiceImpl implements PropertyImageService {
             throw new IllegalArgumentException("Unsupported image extension");
         }
         String hash = HashUtil.sha256(request.getContent());
-        if (propertyImageRepository.findByImageHash(hash).isPresent()) return null;
+        if (propertyImageRepository.findByPropertyAndImageHash(property, hash).isPresent()) return null;
         String fileName = property.getId() + "_" + hash + "." + extension;
         String storagePath = imageStorageService.store(request.getContent(), fileName);
         PropertyImage image = new PropertyImage();
