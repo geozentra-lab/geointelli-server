@@ -47,7 +47,6 @@ public class PropertyImage extends AuditableEntity {
 
     private String storagePath;
 
-    @Column(unique = true)
     private String imageHash;
 
     private Boolean primaryImage;
