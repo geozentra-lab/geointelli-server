@@ -31,7 +31,8 @@ public class MapillaryImageSelectionServiceImpl implements MapillaryImageSelecti
     @Override
     public MapillarySelectionDTO select(Connection connection, long propertyId, Path directory) throws Exception {
         var property = properties.load(connection, propertyId);
-        if (property == null || property.polygon() == null || property.address() == null || property.address().isBlank()) return null;
+        if (property == null || property.polygon() == null) return null;
+        // Address evidence is optional; parcel geometry still anchors image selection.
         Map<String, Object> parcel = parcels.inspect(connection, propertyId);
         if (!"linked-parcel-consistent-house-identity-unverified".equals(parcel.get("associationDecision"))) return null;
         var matches = MapillaryCandidateMatcher.match(connection, property.polygon(), api.search(property.bbox()), 80, 35, true);
