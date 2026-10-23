@@ -10,7 +10,15 @@ target/
 *.ipr
 
 .vscode/
-.gitignore
 .env
 node_modules/
 images/
+
+mapillary-validation/
+
+# Local certificates
+certificates/
+
+# Generated application logs
+logs/
+*.log
