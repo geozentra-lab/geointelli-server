@@ -47,5 +47,17 @@ public class PropertyController {
         PropertyDTO property = propertyService.getByFolio(folio, countyId);
         return ResponseEntity.ok(property);
     }
+
+    /**
+     * Returns property details by internal ID.
+     *
+     * @param id internal property ID
+     * @return 200 with the property; 400 if the ID is invalid; 404 if not found
+     */
+    @GetMapping("/id/{id}")
+    public ResponseEntity<PropertyDTO> getPropertyById(@PathVariable Long id) {
+        PropertyDTO property = propertyService.getPropertyById(id);
+        return ResponseEntity.ok(property);
+    }
     
 }
