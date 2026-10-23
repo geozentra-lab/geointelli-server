@@ -2,6 +2,8 @@ package com.geointelli.ai.property.service.service;
 
 import java.util.List;
 
+import com.geointelli.ai.property.service.dto.ChildPropertyDTO;
+import com.geointelli.ai.property.service.dto.PageResponse;
 import com.geointelli.ai.property.service.dto.PropertyDTO;
 import com.geointelli.ai.property.service.entity.Property;
 
@@ -27,4 +29,17 @@ public interface PropertyService {
      *         if no property exists with the given ID
      */
     PropertyDTO getPropertyById(Long id);
+
+    /**
+     * Returns a page of the child properties of the given parent, ordered by ID ascending.
+     *
+     * @param parentId internal ID of the parent property; must be positive
+     * @param page     zero-based page index
+     * @param size     page size (1–100)
+     * @return the requested page of children; an empty page if the parent has no children
+     * @throws IllegalArgumentException if {@code parentId} is null or not positive
+     * @throws com.geointelli.ai.property.service.exception.PropertyNotFoundException
+     *         if no property exists with the given ID
+     */
+    PageResponse<ChildPropertyDTO> getChildPropertiesByParentId(Long parentId, int page, int size);
 }
