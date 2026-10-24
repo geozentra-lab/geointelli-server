@@ -7,19 +7,24 @@ import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.mapper.PropertyMapper;
 import com.geointelli.ai.property.service.repository.PropertyRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,236 +32,166 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-public class PropertyServiceImplTest {
+class PropertyServiceImplTest {
 
     @Mock
-    PropertyRepository propertyRepository;
+    private PropertyRepository propertyRepository;
 
     @Mock
-    PropertyMapper propertyMapper;
+    private PropertyMapper propertyMapper;
 
     @InjectMocks
-    PropertyServiceImpl service;
+    private PropertyServiceImpl service;
 
-    Property property;
-    Property child;
-    PropertyDTO propertyDTO;
-    ChildPropertyDTO childPropertyDTO;
-
+    private Property property;
+    private PropertyDTO propertyDTO;
+    private Property child;
 
     @BeforeEach
     void setup() {
-
         property = new Property();
         property.setId(1L);
-
-        child = new Property();
-        child.setId(101L);
-        child.setParentProperty(property);
 
         propertyDTO = new PropertyDTO();
         propertyDTO.setId(1L);
 
-        childPropertyDTO = new ChildPropertyDTO(
-                101L,
-                null,
-                null,
-                null,
-                1L,
-                "FL",
-                "Florida",
-                "111111111111",
-                1L,
-                BigDecimal.valueOf(1),
-                BigDecimal.valueOf(3),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
-
+        child = new Property();
+        child.setId(101L);
+        child.setParentProperty(property);
     }
 
-    @DisplayName("Test getPropertyById method")
     @Nested
+    @DisplayName("getPropertyById")
     class GetPropertyByIdTest {
 
         @Test
-        void whenPropertyWithGivenIdExists_thenReturnProperty() {
-            //Arrange
-            Long propertyId = 1L;
-            when(propertyRepository.findById(propertyId)).thenReturn(Optional.of(property));
+        void whenPropertyExists_thenReturnMappedProperty() {
+            when(propertyRepository.findById(1L))
+                    .thenReturn(Optional.of(property));
             when(propertyMapper.toDTO(property)).thenReturn(propertyDTO);
 
-            //Act
-            PropertyDTO result = service.getPropertyById(propertyId);
+            PropertyDTO result = service.getPropertyById(1L);
 
-            //Assert
-            assertNotNull(result);
-            assertEquals(propertyDTO.getId(), result.getId());
-
+            assertSame(propertyDTO, result);
+            verify(propertyRepository).findById(1L);
+            verify(propertyMapper).toDTO(property);
         }
 
         @Test
-        void whenPropertyWithGivenIdDoesNotExist_thenThrowPropertyNotFoundException() {
-            //Arrange
-            Long propertyId = 1L;
-            when(propertyRepository.findById(propertyId)).thenReturn(Optional.empty());
+        void whenPropertyDoesNotExist_thenThrowPropertyNotFoundException() {
+            when(propertyRepository.findById(1L))
+                    .thenReturn(Optional.empty());
 
-            //Assert & Act
-            PropertyNotFoundException ex = assertThrows(PropertyNotFoundException.class,
-                    () -> service.getPropertyById(propertyId));
-            assertEquals("No property found with id: " + propertyId,
-                    ex.getMessage());
+            PropertyNotFoundException exception = assertThrows(
+                    PropertyNotFoundException.class,
+                    () -> service.getPropertyById(1L)
+            );
+
+            assertEquals(
+                    "No property found with id: 1",
+                    exception.getMessage()
+            );
             verifyNoInteractions(propertyMapper);
         }
 
-        @Test
-        void whenPropertyIdIsNull_thenThrowIllegalArgumentException() {
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(longs = {0L, -1L})
+        void whenIdIsInvalid_thenRejectWithoutAccessingRepository(Long id) {
+            IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> service.getPropertyById(id)
+            );
 
-            //Assert & Act
-            IllegalArgumentException ex =  assertThrows(IllegalArgumentException.class, () -> {
-                service.getPropertyById(null);
-            });
-
-
-            assertEquals("id must be a positive number",
-                    ex.getMessage());
-            verifyNoInteractions(propertyRepository);
-            verifyNoInteractions(propertyMapper);
+            assertEquals(
+                    "id must be a positive number",
+                    exception.getMessage()
+            );
+            verifyNoInteractions(propertyRepository, propertyMapper);
         }
-
-
-        @Test
-        void whenPropertyIdIsNegative_thenThrowIllegalArgumentException() {
-            //Arrange
-            Long propertyId = -1L;
-
-            //Assert & Act
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
-                service.getPropertyById(propertyId);
-            });
-            assertEquals("id must be a positive number",
-                    ex.getMessage());
-            verifyNoInteractions(propertyRepository);
-            verifyNoInteractions(propertyMapper);
-        }
-
-
-        @Test
-        void whenPropertyIdIsZero_thenThrowIllegalArgumentException() {
-            //Arrange
-            Long propertyId = 0L;
-
-            //Assert & Act
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
-                service.getPropertyById(propertyId);
-            });
-            assertEquals("id must be a positive number",
-                    ex.getMessage());
-            verifyNoInteractions(propertyRepository);
-            verifyNoInteractions(propertyMapper);
-        }
-
     }
 
-    @DisplayName("Test getChildPropertiesByParentId method")
     @Nested
+    @DisplayName("getChildPropertiesByParentId")
     class GetChildPropertiesByParentIdTest {
 
         @Test
-        void whenParentHasChildren_thenReturnPageOfChildren() {
-            // Arrange
-            Long parentId = 1L;
+        void whenParentHasChildren_thenReturnMappedPage() {
             PageRequest pageable = PageRequest.of(0, 10);
-            when(propertyRepository.existsById(parentId)).thenReturn(true);
-            when(propertyRepository.findChildPropertiesByParentId(parentId, pageable))
-                    .thenReturn(new PageImpl<>(List.of(child), pageable, 1));
-            when(propertyMapper.toChildDTO(child)).thenReturn(childPropertyDTO);
+            ChildPropertyDTO childDTO = mock(ChildPropertyDTO.class);
 
-            // Act
-            PageResponse<ChildPropertyDTO> result = service.getChildPropertiesByParentId(parentId, 0, 10);
+            when(propertyRepository.existsById(1L)).thenReturn(true);
+            when(propertyRepository.findChildPropertiesByParentId(
+                    1L, pageable
+            )).thenReturn(new PageImpl<>(List.of(child), pageable, 1));
+            when(propertyMapper.toChildDTO(child)).thenReturn(childDTO);
 
-            // Assert
-            assertEquals(1, result.content().size());
-            assertEquals(101L, result.content().get(0).id());
-            assertEquals(parentId, result.content().get(0).parentPropertyId());
+            PageResponse<ChildPropertyDTO> result =
+                    service.getChildPropertiesByParentId(1L, 0, 10);
+
+            assertEquals(List.of(childDTO), result.content());
             assertEquals(0, result.page());
             assertEquals(10, result.size());
-            assertEquals(1, result.totalElements());
+            assertEquals(1L, result.totalElements());
+            assertEquals(1L, result.totalPages());
+            assertTrue(result.first());
+            assertTrue(result.last());
+
+            verify(propertyMapper).toChildDTO(child);
         }
 
         @Test
-        void whenParentDoesNotHaveChildren_thenReturnEmptyPage() {
-            // Arrange
-            Long parentId = 1L;
+        void whenParentHasNoChildren_thenReturnEmptyPage() {
             PageRequest pageable = PageRequest.of(0, 10);
-            when(propertyRepository.existsById(parentId)).thenReturn(true);
-            when(propertyRepository.findChildPropertiesByParentId(parentId, pageable))
-                    .thenReturn(Page.empty(pageable));
 
-            // Act
-            PageResponse<ChildPropertyDTO> result = service.getChildPropertiesByParentId(parentId, 0, 10);
+            when(propertyRepository.existsById(1L)).thenReturn(true);
+            when(propertyRepository.findChildPropertiesByParentId(
+                    1L, pageable
+            )).thenReturn(Page.empty(pageable));
 
-            // Assert
-            assertEquals(0, result.content().size());
-            assertEquals(0, result.totalElements());
+            PageResponse<ChildPropertyDTO> result =
+                    service.getChildPropertiesByParentId(1L, 0, 10);
+
+            assertTrue(result.content().isEmpty());
+            assertEquals(0L, result.totalElements());
+            assertEquals(0L, result.totalPages());
             verifyNoInteractions(propertyMapper);
         }
 
         @Test
         void whenParentDoesNotExist_thenThrowPropertyNotFoundException() {
-            // Arrange
-            Long parentId = 1L;
-            when(propertyRepository.existsById(parentId)).thenReturn(false);
+            when(propertyRepository.existsById(1L)).thenReturn(false);
 
-            // Act & Assert
-            PropertyNotFoundException ex = assertThrows(PropertyNotFoundException.class, () -> {
-                service.getChildPropertiesByParentId(parentId, 0, 10);
-            });
-            assertEquals("No property found with id: " + parentId, ex.getMessage());
-            verifyNoInteractions(propertyMapper);
-            verify(propertyRepository, never()).findChildPropertiesByParentId(any(), any());
-        }
+            PropertyNotFoundException exception = assertThrows(
+                    PropertyNotFoundException.class,
+                    () -> service.getChildPropertiesByParentId(1L, 0, 10)
+            );
 
-        @Test
-        void whenParentIdIsNull_thenThrowIllegalArgumentException() {
-            // Assert & Act
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
-                service.getChildPropertiesByParentId(null, 0, 10);
-            });
-            assertEquals("id must be a positive number", ex.getMessage());
-            verifyNoInteractions(propertyRepository);
+            assertEquals(
+                    "No property found with id: 1",
+                    exception.getMessage()
+            );
+            verify(propertyRepository, never())
+                    .findChildPropertiesByParentId(any(), any());
             verifyNoInteractions(propertyMapper);
         }
 
-        @Test
-        void whenParentIdIsNegative_thenThrowIllegalArgumentException() {
-            // Assert & Act
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> {
-                service.getChildPropertiesByParentId(-1L, 0, 10);
-            });
-            assertEquals("id must be a positive number", ex.getMessage());
-            verifyNoInteractions(propertyRepository);
-            verifyNoInteractions(propertyMapper);
+        @ParameterizedTest
+        @NullSource
+        @ValueSource(longs = {0L, -1L})
+        void whenParentIdIsInvalid_thenRejectWithoutAccessingRepository(
+                Long parentId
+        ) {
+            IllegalArgumentException exception = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> service.getChildPropertiesByParentId(parentId, 0, 10)
+            );
+
+            assertEquals(
+                    "id must be a positive number",
+                    exception.getMessage()
+            );
+            verifyNoInteractions(propertyRepository, propertyMapper);
         }
     }
 }
