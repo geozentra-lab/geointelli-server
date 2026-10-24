@@ -1,5 +1,8 @@
 package com.geointelli.ai.property.service.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
@@ -43,4 +46,13 @@ public interface PropertyRepository extends JpaRepository<Property, Long>{
 
     @Query("SELECT p FROM Property p LEFT JOIN FETCH p.address")
     List<Property> findAllWithAddress();
+
+    @EntityGraph(attributePaths = {"county", "county.state", "address"})
+    @Query(value = """
+        SELECT p FROM Property p
+        WHERE p.parentProperty.id = :parentId
+        ORDER BY p.id ASC
+        """,
+            countQuery = "SELECT COUNT(p) FROM Property p WHERE p.parentProperty.id = :parentId")
+    Page<Property> findChildPropertiesByParentId(@Param("parentId") Long parentId, Pageable pageable);
 }

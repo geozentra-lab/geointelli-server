@@ -5,7 +5,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 
+import org.locationtech.jts.geom.Geometry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,11 +17,13 @@ import com.geointelli.ai.property.service.dto.PropertySearchRequest;
 import com.geointelli.ai.property.service.dto.PropertySearchResponse;
 import com.geointelli.ai.property.service.entity.Address;
 import com.geointelli.ai.property.service.entity.County;
+import com.geointelli.ai.property.service.entity.Parcel;
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.entity.State;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
@@ -26,11 +31,17 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * {@link PropertySearchService} built on JPA Criteria queries: every filter given in the request
+ * becomes one SQL predicate, and the same predicates drive both the page query and the count query.
+ */
 @Service
 @RequiredArgsConstructor
 public class PropertySearchServiceImpl implements PropertySearchService {
+    private static final int WGS84_SRID = 4326;
     private final EntityManager entityManager;
     private static final Map<String, String> SORT_FIELDS = Map.of(
         "id", "id", "bedrooms", "bedroomCount", "bathrooms", "bathroomCount",
@@ -51,7 +62,7 @@ public class PropertySearchServiceImpl implements PropertySearchService {
             property.get("dorDescription"), property.get("bedroomCount"), property.get("bathroomCount"),
             property.get("buildingHeatedArea"), property.get("lotSize"), property.get("yearBuilt"),
             property.get("neighborhood"), property.get("neighborhoodDescription")));
-        query.where(predicates(request, property, joins, cb));
+        query.where(predicates(request, query, property, joins, cb));
 
         Expression<?> sort = "yearBuilt".equals(request.getSortBy())
             ? validYear(property, cb) : property.get(SORT_FIELDS.get(request.getSortBy()));
@@ -69,14 +80,15 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         var countQuery = cb.createQuery(Long.class);
         Root<Property> countProperty = countQuery.from(Property.class);
         countQuery.select(cb.count(countProperty));
-        countQuery.where(predicates(request, countProperty, new SearchJoins(countProperty), cb));
+        countQuery.where(predicates(request, countQuery, countProperty, new SearchJoins(countProperty), cb));
         long total = entityManager.createQuery(countQuery).getSingleResult();
         long totalPages = (total + request.getSize() - 1) / request.getSize();
         return new PropertySearchResponse(content, request.getPage(), request.getSize(), total,
             totalPages, request.getPage() == 0, (long) request.getPage() + 1 >= totalPages);
     }
 
-    private Predicate[] predicates(PropertySearchRequest r, Root<Property> p, SearchJoins j, CriteriaBuilder cb) {
+    private Predicate[] predicates(PropertySearchRequest r, CommonAbstractCriteria q, Root<Property> p,
+            SearchJoins j, CriteriaBuilder cb) {
         List<Predicate> filters = new ArrayList<>();
         if (r.getCountyId() != null) filters.add(cb.equal(j.county.get("id"), r.getCountyId()));
         if (hasText(r.getState())) {
@@ -106,7 +118,26 @@ public class PropertySearchServiceImpl implements PropertySearchService {
             if (r.getMinYearBuilt() != null) filters.add(cb.greaterThanOrEqualTo(year, year(r.getMinYearBuilt())));
             if (r.getMaxYearBuilt() != null) filters.add(cb.lessThanOrEqualTo(year, year(r.getMaxYearBuilt())));
         }
+        if (r.getMinLotSize() != null) filters.add(cb.ge(p.<Double>get("lotSize"), r.getMinLotSize().doubleValue()));
+        if (r.getMaxLotSize() != null) filters.add(cb.le(p.<Double>get("lotSize"), r.getMaxLotSize().doubleValue()));
+        if (r.getMinLon() != null) filters.add(inBoundingBox(r, q, p, cb));
         return filters.toArray(Predicate[]::new);
+    }
+
+    /**
+     * Matches properties having at least one parcel whose geometry intersects the request's bounding box.
+     * Properties without parcel geometry never match.
+     */
+    private Predicate inBoundingBox(PropertySearchRequest r, CommonAbstractCriteria q, Root<Property> p,
+            CriteriaBuilder cb) {
+        Expression<Geometry> box = cb.function("st_makeenvelope", Geometry.class,
+            cb.literal(r.getMinLon().doubleValue()), cb.literal(r.getMinLat().doubleValue()),
+            cb.literal(r.getMaxLon().doubleValue()), cb.literal(r.getMaxLat().doubleValue()), cb.literal(WGS84_SRID));
+        Subquery<Long> parcels = q.subquery(Long.class);
+        Root<Parcel> parcel = parcels.from(Parcel.class);
+        parcels.select(parcel.<Long>get("id")).where(cb.equal(parcel.get("property"), p),
+            cb.isTrue(cb.function("st_intersects", Boolean.class, parcel.get("geom"), box)));
+        return cb.exists(parcels);
     }
 
     private Expression<String> validYear(Root<Property> p, CriteriaBuilder cb) {
@@ -144,7 +175,27 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         if (request.getMinYearBuilt() != null && request.getMaxYearBuilt() != null && request.getMinYearBuilt() > request.getMaxYearBuilt()) {
             throw new IllegalArgumentException("minYearBuilt must not exceed maxYearBuilt");
         }
+        checkRange("lot size", request.getMinLotSize(), request.getMaxLotSize());
+        checkBoundingBox(request);
     }
+
+    private void checkBoundingBox(PropertySearchRequest r) {
+        long given = Stream.of(r.getMinLon(), r.getMinLat(), r.getMaxLon(), r.getMaxLat()).filter(Objects::nonNull).count();
+        if (given == 0) return;
+        if (given < 4) {
+            throw new IllegalArgumentException("minLon, minLat, maxLon and maxLat must be given together");
+        }
+        if (!within(r.getMinLon(), 180) || !within(r.getMaxLon(), 180)
+                || !within(r.getMinLat(), 90) || !within(r.getMaxLat(), 90)) {
+            throw new IllegalArgumentException("Invalid bounding box: longitude must be -180..180 and latitude -90..90");
+        }
+        if (r.getMinLon().compareTo(r.getMaxLon()) >= 0 || r.getMinLat().compareTo(r.getMaxLat()) >= 0) {
+            throw new IllegalArgumentException("Invalid bounding box: require minLon < maxLon and minLat < maxLat"
+                + " (boxes crossing the antimeridian are not supported)");
+        }
+    }
+
+    private boolean within(BigDecimal value, int limit) { return value.abs().compareTo(BigDecimal.valueOf(limit)) <= 0; }
 
     private void checkRange(String field, BigDecimal min, BigDecimal max) {
         if ((min != null && min.signum() < 0) || (max != null && max.signum() < 0)
