@@ -66,7 +66,7 @@ public class PortfolioController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete a portfolio and all its holdings", description = "Permanent deletion. "
+    @Operation(summary = "Delete a portfolio and all its holdings", description = "Permanent deletion, including holding financial records. "
         + "The underlying properties, parcels, sales and images are preserved. Returns 204; missing/foreign portfolio is 404.")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         portfolios.delete(id);

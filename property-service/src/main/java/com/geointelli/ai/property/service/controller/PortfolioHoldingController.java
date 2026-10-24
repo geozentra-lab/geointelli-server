@@ -68,7 +68,7 @@ public class PortfolioHoldingController {
     }
 
     @DeleteMapping("/{holdingId}")
-    @Operation(summary = "Remove a holding", description = "Permanently deletes the holding only, preserving "
+    @Operation(summary = "Remove a holding", description = "Permanently deletes the holding and its financial records, preserving "
         + "the underlying property and images. Returns 204; missing or inaccessible holding is 404.")
     public ResponseEntity<Void> delete(@PathVariable Long id, @PathVariable Long holdingId) {
         holdings.delete(id, holdingId);
