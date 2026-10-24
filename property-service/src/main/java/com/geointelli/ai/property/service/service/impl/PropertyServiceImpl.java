@@ -1,11 +1,15 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.dto.ChildPropertyDTO;
+import com.geointelli.ai.property.service.dto.PageResponse;
 import com.geointelli.ai.property.service.service.CountyService;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import com.geointelli.ai.property.service.entity.Address;
@@ -223,5 +227,22 @@ public class PropertyServiceImpl implements PropertyService {
         Property property = propertyRepository.findById(id)
                 .orElseThrow(() -> new PropertyNotFoundException("No property found with id: " + id));
         return propertyMapper.toDTO(property);
+    }
+
+    @Override
+    @Transactional
+    public PageResponse<ChildPropertyDTO> getChildPropertiesByParentId(Long parentId, int page, int size) {
+
+        if (parentId == null || parentId <= 0) {
+            throw new IllegalArgumentException("id must be a positive number");
+        }
+        if (!propertyRepository.existsById(parentId)) {
+            throw new PropertyNotFoundException("No property found with id: " + parentId);
+        }
+
+        Page<ChildPropertyDTO> children = propertyRepository.findChildPropertiesByParentId(parentId, PageRequest.of(page, size))
+                .map(propertyMapper::toChildDTO);
+
+        return PageResponse.from(children);
     }
 }
