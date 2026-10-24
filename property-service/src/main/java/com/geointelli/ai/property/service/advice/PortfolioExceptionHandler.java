@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.geointelli.ai.property.service.controller.PortfolioController;
 import com.geointelli.ai.property.service.controller.PortfolioHoldingController;
+import com.geointelli.ai.property.service.controller.HoldingFinancialRecordController;
 
 /** Reports concurrent portfolio changes without exposing SQL or database constraint details. */
-@RestControllerAdvice(assignableTypes = {PortfolioController.class, PortfolioHoldingController.class})
+@RestControllerAdvice(assignableTypes = {PortfolioController.class, PortfolioHoldingController.class,
+    HoldingFinancialRecordController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class PortfolioExceptionHandler {
     @ExceptionHandler({DataIntegrityViolationException.class, PessimisticLockingFailureException.class,

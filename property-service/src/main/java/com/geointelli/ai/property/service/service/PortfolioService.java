@@ -14,6 +14,6 @@ public interface PortfolioService {
     PortfolioDTO get(Long portfolioId);
     /** Changes only supplied fields; null description clears it. */
     PortfolioDTO update(Long portfolioId, PortfolioRequest request);
-    /** Permanently deletes the portfolio and its holdings, preserving underlying properties and images. */
+    /** Permanently deletes the portfolio, holdings and actual financial records, preserving properties and images. */
     void delete(Long portfolioId);
 }
