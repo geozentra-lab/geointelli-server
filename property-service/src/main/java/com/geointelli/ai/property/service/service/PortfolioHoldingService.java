@@ -14,6 +14,6 @@ public interface PortfolioHoldingService {
     PortfolioHoldingDTO get(Long portfolioId, Long holdingId);
     /** Patches supplied facts; nested financing/occupancy sections are replaced, or cleared by null. */
     PortfolioHoldingDTO update(Long portfolioId, Long holdingId, PortfolioHoldingRequest request);
-    /** Removes only the holding; it never deletes the property, parcel, sale or image records. */
+    /** Removes the holding and its actual financial records; property, parcel, sale and image records remain. */
     void delete(Long portfolioId, Long holdingId);
 }
