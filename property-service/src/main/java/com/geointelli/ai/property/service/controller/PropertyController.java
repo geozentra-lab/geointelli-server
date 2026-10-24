@@ -71,7 +71,6 @@ public class PropertyController {
         PropertyDTO property = propertyService.getPropertyById(id);
         return ResponseEntity.ok(property);
     }
-    
 
     /**
      * Returns a paginated list of the child properties of a parent property, ordered by ID.
