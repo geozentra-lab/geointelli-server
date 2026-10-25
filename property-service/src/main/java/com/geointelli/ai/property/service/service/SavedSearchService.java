@@ -15,7 +15,7 @@ public interface SavedSearchService {
     SavedSearchDTO get(Long id);
     /** Replaces only supplied metadata/filters; pause affects monitoring settings, not manual replay. */
     SavedSearchDTO update(Long id, SavedSearchRequest request);
-    /** Permanently removes the definition and its monitoring settings. Properties are preserved. */
+    /** Permanently removes the definition, monitoring settings and linked alert rules. Properties are preserved. */
     void delete(Long id);
     /** Runs the stored query against current data with caller-supplied pagination; rejects unsupported filter versions. */
     PropertySearchResponse results(Long id, int page, int size);
