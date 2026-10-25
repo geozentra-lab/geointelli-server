@@ -5,8 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Stream;
 
 import org.locationtech.jts.geom.Geometry;
 import org.springframework.stereotype.Service;
@@ -21,6 +19,7 @@ import com.geointelli.ai.property.service.entity.Parcel;
 import com.geointelli.ai.property.service.entity.Property;
 import com.geointelli.ai.property.service.entity.State;
 import com.geointelli.ai.property.service.service.PropertySearchService;
+import com.geointelli.ai.property.service.service.PropertySearchValidationService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CommonAbstractCriteria;
@@ -43,6 +42,7 @@ import lombok.RequiredArgsConstructor;
 public class PropertySearchServiceImpl implements PropertySearchService {
     private static final int WGS84_SRID = 4326;
     private final EntityManager entityManager;
+    private final PropertySearchValidationService searchValidation;
     private static final Map<String, String> SORT_FIELDS = Map.of(
         "id", "id", "bedrooms", "bedroomCount", "bathrooms", "bathroomCount",
         "livingAreaSqft", "buildingHeatedArea", "lotSize", "lotSize", "yearBuilt", "yearBuilt");
@@ -50,7 +50,7 @@ public class PropertySearchServiceImpl implements PropertySearchService {
     @Override
     @Transactional(readOnly = true)
     public PropertySearchResponse search(PropertySearchRequest request) {
-        validate(request);
+        searchValidation.validate(request);
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         var query = cb.createQuery(PropertySearchItem.class);
         Root<Property> property = query.from(Property.class);
@@ -156,52 +156,6 @@ public class PropertySearchServiceImpl implements PropertySearchService {
             BigDecimal min, BigDecimal max) {
         if (min != null) filters.add(cb.greaterThanOrEqualTo(field, min));
         if (max != null) filters.add(cb.lessThanOrEqualTo(field, max));
-    }
-
-    private void validate(PropertySearchRequest request) {
-        if (request.getPage() < 0 || request.getSize() < 1 || request.getSize() > 100
-                || (long) request.getPage() * request.getSize() > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("page must be non-negative, size must be 1-100, and offset must fit an integer");
-        }
-        if (request.getSortBy() == null || !SORT_FIELDS.containsKey(request.getSortBy())) {
-            throw new IllegalArgumentException("sortBy must be id, bedrooms, bathrooms, livingAreaSqft, lotSize or yearBuilt");
-        }
-        if (!"asc".equalsIgnoreCase(request.getDirection()) && !"desc".equalsIgnoreCase(request.getDirection())) {
-            throw new IllegalArgumentException("direction must be asc or desc");
-        }
-        checkRange("bedrooms", request.getMinBedrooms(), request.getMaxBedrooms());
-        checkRange("bathrooms", request.getMinBathrooms(), request.getMaxBathrooms());
-        checkRange("living area", request.getMinLivingAreaSqft(), request.getMaxLivingAreaSqft());
-        if (request.getMinYearBuilt() != null && request.getMaxYearBuilt() != null && request.getMinYearBuilt() > request.getMaxYearBuilt()) {
-            throw new IllegalArgumentException("minYearBuilt must not exceed maxYearBuilt");
-        }
-        checkRange("lot size", request.getMinLotSize(), request.getMaxLotSize());
-        checkBoundingBox(request);
-    }
-
-    private void checkBoundingBox(PropertySearchRequest r) {
-        long given = Stream.of(r.getMinLon(), r.getMinLat(), r.getMaxLon(), r.getMaxLat()).filter(Objects::nonNull).count();
-        if (given == 0) return;
-        if (given < 4) {
-            throw new IllegalArgumentException("minLon, minLat, maxLon and maxLat must be given together");
-        }
-        if (!within(r.getMinLon(), 180) || !within(r.getMaxLon(), 180)
-                || !within(r.getMinLat(), 90) || !within(r.getMaxLat(), 90)) {
-            throw new IllegalArgumentException("Invalid bounding box: longitude must be -180..180 and latitude -90..90");
-        }
-        if (r.getMinLon().compareTo(r.getMaxLon()) >= 0 || r.getMinLat().compareTo(r.getMaxLat()) >= 0) {
-            throw new IllegalArgumentException("Invalid bounding box: require minLon < maxLon and minLat < maxLat"
-                + " (boxes crossing the antimeridian are not supported)");
-        }
-    }
-
-    private boolean within(BigDecimal value, int limit) { return value.abs().compareTo(BigDecimal.valueOf(limit)) <= 0; }
-
-    private void checkRange(String field, BigDecimal min, BigDecimal max) {
-        if ((min != null && min.signum() < 0) || (max != null && max.signum() < 0)
-                || (min != null && max != null && min.compareTo(max) > 0)) {
-            throw new IllegalArgumentException("Invalid " + field + " range: require 0 <= minimum <= maximum");
-        }
     }
 
     private boolean hasText(String value) { return value != null && !value.isBlank(); }
