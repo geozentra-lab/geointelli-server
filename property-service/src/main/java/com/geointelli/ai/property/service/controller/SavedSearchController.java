@@ -68,7 +68,7 @@ public class SavedSearchController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a saved search", description = "Permanently deletes the definition and its monitoring "
-        + "settings. Does not delete any property or result data. Returns 204; missing/foreign IDs return 404.")
+        + "settings and linked alert rules. Does not delete any property or result data. Returns 204; missing/foreign IDs return 404.")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         searches.delete(id);
         return ResponseEntity.noContent().build();
