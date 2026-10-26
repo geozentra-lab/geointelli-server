@@ -1,0 +1,95 @@
+{
+  "info": {
+    "name": "SCRUM-47 Locations (states / counties)",
+    "description": "Manual checks for GET /api/locations/states and GET /api/locations/counties?stateId. Set baseUrl; check 1 fills stateId and stateCode automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "stateId", "value": "" },
+    { "key": "stateCode", "value": "" },
+    { "key": "emptyStateId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. States - success",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/states" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const body = pm.response.json();",
+        "pm.test('non-empty array', () => { pm.expect(body).to.be.an('array'); pm.expect(body.length).to.be.above(0); });",
+        "pm.test('each item has id, code, name', () => body.forEach(s => {",
+        "  pm.expect(s.id).to.be.a('number');",
+        "  pm.expect(s.code).to.match(/^[A-Z]{2}$/);",
+        "  pm.expect(s.name).to.be.a('string').and.not.empty;",
+        "}));",
+        "pm.test('sorted by name', () => { const n = body.map(s => s.name); pm.expect(n).to.eql([...n].sort((a, b) => a.localeCompare(b))); });",
+        "pm.test('codes and names unique', () => {",
+        "  pm.expect(new Set(body.map(s => s.code)).size).to.eql(body.length);",
+        "  pm.expect(new Set(body.map(s => s.name.toLowerCase())).size).to.eql(body.length);",
+        "});",
+        "pm.collectionVariables.set('stateId', body[0].id);",
+        "pm.collectionVariables.set('stateCode', body[0].code);"
+      ] } } ]
+    },
+    {
+      "name": "2. Counties - success, scoped to state",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/counties?stateId={{stateId}}" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const body = pm.response.json();",
+        "pm.test('array', () => pm.expect(body).to.be.an('array'));",
+        "pm.test('each item has countyId, countyName, stateCode, stateName', () => body.forEach(c => {",
+        "  pm.expect(c.countyId).to.be.a('number');",
+        "  pm.expect(c.countyName).to.be.a('string').and.not.empty;",
+        "  pm.expect(c.stateCode).to.be.a('string');",
+        "  pm.expect(c.stateName).to.be.a('string');",
+        "}));",
+        "pm.test('all counties belong to the selected state', () => body.forEach(c => pm.expect(c.stateCode).to.eql(pm.collectionVariables.get('stateCode'))));",
+        "pm.test('sorted by county name', () => { const n = body.map(c => c.countyName); pm.expect(n).to.eql([...n].sort((a, b) => a.localeCompare(b))); });",
+        "pm.test('county ids unique', () => pm.expect(new Set(body.map(c => c.countyId)).size).to.eql(body.length));"
+      ] } } ]
+    },
+    {
+      "name": "3. Counties - stateId missing (400)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/counties" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('400', () => pm.response.to.have.status(400));",
+        "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('stateId is required'));"
+      ] } } ]
+    },
+    {
+      "name": "4. Counties - stateId not a number (400)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/counties?stateId=abc" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('400', () => pm.response.to.have.status(400));",
+        "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('stateId: invalid value'));"
+      ] } } ]
+    },
+    {
+      "name": "5. Counties - unknown state (404)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/counties?stateId=999999" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('404', () => pm.response.to.have.status(404));",
+        "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('State not found'));"
+      ] } } ]
+    },
+    {
+      "name": "6. Counties - state without counties (200, empty) [needs emptyStateId]",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/counties?stateId={{emptyStateId}}" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "if (!pm.collectionVariables.get('emptyStateId')) { console.log('skipped: set emptyStateId to a state with no counties'); return; }",
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('empty array', () => pm.expect(pm.response.json()).to.eql([]));"
+      ] } } ]
+    },
+    {
+      "name": "7. States - stable across calls",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/locations/states" },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('first state unchanged since check 1', () => { const s = pm.response.json()[0]; pm.expect(s.id).to.eql(pm.collectionVariables.get('stateId')); pm.expect(s.code).to.eql(pm.collectionVariables.get('stateCode')); });"
+      ] } } ]
+    }
+  ]
+}
