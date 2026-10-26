@@ -28,6 +28,7 @@ import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 import com.geointelli.ai.property.service.service.PropertySearchValidationService;
 import com.geointelli.ai.property.service.service.SavedSearchService;
+import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import jakarta.validation.groups.Default;
@@ -43,16 +44,19 @@ public class SavedSearchServiceImpl implements SavedSearchService {
     private final PropertySearchValidationService searchValidation;
     private final ObjectMapper json;
     private final Validator validator;
+    private final AlertEvaluationScheduleService evaluationSchedule;
 
     public SavedSearchServiceImpl(SavedSearchRepository searches, CurrentUserService currentUser,
             PropertySearchService propertySearch, PropertySearchValidationService searchValidation,
-            ObjectMapper json, Validator validator) {
+            ObjectMapper json, Validator validator,
+            AlertEvaluationScheduleService evaluationSchedule) {
         this.searches = searches;
         this.currentUser = currentUser;
         this.propertySearch = propertySearch;
         this.searchValidation = searchValidation;
         this.json = json;
         this.validator = validator;
+        this.evaluationSchedule = evaluationSchedule;
     }
 
     @Override
@@ -66,7 +70,9 @@ public class SavedSearchServiceImpl implements SavedSearchService {
         search.setFilters(filters);
         if (request.isCadenceProvided()) search.setCadence(request.getCadence());
         if (request.isPausedProvided()) search.setPaused(request.getPaused());
-        return toDTO(searches.saveAndFlush(search));
+        searches.saveAndFlush(search);
+        evaluationSchedule.rescheduleSearch(search.getId());
+        return toDTO(search);
     }
 
     @Override
@@ -97,7 +103,9 @@ public class SavedSearchServiceImpl implements SavedSearchService {
         }
         if (request.isCadenceProvided()) search.setCadence(request.getCadence());
         if (request.isPausedProvided()) search.setPaused(request.getPaused());
-        return toDTO(searches.saveAndFlush(search));
+        searches.saveAndFlush(search);
+        evaluationSchedule.rescheduleSearch(search.getId());
+        return toDTO(search);
     }
 
     @Override

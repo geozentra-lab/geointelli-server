@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.service;
 
+import java.util.List;
+
 import com.geointelli.ai.property.service.dto.PropertySearchRequest;
 import com.geointelli.ai.property.service.dto.PropertySearchResponse;
 
@@ -21,4 +23,7 @@ public interface PropertySearchService {
      * @throws IllegalArgumentException if paging, sorting, a range or the bounding box is invalid
      */
     PropertySearchResponse search(PropertySearchRequest request);
+
+    /** Returns matching IDs after the cursor, ordered by ID, without a count query; limit is 1 to 1000. */
+    List<Long> findMatchingIds(PropertySearchRequest request, long afterPropertyId, int limit);
 }
