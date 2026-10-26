@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -23,4 +24,12 @@ public interface ParcelRepository extends JpaRepository<Parcel,Long>{
 
     @Query("SELECT DISTINCT p.folio FROM Parcel p WHERE p.property.county.id = :countyId")
     List<String> findAllFolios(@Param("countyId") Long countyId);
+
+    Long countByGeomIsNotNull();
+
+    @Query("SELECT MAX(p.updatedAt) FROM Parcel p WHERE p.geom IS NOT NULL")
+    LocalDateTime findMaxUpdatedAt();
+
+    @Query("SELECT DISTINCT c.name FROM Parcel p JOIN p.property pr JOIN pr.county c WHERE p.geom IS NOT NULL ORDER BY c.name")
+    List<String> findDistinctCountyNames();
 }
