@@ -27,9 +27,11 @@ import com.geointelli.ai.property.service.service.PortfolioValueSummaryService;
 public class PortfolioValueSummaryServiceImpl implements PortfolioValueSummaryService {
     private final PortfolioSummaryRepository repository;
     private final PortfolioValuationService valuations;
+
     public PortfolioValueSummaryServiceImpl(PortfolioSummaryRepository repository, PortfolioValuationService valuations) {
         this.repository=repository; this.valuations=valuations;
     }
+
     @Override
     @Transactional(readOnly=true, propagation=Propagation.REQUIRES_NEW, isolation=Isolation.REPEATABLE_READ)
     public PortfolioValueSummaryDTO summarize(Long portfolioId, Long userId, LocalDate asOfDate) {
@@ -73,10 +75,12 @@ public class PortfolioValueSummaryServiceImpl implements PortfolioValueSummarySe
             + "Reported balances are used as recorded, not amortized to today. CASH financing contributes zero debt. "
             + "Owner amounts are rounded HALF_UP to cents per holding. All amounts apply current ownership share; equity requires value and debt for the same holding.");
     }
+
     private boolean valid(PortfolioValuationDTO quote, LocalDate date) {
         return quote!=null && quote.amount()!=null && quote.amount().signum()>=0 && "USD".equals(quote.currency())
             && quote.valueDate()!=null && !quote.valueDate().isAfter(date) && quote.source()!=null && !quote.source().isBlank();
     }
+    
     private PortfolioMetricDTO metric(BigDecimal known, long covered, long total) {
         BigDecimal rounded=known.setScale(2,RoundingMode.HALF_UP);
         String status=total==0 ? "EMPTY" : covered==total ? "COMPLETE" : covered==0 ? "UNAVAILABLE" : "PARTIAL";
