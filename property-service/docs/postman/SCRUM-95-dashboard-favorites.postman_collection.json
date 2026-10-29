@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "SCRUM-95 Dashboard favorites card",
+    "description": "Manual checks for GET /api/dashboards/user/favorites. Variables: baseUrl (app), keycloakUrl (realm geozentra), clientId, userA/passwordA and userB/passwordB (two distinct users). Requests 01 and 02 fetch tokens into tokenA/tokenB. Run 03-04 on a user without favorites, then give user A some favorites (05-07 use the existing favorite endpoint, property ids 2, 3, 4 exist in the dev database) and run 08-12. 13-14 clean up (03-04 can be re-run afterwards). 15-19 are the error cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "keycloakUrl", "value": "http://localhost:8090/realms/geozentra" },
+    { "key": "clientId", "value": "geozentra-postman" },
+    { "key": "userA", "value": "dash_user_a" },
+    { "key": "passwordA", "value": "Test1234!" },
+    { "key": "userB", "value": "dash_user_b" },
+    { "key": "passwordB", "value": "Test1234!" },
+    { "key": "tokenA", "value": "" },
+    { "key": "tokenB", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Token for user A (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+        "url": { "raw": "{{keycloakUrl}}/protocol/openid-connect/token", "host": [ "{{keycloakUrl}}" ], "path": [ "protocol", "openid-connect", "token" ] },
+        "body": { "mode": "urlencoded", "urlencoded": [
+          { "key": "client_id", "value": "{{clientId}}" }, { "key": "grant_type", "value": "password" },
+          { "key": "username", "value": "{{userA}}" }, { "key": "password", "value": "{{passwordA}}" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+      ] } } ]
+    },
+    {
+      "name": "02 Token for user B (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/x-www-form-urlencoded" } ],
+        "url": { "raw": "{{keycloakUrl}}/protocol/openid-connect/token", "host": [ "{{keycloakUrl}}" ], "path": [ "protocol", "openid-connect", "token" ] },
+        "body": { "mode": "urlencoded", "urlencoded": [
+          { "key": "client_id", "value": "{{clientId}}" }, { "key": "grant_type", "value": "password" },
+          { "key": "username", "value": "{{userB}}" }, { "key": "password", "value": "{{passwordB}}" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+      ] } } ]
+    },
+    {
+      "name": "03 User A without favorites (200, count 0, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('common card fields', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+        "pm.test('empty stays empty', () => { pm.expect(b.count).to.eql(0); pm.expect(b.recent).to.eql([]); });",
+        "pm.test('default limit is 5', () => pm.expect(b.limit).to.eql(5));"
+      ] } } ]
+    },
+    {
+      "name": "04 User B without favorites (200, count 0, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenB}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('empty stays empty', () => { pm.expect(b.count).to.eql(0); pm.expect(b.recent).to.eql([]); });"
+      ] } } ]
+    },
+    {
+      "name": "05 Setup: user A favorites property 2 (existing endpoint)",
+      "request": { "method": "POST", "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/2/favorite", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "2", "favorite" ] } },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('status 200', () => pm.response.to.have.status(200));" ] } } ]
+    },
+    {
+      "name": "06 Setup: user A favorites property 3 (existing endpoint)",
+      "request": { "method": "POST", "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/3/favorite", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "3", "favorite" ] } },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('status 200', () => pm.response.to.have.status(200));" ] } } ]
+    },
+    {
+      "name": "07 Setup: user A favorites property 4 (existing endpoint)",
+      "request": { "method": "POST", "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/4/favorite", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "4", "favorite" ] } },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('status 200', () => pm.response.to.have.status(200));" ] } } ]
+    },
+    {
+      "name": "08 User A with 3 favorites (200, count 3, newest first)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('count is the real total', () => pm.expect(b.count).to.eql(3));",
+        "pm.test('newest first: 4, 3, 2', () => pm.expect(b.recent.map(r => r.propertyId)).to.eql([4, 3, 2]));",
+        "pm.test('each item has display fields', () => b.recent.forEach(r => ['propertyId', 'folio', 'address', 'countyName', 'stateCode', 'favoritedAt'].forEach(k => pm.expect(r).to.have.property(k))));",
+        "pm.test('favoritedAt descending', () => { const t = b.recent.map(r => JSON.stringify(r.favoritedAt)); for (let i = 1; i < t.length; i++) pm.expect(b.recent[i-1].favoritedAt >= b.recent[i].favoritedAt).to.be.true; });"
+      ] } } ]
+    },
+    {
+      "name": "09 User A, limit=2 (200, count 3, two items)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=2", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "2" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('count unchanged, list bounded', () => { pm.expect(b.count).to.eql(3); pm.expect(b.limit).to.eql(2); pm.expect(b.recent.map(r => r.propertyId)).to.eql([4, 3]); });"
+      ] } } ]
+    },
+    {
+      "name": "10 User A, limit=1 (200, one item)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=1", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "1" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('only the newest', () => { pm.expect(b.count).to.eql(3); pm.expect(b.recent.map(r => r.propertyId)).to.eql([4]); });"
+      ] } } ]
+    },
+    {
+      "name": "11 User A, limit=20 (200, all three)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=20", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "20" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('max limit accepted', () => { pm.expect(b.limit).to.eql(20); pm.expect(b.recent.length).to.eql(3); });"
+      ] } } ]
+    },
+    {
+      "name": "12 Ownership: user B still sees none (200, count 0)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenB}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('other users records are excluded', () => { pm.expect(b.count).to.eql(0); pm.expect(b.recent).to.eql([]); });"
+      ] } } ]
+    },
+    {
+      "name": "13 Cleanup: user A removes favorite 2",
+      "request": { "method": "DELETE", "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/2/favorite", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "2", "favorite" ] } },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('status 204', () => pm.response.to.have.status(204));" ] } } ]
+    },
+    {
+      "name": "14 Cleanup: user A removes favorites 3 and 4 (run twice: change the id)",
+      "request": { "method": "DELETE", "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/3/favorite", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "3", "favorite" ] } },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('status 204', () => pm.response.to.have.status(204));" ] } } ]
+    },
+    {
+      "name": "15 No token (401)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 401', () => pm.response.to.have.status(401));",
+        "pm.test('message explains the missing token', () => pm.expect(pm.response.json().message).to.include('bearer token'));"
+      ] } } ]
+    },
+    {
+      "name": "16 Invalid token (401)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer not.a.jwt" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 401', () => pm.response.to.have.status(401));"
+      ] } } ]
+    },
+    {
+      "name": "17 limit=0 (400)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=0", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "0" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message states the bound', () => pm.expect(pm.response.json().message).to.eql('limit must be between 1 and 20, got 0'));"
+      ] } } ]
+    },
+    {
+      "name": "18 limit=21 (400)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=21", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "21" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message states the bound', () => pm.expect(pm.response.json().message).to.eql('limit must be between 1 and 20, got 21'));"
+      ] } } ]
+    },
+    {
+      "name": "19 limit=abc (400)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{tokenA}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/dashboards/user/favorites?limit=abc", "host": [ "{{baseUrl}}" ], "path": [ "api", "dashboards", "user", "favorites" ], "query": [ { "key": "limit", "value": "abc" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));"
+      ] } } ]
+    }
+  ]
+}
