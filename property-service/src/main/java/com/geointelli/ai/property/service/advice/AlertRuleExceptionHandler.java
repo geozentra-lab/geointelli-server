@@ -10,9 +10,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.geointelli.ai.property.service.controller.AlertRuleController;
+import com.geointelli.ai.property.service.controller.AlertMonitoringController;
 
 /** Reports duplicate rules and concurrent target deletion without leaking database internals. */
-@RestControllerAdvice(assignableTypes = AlertRuleController.class)
+@RestControllerAdvice(assignableTypes = {AlertRuleController.class, AlertMonitoringController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class AlertRuleExceptionHandler {
     @ExceptionHandler({DataIntegrityViolationException.class, PessimisticLockingFailureException.class})
