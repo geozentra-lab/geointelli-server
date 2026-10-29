@@ -65,7 +65,7 @@ public class MapLayerServiceImpl implements MapLayerService {
     }
 
     private double[] parseBbox(String bbox) {
-        String[] parts = bbox.split(",");
+        String[] parts = bbox.split(",", -1);
         if (parts.length != 4) {
             throw new IllegalArgumentException("bbox must have 4 values: minLng,minLat,maxLng,maxLat");
         }
