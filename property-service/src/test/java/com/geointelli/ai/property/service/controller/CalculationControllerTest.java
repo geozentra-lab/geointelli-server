@@ -1,7 +1,7 @@
 package com.geointelli.ai.property.service.controller;
 
-import com.geointelli.ai.property.service.dto.MortgageCalculationRequest;
-import com.geointelli.ai.property.service.dto.MortgageCalculationResponse;
+import com.geointelli.ai.property.service.dto.*;
+import com.geointelli.ai.property.service.service.AffordabilityCalculationService;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -31,6 +32,9 @@ public class CalculationControllerTest {
 
     @MockBean
     MortgageCalculationService mortgageCalculationService;
+
+    @MockBean
+    AffordabilityCalculationService affordabilityCalculationService;
 
     @Nested
     @DisplayName("Test Calculate Mortgage Endpoint")
@@ -161,4 +165,88 @@ public class CalculationControllerTest {
 
     }
 
+    @Nested
+    @DisplayName("Test Calculate Affordability Endpoint")
+    class CalculateAffordabilityTest {
+
+        private static final String URL = "/api/calculations/affordability";
+
+        private static final String VALID_BODY = """
+                {
+                  "annualGrossIncome": 72000,
+                  "monthlyDebtPayments": 500,
+                  "downPayment": 50000,
+                  "annualInterestRate": 6.5,
+                  "loanTermYears": 30
+                }
+                """;
+
+        @Test
+        @DisplayName("When request is valid, then return 200 with the estimate, assumptions and disclaimer")
+        void whenRequestIsValid_thenReturn200() throws Exception {
+            // Arrange
+            AffordabilityCalculationResponse response = new AffordabilityCalculationResponse(
+                    new BigDecimal("6000.00"), new BigDecimal("1660.00"), new BigDecimal("1660.00"),
+                    new BigDecimal("262629.96"), new BigDecimal("312629.96"),
+                    new AffordabilityAssumptions(BigDecimal.valueOf(28), BigDecimal.valueOf(36),
+                            BigDecimal.valueOf(6.5), 30, "Supplied by user, not a market rate"),
+                    List.of("Property tax not provided: not deducted from the budget, the estimate may be too high."),
+                    "This is an affordability estimate, not a loan approval.");
+
+            when(affordabilityCalculationService.calculateAffordability(any(AffordabilityCalculationRequest.class)))
+                    .thenReturn(response);
+
+            // Act & Assert
+            mockMvc.perform(post(URL)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(VALID_BODY))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.maxLoanAmount").value(262629.96))
+                    .andExpect(jsonPath("$.maxHomePrice").value(312629.96))
+                    .andExpect(jsonPath("$.assumptions.frontEndRatioPercent").value(28))
+                    .andExpect(jsonPath("$.assumptions.backEndRatioPercent").value(36))
+                    .andExpect(jsonPath("$.notes[0]").exists())
+                    .andExpect(jsonPath("$.disclaimer").value("This is an affordability estimate, not a loan approval."));
+            verify(affordabilityCalculationService).calculateAffordability(any(AffordabilityCalculationRequest.class));
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {
+                // missing income
+                """
+                        {"monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                // missing monthly debts (never assumed to be 0)
+                """
+                        {"annualGrossIncome": 72000, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                // income = 0
+                """
+                        {"annualGrossIncome": 0, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                // negative debts
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": -1, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                // rate above 100
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 101, "loanTermYears": 30}""",
+                // term 0 / 51
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 0}""",
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 51}""",
+                // negative optional cost
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30, "annualPropertyTax": -5}""",
+                // empty object
+                "{}",
+                // wrong type / malformed JSON
+                """
+                        {"annualGrossIncome": "abc", "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                "{ not json"
+        })
+        void whenBodyIsInvalid_thenReturn400(String body) throws Exception {
+            mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("Bad Request"));
+            verifyNoInteractions(affordabilityCalculationService);
+        }
+    }
 }
