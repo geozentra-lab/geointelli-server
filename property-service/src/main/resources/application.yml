@@ -2,6 +2,18 @@ spring:
   application:
     name: geointelli
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 5s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:geozentra}
     driver-class-name: org.postgresql.Driver
@@ -30,3 +42,21 @@ mapillary:
 
 images:
   local-directory: ${IMAGES_LOCAL_DIRECTORY:images}
+
+alerts:
+  enabled: ${ALERTS_ENABLED:false}
+  poll-delay-millis: ${ALERTS_POLL_DELAY_MILLIS:30000}
+  id-batch-size: ${ALERTS_ID_BATCH_SIZE:500}
+  steps-per-tick: ${ALERTS_STEPS_PER_TICK:10}
+  retry-delay-seconds: ${ALERTS_RETRY_DELAY_SECONDS:300}
+  max-scan-age-minutes: ${ALERTS_MAX_SCAN_AGE_MINUTES:1440}
+  publisher:
+    enabled: ${ALERTS_PUBLISHER_ENABLED:false}
+    poll-delay-millis: ${ALERTS_PUBLISH_POLL_DELAY_MILLIS:5000}
+    batch-size: ${ALERTS_PUBLISH_BATCH_SIZE:20}
+    max-attempts: ${ALERTS_PUBLISH_MAX_ATTEMPTS:10}
+    confirm-timeout-seconds: ${ALERTS_PUBLISH_CONFIRM_TIMEOUT_SECONDS:10}
+    retry-base-seconds: ${ALERTS_PUBLISH_RETRY_BASE_SECONDS:30}
+    exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
+    queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
+    routing-key: ${ALERTS_ROUTING_KEY:alerts.v1}
