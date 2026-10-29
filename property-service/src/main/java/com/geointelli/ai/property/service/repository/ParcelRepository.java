@@ -32,4 +32,19 @@ public interface ParcelRepository extends JpaRepository<Parcel,Long>{
 
     @Query("SELECT DISTINCT c.name FROM Parcel p JOIN p.property pr JOIN pr.county c WHERE p.geom IS NOT NULL ORDER BY c.name")
     List<String> findDistinctCountyNames();
+
+    @Query(value = """
+                SELECT *
+                FROM parcels p
+                WHERE p.geom IS NOT NULL
+                AND p.geom && ST_MakeEnvelope(:xmin, :ymin, :xmax, :ymax, 4326)
+                AND ST_Intersects(p.geom, ST_MakeEnvelope(:xmin, :ymin, :xmax, :ymax, 4326))
+                ORDER BY p.fid
+                LIMIT :limit
+                """, nativeQuery = true)
+    List<Parcel> findFeaturesWithinBoundingBox(@Param("xmin") double xmin,
+                                               @Param("ymin") double ymin,
+                                               @Param("xmax") double xmax,
+                                               @Param("ymax") double ymax,
+                                               @Param("limit") int limit);
 }
