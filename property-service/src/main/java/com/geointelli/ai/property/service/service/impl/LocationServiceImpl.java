@@ -23,11 +23,17 @@ public class LocationServiceImpl implements LocationService {
     private final CountyRepository counties;
     private final LocationMapper mapper;
 
+    /** {@inheritDoc} Ordered by state name. */
     @Override
     public List<StateDTO> getStates() {
         return states.findAll(Sort.by("name")).stream().map(mapper::toDTO).toList();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws ResponseStatusException 404 when no state has the given id
+     */
     @Override
     public List<CountyLocationDTO> getCounties(Long stateId) {
         if (!states.existsById(stateId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "State not found");
