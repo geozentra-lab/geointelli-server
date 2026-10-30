@@ -32,6 +32,7 @@ import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
+import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 
 /** Verifies canonical definitions, owner isolation, partial changes and replay through the existing search service. */
 class SavedSearchServiceImplTest {
@@ -41,7 +42,7 @@ class SavedSearchServiceImplTest {
     private final PropertySearchService propertySearch = mock(PropertySearchService.class);
     private final ObjectMapper json = new ObjectMapper();
     private final SavedSearchServiceImpl service = new SavedSearchServiceImpl(searches, currentUser, propertySearch,
-        new PropertySearchValidationServiceImpl(FACTORY.getValidator()), json, FACTORY.getValidator());
+        new PropertySearchValidationServiceImpl(FACTORY.getValidator()), json, FACTORY.getValidator(), mock(AlertEvaluationScheduleService.class));
     private SavedSearch saved;
 
     @AfterAll

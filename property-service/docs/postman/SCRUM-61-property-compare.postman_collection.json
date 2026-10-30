@@ -1,0 +1,201 @@
+{
+  "info": {
+    "name": "SCRUM-61 Property compare",
+    "description": "Manual checks for POST /api/properties/compare. Set baseUrl (default http://localhost:8081) and, if security is enabled, token. The property ids used (1, 2, 3, 4, 5, 10, 100, 1000) exist in the dev database; ids 1 and 10 have no stored valuation and no scores, id 10 has no sale.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "token", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{token}}", "type": "string" } ]
+  },
+  "item": [
+    {
+      "name": "01 Valid - three properties (200)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, 3, 4] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('requestedIds echoed in order', () => pm.expect(b.requestedIds).to.eql([2, 3, 4]));",
+        "pm.test('comparedCount is 3', () => pm.expect(b.comparedCount).to.eql(3));",
+        "pm.test('units are USD / sqft / sqft', () => pm.expect(b.units).to.eql({ currency: 'USD', area: 'sqft', lotSize: 'sqft' }));",
+        "pm.test('columns follow request order', () => pm.expect(b.properties.map(p => p.propertyId)).to.eql([2, 3, 4]));",
+        "pm.test('every column has the same sections', () => b.properties.forEach(p => {",
+        "  ['propertyId', 'folio', 'address', 'countyName', 'stateCode', 'facts', 'assessment', 'lastSale', 'valuation', 'scores', 'missingFields'].forEach(k => pm.expect(p, 'column ' + p.propertyId).to.have.property(k));",
+        "  pm.expect(p.missingFields).to.be.an('array');",
+        "}));",
+        "pm.test('assessment year is shared when set', () => { if (b.assessmentYear !== null) b.properties.forEach(p => { if (p.assessment) pm.expect(p.assessment.year).to.eql(b.assessmentYear); }); });",
+        "pm.test('address is not duplicated', () => b.properties.forEach(p => { if (p.address) pm.expect((p.address.match(/Unincorporated County/g) || []).length).to.be.at.most(1); }));"
+      ] } } ]
+    },
+    {
+      "name": "02 Valid - two properties (200)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, 5] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('two columns', () => pm.expect(b.comparedCount).to.eql(2));",
+        "pm.test('valuation present for ids with a prediction', () => b.properties.forEach(p => pm.expect(p.valuation, 'valuation of ' + p.propertyId).to.not.be.null));"
+      ] } } ]
+    },
+    {
+      "name": "03 Valid - order preserved [5, 2, 3] (200)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [5, 2, 3] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "pm.test('columns are 5, 2, 3', () => pm.expect(b.properties.map(p => p.propertyId)).to.eql([5, 2, 3]));"
+      ] } } ]
+    },
+    {
+      "name": "04 Valid - properties without valuation or scores (200, nulls + missingFields)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [1, 2, 10] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const b = pm.response.json();",
+        "const byId = Object.fromEntries(b.properties.map(p => [p.propertyId, p]));",
+        "pm.test('id 1: valuation null and listed', () => { pm.expect(byId[1].valuation).to.be.null; pm.expect(byId[1].missingFields).to.include('valuation'); });",
+        "pm.test('id 10: lastSale and valuation null and listed', () => { pm.expect(byId[10].lastSale).to.be.null; pm.expect(byId[10].valuation).to.be.null; pm.expect(byId[10].missingFields).to.include.members(['lastSale', 'valuation']); });",
+        "pm.test('id 2: valuation present and not listed', () => { pm.expect(byId[2].valuation).to.not.be.null; pm.expect(byId[2].missingFields).to.not.include('valuation'); });",
+        "pm.test('missing scores are null, never 0', () => b.properties.forEach(p => { if (p.missingFields.includes('scores.schoolScore')) pm.expect(p.scores.schoolScore).to.be.null; if (p.missingFields.includes('scores.transportationScore')) pm.expect(p.scores.transportationScore).to.be.null; }));"
+      ] } } ]
+    },
+    {
+      "name": "05 Only one id (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message names propertyIds', () => pm.expect(pm.response.json().message).to.include('propertyIds'));"
+      ] } } ]
+    },
+    {
+      "name": "06 Six ids (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, 3, 4, 5, 100, 1000] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message names propertyIds', () => pm.expect(pm.response.json().message).to.include('propertyIds'));"
+      ] } } ]
+    },
+    {
+      "name": "07 Negative id (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, -3] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message points at the bad element', () => pm.expect(pm.response.json().message).to.include('propertyIds[1]'));"
+      ] } } ]
+    },
+    {
+      "name": "08 Null id (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, null] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message points at the bad element', () => pm.expect(pm.response.json().message).to.include('propertyIds[1]'));"
+      ] } } ]
+    },
+    {
+      "name": "09 Duplicate ids (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, 3, 2] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message is the duplicate message', () => pm.expect(pm.response.json().message).to.eql('propertyIds contains duplicates: [2]'));"
+      ] } } ]
+    },
+    {
+      "name": "10 Unknown id (404)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, 999999999] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 404', () => pm.response.to.have.status(404));",
+        "pm.test('message names the id', () => pm.expect(pm.response.json().message).to.eql('No property found with id: 999999999'));"
+      ] } } ]
+    },
+    {
+      "name": "11 No body (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));"
+      ] } } ]
+    },
+    {
+      "name": "12 Empty object, propertyIds missing (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{}" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message names propertyIds', () => pm.expect(pm.response.json().message).to.include('propertyIds'));"
+      ] } } ]
+    },
+    {
+      "name": "13 Non-numeric id (400)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/api/properties/compare", "host": [ "{{baseUrl}}" ], "path": [ "api", "properties", "compare" ] },
+        "body": { "mode": "raw", "raw": "{ \"propertyIds\": [2, \"abc\"] }" }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));"
+      ] } } ]
+    }
+  ]
+}

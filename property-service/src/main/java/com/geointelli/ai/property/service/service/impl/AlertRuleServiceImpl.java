@@ -26,6 +26,7 @@ import com.geointelli.ai.property.service.repository.PropertyRepository;
 import com.geointelli.ai.property.service.repository.SavedSearchRepository;
 import com.geointelli.ai.property.service.service.AlertRuleService;
 import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import jakarta.validation.groups.Default;
@@ -40,15 +41,18 @@ public class AlertRuleServiceImpl implements AlertRuleService {
     private final CurrentUserService currentUser;
     private final AlertRuleMapper mapper;
     private final Validator validator;
+    private final AlertEvaluationScheduleService evaluationSchedule;
 
     public AlertRuleServiceImpl(AlertRuleRepository rules, SavedSearchRepository searches,
-            PropertyRepository properties, CurrentUserService currentUser, AlertRuleMapper mapper, Validator validator) {
+            PropertyRepository properties, CurrentUserService currentUser, AlertRuleMapper mapper, Validator validator,
+            AlertEvaluationScheduleService evaluationSchedule) {
         this.rules = rules;
         this.searches = searches;
         this.properties = properties;
         this.currentUser = currentUser;
         this.mapper = mapper;
         this.validator = validator;
+        this.evaluationSchedule = evaluationSchedule;
     }
 
     @Override
@@ -85,7 +89,9 @@ public class AlertRuleServiceImpl implements AlertRuleService {
         }
         if (request.hasField("cadence")) rule.setCadence(request.getCadence());
         if (request.hasField("paused")) rule.setPaused(request.getPaused());
-        return mapper.toDTO(rules.saveAndFlush(rule));
+        rules.saveAndFlush(rule);
+        evaluationSchedule.rescheduleRule(rule.getId());
+        return mapper.toDTO(rule);
     }
 
     @Override
@@ -118,7 +124,9 @@ public class AlertRuleServiceImpl implements AlertRuleService {
         if (request.hasField("name")) rule.setName(request.getName().trim());
         if (request.hasField("cadence")) rule.setCadence(request.getCadence());
         if (request.hasField("paused")) rule.setPaused(request.getPaused());
-        return mapper.toDTO(rules.saveAndFlush(rule));
+        rules.saveAndFlush(rule);
+        evaluationSchedule.rescheduleRule(rule.getId());
+        return mapper.toDTO(rule);
     }
 
     @Override
