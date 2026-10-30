@@ -10,6 +10,7 @@ import com.geointelli.ai.property.service.entity.Favorite;
 @Mapper(componentModel = "spring", config = IgnoreUnmappedMapperConfig.class)
 public interface FavoriteMapper {
     @Mapping(target = "propertyId", source = "favorite.property.id")
+    @Mapping(target = "favorite", constant = "true")
     FavoriteDTO toDTO(Favorite favorite);
     Favorite toEntity(FavoriteDTO favoriteDTO);
 }

@@ -3,6 +3,7 @@ package com.geointelli.ai.notification.service.config;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.core.StreamReadConstraints;
 import tools.jackson.core.json.JsonFactory;
@@ -16,6 +17,17 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Configuration
 public class NotificationJsonConfig {
+    /**
+     * REST requests reject unknown fields; queue events still allow additive
+     * contract fields.
+     */
+    @Bean("notificationApiMapper")
+    @Primary
+    public JsonMapper notificationApiMapper() {
+        return notificationEventMapper().rebuild()
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
+    }
+
     @Bean("notificationEventMapper")
     public JsonMapper notificationEventMapper() {
         return JsonMapper.builder(JsonFactory.builder().streamReadConstraints(
