@@ -3,6 +3,7 @@ package com.geointelli.ai.property.service.service.impl;
 import com.geointelli.ai.property.service.dto.MortgageCalculationRequest;
 import com.geointelli.ai.property.service.dto.MortgageCalculationResponse;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
+import com.geointelli.ai.property.service.util.MortgageMath;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -15,7 +16,6 @@ public class MortgageCalculationServiceImpl implements MortgageCalculationServic
 
     private static final MathContext MC = MathContext.DECIMAL64;
     private static final BigDecimal TWELVE = BigDecimal.valueOf(12);
-    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     @Override
     public MortgageCalculationResponse calculateMortgage(MortgageCalculationRequest request) {
@@ -24,27 +24,9 @@ public class MortgageCalculationServiceImpl implements MortgageCalculationServic
             throw new IllegalArgumentException("downPayment must not exceed price");
         }
 
-        BigDecimal monthlyPayment;
-
         BigDecimal loanAmount = toMoney(request.price().subtract(request.downPayment()));
-        int numberOfPayments = request.loanTermYears() * 12;
 
-        if (request.annualInterestRate().compareTo(BigDecimal.ZERO) == 0) {
-            // If interest rate is 0, the monthly payment is simply the loan amount divided by number of payments
-            monthlyPayment = loanAmount.divide(BigDecimal.valueOf(numberOfPayments), MC);
-            monthlyPayment = toMoney(monthlyPayment);
-        } else {
-            // Convert annual interest rate to monthly and from percentage to decimal
-            BigDecimal monthlyInterestRate = request.annualInterestRate().divide(HUNDRED, MC).divide(TWELVE, MC);
-
-            // Amortized payment: P * r * (1+r)^n / ((1+r)^n - 1)
-            BigDecimal onePlusRPowerN = BigDecimal.ONE.add(monthlyInterestRate).pow(numberOfPayments, MC);
-            monthlyPayment = loanAmount.multiply(monthlyInterestRate)
-                    .multiply(onePlusRPowerN)
-                    .divide(onePlusRPowerN.subtract(BigDecimal.ONE), MC);
-
-            monthlyPayment = toMoney(monthlyPayment);
-        }
+        BigDecimal monthlyPayment =  toMoney(MortgageMath.monthlyPayment(loanAmount, request.annualInterestRate(), request.loanTermYears()));
 
         BigDecimal monthlyPropertyTax = monthly(request.annualPropertyTax());
         BigDecimal monthlyInsurance = monthly(request.annualHomeInsurance());
