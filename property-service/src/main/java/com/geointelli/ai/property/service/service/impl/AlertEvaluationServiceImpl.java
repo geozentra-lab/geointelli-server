@@ -3,6 +3,7 @@ package com.geointelli.ai.property.service.service.impl;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -55,7 +56,7 @@ public class AlertEvaluationServiceImpl implements AlertEvaluationService {
     @Transactional(timeout = 120)
     public boolean processNextBatch() {
         if (!settings.isEnabled()) return false;
-        Instant now = clock.instant();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Long id = monitoring.lockNextDueRule(now);
         if (id == null) return false;
         try {
@@ -101,6 +102,9 @@ public class AlertEvaluationServiceImpl implements AlertEvaluationService {
     }
 
     private void complete(AlertRule rule, AlertEvaluationState state, AlertSearchDefinitionDTO definition, Instant now) {
+        // PostgreSQL timestamps retain microseconds; JSON must use the same precision.
+        // Normalize once before assigning both the envelope time and payload finish time.
+        now = now.truncatedTo(ChronoUnit.MICROS);
         boolean baseline = state.getBaselineGeneration() == null || !definition.hash().equals(state.getBaselineHash());
         if (!baseline) {
             long count = monitoring.countNew(rule.getId(), state.getGeneration(), state.getBaselineGeneration());
