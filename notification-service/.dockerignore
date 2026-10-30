@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+target
+logs
+*.log
+node_modules
+.yarn
+.pnp.*
+.idea
+.vscode
+.mvn
+mvnw
+mvnw.cmd
+package.json
+yarn.lock
+HELP.md
