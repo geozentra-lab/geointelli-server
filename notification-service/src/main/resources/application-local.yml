@@ -1,0 +1,41 @@
+spring:
+  jpa:
+    defer-datasource-initialization: false
+    show-sql: true
+    properties:
+      hibernate:
+        ddl-auto: validate
+        jdbc:
+          fetch_size: 10
+
+  sql:
+    init:
+      mode: never
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/geozentra
+
+  flyway:
+    enabled: true
+    # baseline-on-migrate: true
+    # baseline-version: 1
+server:
+  port: ${APP_PORT:8082}
+
+logging:
+  level:
+    root: INFO
+    com:
+      geointelli: DEBUG
+    org:
+      springframework: WARN
+      hibernate: WARN # DEBUG
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+  file:
+    name: logs/springboot.log
