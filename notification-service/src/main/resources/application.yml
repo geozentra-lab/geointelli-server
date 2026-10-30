@@ -2,6 +2,14 @@ spring:
   application:
     name: notification-service
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/geozentra}
+          # An explicit key endpoint avoids a Keycloak discovery request during startup.
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/geozentra}/protocol/openid-connect/certs}
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:geozentra_notifications}
     driver-class-name: org.postgresql.Driver
