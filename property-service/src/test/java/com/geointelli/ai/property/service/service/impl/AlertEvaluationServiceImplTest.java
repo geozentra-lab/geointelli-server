@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.config.AlertMonitoringProperties;
 import com.geointelli.ai.property.service.dto.AlertSearchDefinitionDTO;
 import com.geointelli.ai.property.service.dto.SavedSearchFilters;
+import com.geointelli.ai.property.service.dto.NewMatchPayloadDTO;
 import com.geointelli.ai.property.service.entity.*;
 import com.geointelli.ai.property.service.exception.AlertEvaluationException;
 import com.geointelli.ai.property.service.repository.*;
@@ -79,6 +81,29 @@ class AlertEvaluationServiceImplTest {
     @Test void changedFiltersEstablishNewSilentBaseline() {
         state.setBaselineGeneration(1L); state.setGeneration(1); state.setBaselineHash("old");
         service.processNextBatch(); assertEquals("BASELINED",state.getStatus()); verifyNoInteractions(outbox);
+    }
+    @Test void completionAndStartUseMicrosecondsEvenWithinTheSameClockTick() throws Exception {
+        Instant precise = Instant.parse("2026-10-30T01:38:04.720653200Z");
+        Instant expected = precise.truncatedTo(ChronoUnit.MICROS);
+        when(monitoring.lockNextDueRule(expected)).thenReturn(1L);
+        state.setBaselineGeneration(1L); state.setGeneration(1); state.setBaselineHash("hash");
+        when(search.findMatchingIds(filters,0,2)).thenReturn(List.of(90L));
+        when(monitoring.countNew(1,2,1)).thenReturn(1L);
+        when(monitoring.previewNew(1,2,1)).thenReturn(List.of(90L));
+        when(monitoring.recipient(9)).thenReturn("keycloak-user");
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        AlertEvaluationServiceImpl preciseService = new AlertEvaluationServiceImpl(rules,states,monitoring,outbox,
+            definitions,search,settings,mapper,Clock.fixed(precise,ZoneOffset.UTC));
+        preciseService.processNextBatch();
+        ArgumentCaptor<AlertOutboxEvent> captured = ArgumentCaptor.forClass(AlertOutboxEvent.class);
+        verify(outbox).save(captured.capture());
+        AlertOutboxEvent event = captured.getValue();
+        var payload = mapper.treeToValue(event.getPayload(), NewMatchPayloadDTO.class);
+        assertEquals(expected, event.getOccurredAt());
+        assertEquals(expected, payload.observationFinishedAt());
+        assertEquals(expected, payload.observationStartedAt());
+        assertFalse(payload.observationStartedAt().isAfter(payload.observationFinishedAt()));
+        assertFalse(payload.observationFinishedAt().isAfter(event.getOccurredAt()));
     }
     @Test void unchangedMembershipEmitsNothing() {
         state.setBaselineGeneration(1L); state.setGeneration(1); state.setBaselineHash("hash");

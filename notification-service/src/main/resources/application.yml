@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: notification-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:geozentra_notifications}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        sslmode: ${DB_SSL_MODE:prefer}
+        sslrootcert: ${DB_SSL_ROOT_CERT:}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 5s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        auto-startup: ${NOTIFICATIONS_CONSUMER_ENABLED:true}
+        concurrency: ${NOTIFICATIONS_CONSUMERS:1}
+        max-concurrency: ${NOTIFICATIONS_MAX_CONSUMERS:2}
+        prefetch: ${NOTIFICATIONS_PREFETCH:5}
+        missing-queues-fatal: true
+        # Bounded retries and confirmed DLQ recovery are configured in NotificationRabbitConfig.
+        retry:
+          enabled: false
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+server:
+  port: ${APP_PORT:8082}
+notifications:
+  exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
+  queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
+  routing-key: ${ALERTS_ROUTING_KEY:alerts.v1}
+  dead-letter-exchange: ${NOTIFICATIONS_DLX:geozentra.notifications.dead}
+  dead-letter-queue: ${NOTIFICATIONS_DLQ:geozentra.notifications.alerts.dlq}
+  dead-letter-routing-key: ${NOTIFICATIONS_DLQ_ROUTING_KEY:alerts.failed.v1}
+  max-attempts: ${NOTIFICATIONS_MAX_ATTEMPTS:3}
+  retry-initial-millis: ${NOTIFICATIONS_RETRY_INITIAL_MILLIS:1000}
+  retry-max-millis: ${NOTIFICATIONS_RETRY_MAX_MILLIS:10000}
+  confirm-timeout-seconds: ${NOTIFICATIONS_CONFIRM_TIMEOUT_SECONDS:10}
+  max-body-bytes: ${NOTIFICATIONS_MAX_BODY_BYTES:262144}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
