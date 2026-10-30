@@ -12,12 +12,6 @@ spring:
     init:
       mode: never
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:8090/realms/geozentra
-
   flyway:
     enabled: true
     # baseline-on-migrate: true
