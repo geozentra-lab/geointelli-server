@@ -87,6 +87,23 @@ public class PropertySearchServiceImpl implements PropertySearchService {
             totalPages, request.getPage() == 0, (long) request.getPage() + 1 >= totalPages);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> findMatchingIds(PropertySearchRequest request, long afterPropertyId, int limit) {
+        searchValidation.validate(request);
+        if (afterPropertyId < 0 || limit < 1 || limit > 1000) {
+            throw new IllegalArgumentException("Invalid property ID cursor or batch size");
+        }
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        var query = cb.createQuery(Long.class);
+        Root<Property> property = query.from(Property.class);
+        query.select(property.get("id")).distinct(true);
+        query.where(cb.and(predicates(request, query, property, new SearchJoins(property), cb)),
+            cb.greaterThan(property.get("id"), afterPropertyId));
+        query.orderBy(cb.asc(property.get("id")));
+        return entityManager.createQuery(query).setMaxResults(limit).getResultList();
+    }
+
     private Predicate[] predicates(PropertySearchRequest r, CommonAbstractCriteria q, Root<Property> p,
             SearchJoins j, CriteriaBuilder cb) {
         List<Predicate> filters = new ArrayList<>();
