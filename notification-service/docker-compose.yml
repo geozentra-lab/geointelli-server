@@ -1,0 +1,52 @@
+name: geozentra-notifications
+
+services:
+  notification-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-geozentra_notifications}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - notification_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  notification-service:
+    image: ${NOTIFICATION_IMAGE:-geozentra/notification-service:local}
+    build:
+      context: .
+    ports:
+      - "127.0.0.1:${APP_PORT:-8082}:8080"
+    env_file:
+      - ${NOTIFICATION_ENV_FILE:-.env}
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVER_PORT: 8080
+      DB_HOST: notification-postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-geozentra_notifications}
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      # This is the private PostgreSQL container, not RDS.
+      DB_SSL_MODE: disable
+      DB_SSL_ROOT_CERT: ""
+      # Reuse property-service's broker; localhost inside this container is not the host.
+      RABBITMQ_HOST: ${DOCKER_RABBITMQ_HOST:-host.docker.internal}
+      RABBITMQ_PORT: ${DOCKER_RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${DOCKER_RABBITMQ_USERNAME:?Set a non-guest RabbitMQ username in .env}
+      RABBITMQ_PASSWORD: ${DOCKER_RABBITMQ_PASSWORD:?Set its RabbitMQ password in .env}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      notification-postgres:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+volumes:
+  notification_pgdata:
