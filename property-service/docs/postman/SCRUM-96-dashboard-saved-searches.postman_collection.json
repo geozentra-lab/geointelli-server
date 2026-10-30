@@ -1,0 +1,982 @@
+{
+  "info": {
+    "name": "SCRUM-96 Dashboard saved-search card",
+    "description": "Manual checks for GET /api/dashboards/user/saved-searches. Variables: baseUrl (app), keycloakUrl (realm geozentra), clientId, userA/passwordA and userB/passwordB (two distinct users). Requests 01 and 02 fetch tokens into tokenA/tokenB. Run 03-04 on a user without saved searches, then 05-07 create three saved searches for user A through the existing POST /api/saved-searches (ids are stored in ssId1..ssId3), 08-13 check count, order, bound, monitoring state and ownership, 14-17 clean up and confirm the card is empty again. 18-22 are the error cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for user A (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{userA}}"
+            },
+            {
+              "key": "password",
+              "value": "{{passwordA}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for user B (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{userB}}"
+            },
+            {
+              "key": "password",
+              "value": "{{passwordB}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 User A without saved searches (200, count 0, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('count 0', () => pm.expect(b.count).to.eql(0));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 User A without saved searches, limit=1 (200, count 0, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('count 0', () => pm.expect(b.count).to.eql(0));",
+              "pm.test('limit 1', () => pm.expect(b.limit).to.eql(1));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Setup: user A saves 'Miami homes' (existing endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Miami homes\",\n  \"filters\": {\n    \"city\": \"Miami\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('ssId1', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Setup: user A saves 'Weekly paused: 3+ bedrooms' (existing endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Weekly paused: 3+ bedrooms\",\n  \"filters\": {\n    \"city\": \"Miami\",\n    \"minBedrooms\": 3\n  },\n  \"cadence\": \"WEEKLY\",\n  \"paused\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('ssId2', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Setup: user A saves 'Zip 33183' (existing endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Zip 33183\",\n  \"filters\": {\n    \"zip\": \"33183\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('ssId3', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 User A with 3 saved searches (200, count 3, newest first, monitoring state)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "const ids = ['ssId3', 'ssId2', 'ssId1'].map(k => Number(pm.collectionVariables.get(k)));",
+              "pm.test('count is the real total', () => pm.expect(b.count).to.eql(3));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('newest first', () => pm.expect(b.recent.map(r => r.id)).to.eql(ids));",
+              "pm.test('each item has summary fields only', () => b.recent.forEach(r => { ['id', 'name', 'cadence', 'paused', 'createdAt', 'updatedAt'].forEach(k => pm.expect(r).to.have.property(k)); pm.expect(r).to.not.have.property('filters'); }));",
+              "pm.test('monitoring state: paused WEEKLY search is reported', () => { const p = b.recent.find(r => r.id === ids[1]); pm.expect(p.cadence).to.eql('WEEKLY'); pm.expect(p.paused).to.be.true; });",
+              "pm.test('monitoring state: defaults are DAILY, not paused', () => { const d = b.recent.find(r => r.id === ids[0]); pm.expect(d.cadence).to.eql('DAILY'); pm.expect(d.paused).to.be.false; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 User A, limit=2 (200, count stays 3, list trimmed to the 2 newest)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=2",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "2"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const ids = ['ssId3', 'ssId2'].map(k => Number(pm.collectionVariables.get(k)));",
+              "pm.test('count unchanged', () => pm.expect(b.count).to.eql(3));",
+              "pm.test('limit 2', () => pm.expect(b.limit).to.eql(2));",
+              "pm.test('two newest', () => pm.expect(b.recent.map(r => r.id)).to.eql(ids));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 User A, limit=1 (200, one item)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('count 3, one item, the newest', () => { pm.expect(b.count).to.eql(3); pm.expect(b.recent.length).to.eql(1); pm.expect(b.recent[0].id).to.eql(Number(pm.collectionVariables.get('ssId3'))); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 User A, limit=20 (200, max bound accepted, still 3 items)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('limit 20, 3 items', () => { pm.expect(b.limit).to.eql(20); pm.expect(b.recent.length).to.eql(3); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Ownership: user B at the same time (200, count 0, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenB}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('count 0', () => pm.expect(b.count).to.eql(0));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Ownership: user B cannot read user A's search by id (404)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenB}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId1}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId1}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Cleanup: delete saved search 1",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId1}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId1}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Cleanup: delete saved search 2",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId2}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId2}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Cleanup: delete saved search 3",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId3}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId3}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 After cleanup: user A back to count 0 (200)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('count 0', () => pm.expect(b.count).to.eql(0));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 No token (401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"bearer token\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Invalid token (401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer not-a-real-token"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 limit=0 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit must be between 1 and 20, got 0\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 limit=21 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=21",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "21"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit must be between 1 and 20, got 21\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 limit=abc (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/saved-searches?limit=abc",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "saved-searches"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "abc"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit\"));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "userA",
+      "value": "dash_user_a"
+    },
+    {
+      "key": "passwordA",
+      "value": "Test1234!"
+    },
+    {
+      "key": "userB",
+      "value": "dash_user_b"
+    },
+    {
+      "key": "passwordB",
+      "value": "Test1234!"
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "ssId1",
+      "value": ""
+    },
+    {
+      "key": "ssId2",
+      "value": ""
+    },
+    {
+      "key": "ssId3",
+      "value": ""
+    }
+  ]
+}
