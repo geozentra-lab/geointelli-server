@@ -33,6 +33,7 @@ import com.geointelli.ai.property.service.repository.SavedSearchRepository;
 import com.geointelli.ai.property.service.service.CurrentUserService;
 import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
+import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 
 /** Tests ownership, stable target/trigger identity and effective pause semantics without external systems. */
 class AlertRuleServiceImplTest {
@@ -42,7 +43,7 @@ class AlertRuleServiceImplTest {
     private final PropertyRepository properties = mock(PropertyRepository.class);
     private final CurrentUserService currentUser = mock(CurrentUserService.class);
     private final AlertRuleServiceImpl service = new AlertRuleServiceImpl(rules, searches, properties,
-        currentUser, new AlertRuleMapper(), FACTORY.getValidator());
+        currentUser, new AlertRuleMapper(), FACTORY.getValidator(), mock(AlertEvaluationScheduleService.class));
     private SavedSearch search;
     private AlertRule rule;
     private User user;
