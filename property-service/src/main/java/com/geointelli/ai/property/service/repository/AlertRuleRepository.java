@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.repository;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,17 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
 
     @EntityGraph(attributePaths = "savedSearch")
     Optional<AlertRule> findByIdAndUser_Id(Long id, Long userId);
+
+    /** Number of alert rules owned by the user (dashboard card); delivered notifications are never counted. */
+    long countByUser_Id(Long userId);
+
+    /** Rules of the user that are effectively paused: paused themselves or linked to a paused saved search. */
+    @Query("SELECT COUNT(r) FROM AlertRule r LEFT JOIN r.savedSearch s WHERE r.user.id = :userId AND (r.paused = true OR s.paused = true)")
+    long countEffectivelyPausedByUserId(@Param("userId") Long userId);
+
+    /** The newest rules of the user, bounded by the page size; the saved search is loaded for the effective pause state. */
+    @EntityGraph(attributePaths = "savedSearch")
+    List<AlertRule> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
     /** Locks only the rule; avoids locking the nullable side of a saved-search outer join. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
