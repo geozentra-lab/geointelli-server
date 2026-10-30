@@ -18,9 +18,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MapLayerServiceImpl implements MapLayerService {
 
+    private final ParcelRepository parcelRepository;
     private static final int FEATURE_LIMIT = 500;
 
-    private final ParcelRepository parcelRepository;
     private final GeometryMapper geometryMapper;
 
     @Override
