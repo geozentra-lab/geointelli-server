@@ -12,9 +12,9 @@ import com.geointelli.ai.notification.service.entity.ConsumedAlertEvent;
  * aborting duplicate transactions.
  */
 public interface ConsumedAlertEventRepository extends JpaRepository<ConsumedAlertEvent, String> {
-    @Modifying
-    @Query(value = "INSERT INTO consumed_alert_events(event_id,source,fingerprint,received_at) "
-            + "VALUES(:eventId,:source,:fingerprint,:receivedAt) ON CONFLICT(event_id) DO NOTHING", nativeQuery = true)
-    int claim(@Param("eventId") String eventId, @Param("source") String source,
-            @Param("fingerprint") String fingerprint, @Param("receivedAt") Instant receivedAt);
+        @Modifying
+        @Query(value = "INSERT INTO consumed_alert_events(event_id,source,fingerprint,received_at) "
+                        + "VALUES(:eventId,:source,:fingerprint,:receivedAt) ON CONFLICT(event_id) DO NOTHING", nativeQuery = true)
+        int claim(@Param("eventId") String eventId, @Param("source") String source,
+                        @Param("fingerprint") String fingerprint, @Param("receivedAt") Instant receivedAt);
 }

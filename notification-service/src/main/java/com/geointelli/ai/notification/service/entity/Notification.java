@@ -48,4 +48,5 @@ public class Notification {
     @Column(nullable = false)
     private Instant createdAt;
     private Instant readAt;
+    private boolean inAppVisible = true;
 }

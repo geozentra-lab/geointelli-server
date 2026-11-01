@@ -17,7 +17,10 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Prevents notification ownership from falling back to names or anonymous identities. */
+/**
+ * Prevents notification ownership from falling back to names or anonymous
+ * identities.
+ */
 class CurrentUserServiceImplTest {
     private final CurrentUserServiceImpl service = new CurrentUserServiceImpl();
 
@@ -41,14 +44,14 @@ class CurrentUserServiceImplTest {
     @Test
     void rejectsAnonymousAuthentication() {
         SecurityContextHolder.getContext().setAuthentication(new AnonymousAuthenticationToken("key", "owner-a",
-            List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
+                List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
         assertUnauthorized();
     }
 
     @Test
     void rejectsNonJwtAuthenticationEvenWithTheSameName() {
         SecurityContextHolder.getContext().setAuthentication(
-            UsernamePasswordAuthenticationToken.authenticated("owner-a", "unused", List.of()));
+                UsernamePasswordAuthenticationToken.authenticated("owner-a", "unused", List.of()));
         assertUnauthorized();
     }
 
@@ -61,7 +64,7 @@ class CurrentUserServiceImplTest {
 
     @ParameterizedTest
     @NullSource
-    @ValueSource(strings = {"", " ", "\t"})
+    @ValueSource(strings = { "", " ", "\t" })
     void rejectsUnusableSubjects(String subject) {
         authenticate(subject);
         assertUnauthorized();
@@ -75,14 +78,34 @@ class CurrentUserServiceImplTest {
 
     private void authenticate(String subject) {
         Jwt.Builder builder = Jwt.withTokenValue("test-token").header("alg", "RS256")
-            .claim("preferred_username", "different-login-name");
-        if (subject != null) builder.subject(subject);
+                .claim("preferred_username", "different-login-name");
+        if (subject != null)
+            builder.subject(subject);
         SecurityContextHolder.getContext().setAuthentication(
-            new JwtAuthenticationToken(builder.build(), List.of()));
+                new JwtAuthenticationToken(builder.build(), List.of()));
     }
 
     private void assertUnauthorized() {
         assertEquals(HttpStatus.UNAUTHORIZED,
-            assertThrows(ResponseStatusException.class, service::getSubject).getStatusCode());
+                assertThrows(ResponseStatusException.class, service::getSubject).getStatusCode());
+    }
+
+    @Test
+    void verifiedEmailComesFromTheJwt() {
+        Jwt jwt = Jwt.withTokenValue("test").header("alg", "RS256").subject("owner")
+                .claim("email", "owner@example.com").claim("email_verified", true).build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
+        assertEquals("owner@example.com", service.getVerifiedEmail());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "false", "missing", "text" })
+    void rejectsUnverifiedOrMissingEmailClaims(String scenario) {
+        var builder = Jwt.withTokenValue("test").header("alg", "RS256").subject("owner");
+        if (!scenario.equals("missing"))
+            builder.claim("email", "owner@example.com");
+        builder.claim("email_verified", scenario.equals("text") ? "true" : !scenario.equals("false"));
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(builder.build(), List.of()));
+        assertThrows(ResponseStatusException.class, service::getVerifiedEmail);
     }
 }
