@@ -1,0 +1,47 @@
+
+name: Revalidate open feature PRs
+
+on:
+  push:
+    branches:
+      - integration-testing
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write
+
+jobs:
+  revalidate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Revalidate open PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh pr list \
+            --repo "$GH_REPO" \
+            --base integration-testing \
+            --state open \
+            --json number,headRefName \
+            --jq '.[] | [.number, .headRefName] | @tsv' |
+          while IFS=$'\t' read -r number branch; do
+
+            if [[ "$branch" == "master" ]]; then
+              continue
+            fi
+
+            echo "Revalidating PR #$number"
+
+            gh api \
+              --method POST \
+              "repos/$GH_REPO/pulls/$number/update-branch" \
+              -f expected_head_sha="$(gh pr view "$number" --repo "$GH_REPO" --json headRefOid --jq '.headRefOid')"
+
+          done
