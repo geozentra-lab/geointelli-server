@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.repository;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,11 @@ import jakarta.persistence.LockModeType;
 public interface SavedSearchRepository extends JpaRepository<SavedSearch, Long> {
     Page<SavedSearch> findByUser_Id(Long userId, Pageable pageable);
     Optional<SavedSearch> findByIdAndUser_Id(Long id, Long userId);
+
+    /** Number of saved searches owned by the user (dashboard card); nothing is executed. */
+    long countByUser_Id(Long userId);
+    /** The newest saved searches of the user, bounded by the page size (for example {@code PageRequest.of(0, 5)}). */
+    List<SavedSearch> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SavedSearch s WHERE s.id = :id AND s.user.id = :userId")
