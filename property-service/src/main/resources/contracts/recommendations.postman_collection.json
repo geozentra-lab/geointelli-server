@@ -1,0 +1,203 @@
+﻿{
+    "info":  {
+                 "name":  "SCRUM-77 Property recommendations",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+                 "description":  "Set baseUrl and a Keycloak access token. Pick a real county ID from your database. Suggestions use saved counties only; budget/goals remain UNKNOWN while price and scoring evidence is unavailable. A county with no records returns NO_MATCHES. An account without preferences returns NO_PREFERENCES. For ownership, repeat with a second user\u0027s token and distinct saved counties. Never use somebody else\u0027s token. No request automatically modifies preferences; run the explicitly named PUT requests only when desired."
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:8081"
+                     },
+                     {
+                         "key":  "token",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "countyId",
+                         "value":  "1"
+                     }
+                 ],
+    "auth":  {
+                 "type":  "bearer",
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "value":  "{{token}}",
+                                    "type":  "string"
+                                }
+                            ]
+             },
+    "item":  [
+                 {
+                     "name":  "Read current preferences before changing them",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/users/me/preferences"
+                                 }
+                 },
+                 {
+                     "name":  "Save a target county (modifies my preferences)",
+                     "request":  {
+                                     "method":  "PUT",
+                                     "url":  "{{baseUrl}}/api/users/me/preferences",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "mode":  "raw",
+                                                  "raw":  "{\"targetLocations\": [{\"countyId\": {{countyId}}}], \"investmentGoals\": []}"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Recommendations: bounded cards, own counties, explanations",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations?limit=20"
+                                 },
+                     "event":  [
+                                   {
+                                       "listen":  "test",
+                                       "script":  {
+                                                      "type":  "text/javascript",
+                                                      "exec":  [
+                                                                   "pm.test(\u0027Success\u0027, () =\u003e pm.response.to.have.status(200));",
+                                                                   "const body = pm.response.json();",
+                                                                   "pm.test(\u0027Bounded results and explicit ranking\u0027, () =\u003e { pm.expect(body.content.length).to.be.at.most(20); pm.expect(body.rankingMethod).to.eql(\u0027COUNTY_MATCH_THEN_PROPERTY_ID_ASC\u0027); });",
+                                                                   "pm.test(\u0027Own geography, stable ranks and no invented listings\u0027, () =\u003e body.content.forEach((item, i) =\u003e { pm.expect(body.appliedCountyIds).to.include(item.property.countyId); pm.expect(item.rank).to.eql(i + 1); pm.expect(item.reasons.length).to.be.above(0); pm.expect(item.listingStatus).to.eql(\u0027UNKNOWN\u0027); }));"
+                                                               ]
+                                                  }
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Budget and goals are explicitly unevaluated (modifies my preferences)",
+                     "request":  {
+                                     "method":  "PUT",
+                                     "url":  "{{baseUrl}}/api/users/me/preferences",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "mode":  "raw",
+                                                  "raw":  "{\"minBudget\": 100000, \"maxBudget\": 400000, \"targetLocations\": [{\"countyId\": {{countyId}}}], \"investmentGoals\": [\"rental income\"]}"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Budget/goal results: expect PARTIAL if records exist",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations?limit=5"
+                                 },
+                     "event":  [
+                                   {
+                                       "listen":  "test",
+                                       "script":  {
+                                                      "type":  "text/javascript",
+                                                      "exec":  [
+                                                                   "pm.test(\u0027Success\u0027, () =\u003e pm.response.to.have.status(200));",
+                                                                   "const body = pm.response.json();",
+                                                                   "pm.test(\u0027Missing evidence is explicit\u0027, () =\u003e { pm.expect(body.status).to.eql(body.content.length ? \u0027PARTIAL\u0027 : \u0027NO_MATCHES\u0027); body.content.forEach(item =\u003e { pm.expect(item.budgetMatch).to.eql(\u0027UNKNOWN\u0027); pm.expect(item.goalMatch).to.eql(\u0027UNKNOWN\u0027); }); });"
+                                                               ]
+                                                  }
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Clear target counties (modifies my preferences)",
+                     "request":  {
+                                     "method":  "PUT",
+                                     "url":  "{{baseUrl}}/api/users/me/preferences",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "mode":  "raw",
+                                                  "raw":  "{\"targetLocations\": [], \"investmentGoals\": []}"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Missing locations: empty with LOCATION_REQUIRED",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations"
+                                 },
+                     "event":  [
+                                   {
+                                       "listen":  "test",
+                                       "script":  {
+                                                      "type":  "text/javascript",
+                                                      "exec":  [
+                                                                   "pm.test(\u0027Explicit cold start\u0027, () =\u003e { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.status).to.eql(\u0027LOCATION_REQUIRED\u0027); pm.expect(body.content).to.eql([]); });"
+                                                               ]
+                                                  }
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Invalid limit: zero returns 400",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations?limit=0"
+                                 },
+                     "event":  [
+                                   {
+                                       "listen":  "test",
+                                       "script":  {
+                                                      "type":  "text/javascript",
+                                                      "exec":  [
+                                                                   "pm.test(\u0027Bad request\u0027, () =\u003e pm.response.to.have.status(400));"
+                                                               ]
+                                                  }
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Invalid limit: 51 returns 400",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations?limit=51"
+                                 }
+                 },
+                 {
+                     "name":  "Invalid limit: text returns 400",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/recommendations?limit=abc"
+                                 }
+                 },
+                 {
+                     "name":  "Unauthenticated returns 401",
+                     "request":  {
+                                     "method":  "GET",
+                                     "auth":  {
+                                                  "type":  "noauth"
+                                              },
+                                     "url":  "{{baseUrl}}/api/recommendations"
+                                 },
+                     "event":  [
+                                   {
+                                       "listen":  "test",
+                                       "script":  {
+                                                      "type":  "text/javascript",
+                                                      "exec":  [
+                                                                   "pm.test(\u0027Identity required\u0027, () =\u003e pm.response.to.have.status(401));"
+                                                               ]
+                                                  }
+                                   }
+                               ]
+                 }
+             ]
+}
