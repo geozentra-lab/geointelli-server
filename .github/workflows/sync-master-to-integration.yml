@@ -1,4 +1,3 @@
-
 name: Sync master to integration-testing
 
 on:
@@ -6,19 +5,37 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
     branches:
       - integration-testing
+  workflow_run:
+    workflows: ["GeoZentra Backend CI", "Notification Service CI"]
+    types: [completed]
+    branches:
+      - master
 
+# Read CI with GITHUB_TOKEN; keep the App's existing write permissions unchanged.
 permissions:
   contents: read
+  actions: read
+
+# Both CI completions and PR events share a lock. Never cancel a merge in flight.
+concurrency:
+  group: sync-master-to-integration-testing
+  cancel-in-progress: false
 
 jobs:
   sync:
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'master' &&
-      github.event.pull_request.base.ref == 'integration-testing' &&
-      github.event.pull_request.draft == false
-
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'master' &&
+       github.event.pull_request.base.ref == 'integration-testing' &&
+       github.event.pull_request.draft == false) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'master')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: branch-sync
 
     steps:
@@ -31,78 +48,140 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - name: Check PR and merge safely
+      # No checkout or execution of PR code in this privileged workflow.
+      - name: Verify current PR CI and merge with the App
+        uses: actions/github-script@v7
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          SYNC_APP_TOKEN: ${{ steps.app.outputs.token }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const fullName = owner + '/' + repo;
+            const required = [
+              { file: 'backend-ci.yml', name: 'GeoZentra Backend CI', job: 'Build and Test Spring Boot' },
+              { file: 'notification-service-ci.yml', name: 'Notification Service CI', job: 'Notification Service Build' }
+            ];
+            const report = async message => {
+              core.notice(message);
+              await core.summary.addRaw(message).write();
+            };
+            const eligible = pr =>
+              pr.state === 'open' && !pr.draft &&
+              pr.head.repo?.full_name === fullName && pr.head.ref === 'master' &&
+              pr.base.repo?.full_name === fullName && pr.base.ref === 'integration-testing';
 
-          echo "Checking PR #$PR_NUMBER"
+            let number;
+            if (context.eventName === 'pull_request_target') {
+              number = context.payload.pull_request.number;
+            } else if (context.eventName === 'workflow_run') {
+              // workflow_run.pull_requests can be empty. Discover the PR, never guess a number.
+              const prs = await github.paginate(github.rest.pulls.list, {
+                owner, repo, state: 'open', head: owner + ':master',
+                base: 'integration-testing', per_page: 100
+              });
+              const candidates = prs.filter(eligible);
+              if (candidates.length !== 1) {
+                await report('Expected one open master -> integration-testing PR; found ' + candidates.length + '. No merge.');
+                return;
+              }
+              number = candidates[0].number;
+            } else {
+              core.setFailed('Unexpected trigger.');
+              return;
+            }
 
-          # GitHub may need time to calculate mergeability.
-          for attempt in {1..10}; do
-            pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+            let pr;
+            for (let attempt = 0; attempt < 10; attempt++) {
+              pr = (await github.rest.pulls.get({ owner, repo, pull_number: number })).data;
+              if (!eligible(pr)) {
+                await report('PR #' + number + ' is no longer an eligible open synchronization PR. No merge.');
+                return;
+              }
+              if (pr.mergeable !== null) break;
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+            if (pr.mergeable === false) {
+              core.warning('PR #' + number + ' has merge conflicts. Left open for manual resolution.');
+              await report('Merge conflicts in PR #' + number + '; left open. No branches were changed.');
+              return;
+            }
+            if (pr.mergeable !== true) {
+              await report('Mergeability is still unknown for PR #' + number + '. No merge.');
+              return;
+            }
 
-            source=$(jq -r '.head.ref' <<< "$pr")
-            source_repo=$(jq -r '.head.repo.full_name' <<< "$pr")
-            target=$(jq -r '.base.ref' <<< "$pr")
-            state=$(jq -r '.state' <<< "$pr")
-            draft=$(jq -r '.draft' <<< "$pr")
-            sha=$(jq -r '.head.sha' <<< "$pr")
-            mergeable=$(jq -r '.mergeable' <<< "$pr")
-            mergeable_state=$(jq -r '.mergeable_state' <<< "$pr")
+            const head = pr.head.sha;
+            const base = pr.base.sha;
+            if (context.eventName === 'workflow_run' && context.payload.workflow_run.head_sha !== head) {
+              await report('Ignoring a CI completion for an older PR head. No merge.');
+              return;
+            }
 
-            # Confirm that this is the intended sync PR.
-            if [[ "$source" != "master" ||
-                  "$source_repo" != "$GH_REPO" ||
-                  "$target" != "integration-testing" ||
-                  "$state" != "open" ||
-                  "$draft" != "false" ]]; then
-              echo "PR is no longer eligible. Skipping."
-              exit 0
-            fi
+            async function ciSucceeded() {
+              for (const check of required) {
+                // Pin workflow identity by file, not a potentially colliding check name.
+                const workflow = (await github.rest.actions.getWorkflow({
+                  owner, repo, workflow_id: check.file
+                })).data;
+                if (workflow.name !== check.name) {
+                  await report('Required workflow identity changed: ' + check.file + '. No merge.');
+                  return false;
+                }
+                const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                  owner, repo, workflow_id: workflow.id, event: 'pull_request',
+                  branch: 'master', head_sha: head, per_page: 100
+                });
+                // Exclude push runs and PRs into other branches, even for the same SHA.
+                const matching = runs.filter(run =>
+                  run.head_sha === head && run.head_branch === 'master' &&
+                  run.head_repository?.full_name === fullName &&
+                  run.pull_requests?.some(p =>
+                    p.number === number && p.base.ref === 'integration-testing' &&
+                    p.head.sha === head && p.base.sha === base));
+                matching.sort((a, b) => b.id - a.id);
+                const run = matching[0];
+                // Never select an older success when a newer run/attempt is pending or failed.
+                if (!run || run.status !== 'completed' || run.conclusion !== 'success') {
+                  await report(check.name + ' has no latest successful PR run for current head/base ' + head + '/' + base + '. No merge.');
+                  return false;
+                }
+                const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                  owner, repo, run_id: run.id, filter: 'latest', per_page: 100
+                });
+                const job = jobs.find(job => job.name === check.job);
+                if (!job || job.status !== 'completed' || job.conclusion !== 'success' ||
+                    !job.steps?.some(step => step.name === 'Build and run tests' && step.conclusion === 'success')) {
+                  await report(check.name + ' did not successfully execute its required build/test job. No merge.');
+                  return false;
+                }
+                core.info(check.name + ': verified run ' + run.id + ', attempt ' + run.run_attempt);
+              }
+              return true;
+            }
 
-            if [[ "$mergeable" != "null" ]]; then
-              break
-            fi
+            if (!(await ciSucceeded())) return;
+            // Re-fetch after verification so a closed PR or a moved head/base cannot reuse stale CI.
+            const current = (await github.rest.pulls.get({ owner, repo, pull_number: number })).data;
+            if (!eligible(current) || current.head.sha !== head || current.base.sha !== base ||
+                current.mergeable !== true || current.merge_commit_sha !== pr.merge_commit_sha) {
+              await report('PR changed while verifying CI. Left open for the next trigger.');
+              return;
+            }
+            if (!(await ciSucceeded())) return;
 
-            echo "Mergeability pending ($attempt/10)"
-            sleep 5
-          done
-
-          echo "Mergeable: $mergeable"
-          echo "Merge state: $mergeable_state"
-
-          if [[ "$mergeable" == "false" ]]; then
-            echo "::warning::PR #$PR_NUMBER has merge conflicts. Manual resolution required."
-
-            gh pr comment "$PR_NUMBER" \
-              --body "⚠️ Automatic synchronization skipped: master and integration-testing have merge conflicts. Please resolve the conflicts manually." \
-              || true
-
-            exit 0
-          fi
-
-          if [[ "$mergeable" != "true" ]]; then
-            echo "::warning::GitHub could not determine mergeability. Skipping."
-            exit 0
-          fi
-
-          # Check branch protection, CI and review requirements
-          # through GitHub's merge API. Do not bypass rules.
-          echo "Attempting merge..."
-
-          if gh api --method PUT \
-            "repos/$GH_REPO/pulls/$PR_NUMBER/merge" \
-            -f merge_method=merge \
-            -f sha="$sha"; then
-
-            echo "PR #$PR_NUMBER merged successfully."
-
-          else
-            echo "::warning::Merge rejected. Required checks, reviews, branch rules or concurrent updates may be blocking it."
-            exit 0
-          fi
+            // --admin permits the App's ALREADY CONFIGURED ruleset review bypass.
+            // It is used only AFTER the explicit CI gate; no auto-merge, rule edits,
+            // branch updates, branch deletion, or protection changes are performed.
+            const result = await exec.getExecOutput('gh', [
+              'pr', 'merge', String(number), '--repo', fullName,
+              '--merge', '--admin', '--match-head-commit', head
+            ], {
+              env: { ...process.env, GH_TOKEN: process.env.SYNC_APP_TOKEN },
+              ignoreReturnCode: true
+            });
+            if (result.exitCode !== 0) {
+              core.setFailed('Merge was rejected. PR left open; inspect the merge command output.');
+              return;
+            }
+            await report('Merged synchronization PR #' + number + ' after both required CI workflows passed for ' + head + '.');
