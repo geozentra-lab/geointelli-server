@@ -3,6 +3,8 @@ package com.geointelli.ai.property.service.service.impl;
 import com.geointelli.ai.property.service.dto.*;
 import com.geointelli.ai.property.service.service.InvestmentFinancingService;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -11,6 +13,8 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Financed metrics on top of the unfinanced operating result. Debt service comes from the
@@ -25,9 +29,20 @@ public class InvestmentFinancingServiceImpl implements InvestmentFinancingServic
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private final MortgageCalculationService mortgageCalculationService;
+    private final Validator validator;   // jakarta.validation.Validator
 
     @Override
     public InvestmentFinancingResult calculateFinancingMetrics(InvestmentFinancingRequest request, InvestmentOperatingResult operating) {
+        // No controller validates the request: enforce its constraints here so bad inputs fail as IllegalArgumentException
+        Set<ConstraintViolation<InvestmentFinancingRequest>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            String message = violations.stream()
+                    .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                    .sorted()
+                    .collect(Collectors.joining(", "));
+            throw new IllegalArgumentException(message);
+        }
+
         BigDecimal annualNoi = operating.annualNetOperatingIncome();
 
         List<String> notes = new ArrayList<>();

@@ -24,7 +24,8 @@ public interface InvestmentFinancingService {
      * @param request   financing inputs; every field is optional
      * @param operating unfinanced operating result; its NOI is used unchanged
      * @return the financed metrics with one note per unavailable metric
-     * @throws IllegalArgumentException if the down payment exceeds the purchase price
+     * @throws IllegalArgumentException if a supplied input is out of range (e.g. a zero price, a term
+     *         outside 1 to 50, a negative amount, too many digits) or the down payment exceeds the purchase price
      */
     InvestmentFinancingResult calculateFinancingMetrics(InvestmentFinancingRequest request,
                                                         InvestmentOperatingResult operating);

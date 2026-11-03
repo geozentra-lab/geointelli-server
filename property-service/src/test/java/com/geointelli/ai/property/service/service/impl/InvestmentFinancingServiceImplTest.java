@@ -2,9 +2,13 @@ package com.geointelli.ai.property.service.service.impl;
 
 import com.geointelli.ai.property.service.dto.*;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
+import jakarta.validation.Validation;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
@@ -18,7 +22,8 @@ public class InvestmentFinancingServiceImplTest {
     MortgageCalculationService mortgageCalculationService = spy(new MortgageCalculationServiceImpl());
 
     InvestmentFinancingServiceImpl investmentFinancingService =
-            new InvestmentFinancingServiceImpl(mortgageCalculationService);
+            new InvestmentFinancingServiceImpl(mortgageCalculationService,
+                    Validation.buildDefaultValidatorFactory().getValidator());
 
     // Annual NOI = 18570.00 (same inputs as InvestmentOperatingServiceImplTest)
     private static final InvestmentOperatingResult OPERATING = new InvestmentOperatingServiceImpl()
@@ -179,6 +184,53 @@ public class InvestmentFinancingServiceImplTest {
                     () -> investmentFinancingService.calculateFinancingMetrics(request, OPERATING));
             assertEquals("downPayment must not exceed purchasePrice", exception.getMessage());
             verifyNoInteractions(mortgageCalculationService);
+        }
+
+        static java.util.stream.Stream<Arguments> invalidRequests() {
+            BigDecimal price = BigDecimal.valueOf(300000);
+            BigDecimal down = BigDecimal.valueOf(60000);
+            BigDecimal rate = BigDecimal.valueOf(6.5);
+            return java.util.stream.Stream.of(
+                    Arguments.of("purchasePrice", new InvestmentFinancingRequest(BigDecimal.ZERO, null, null, null, null)),
+                    Arguments.of("purchasePrice", new InvestmentFinancingRequest(BigDecimal.valueOf(-300000), down, rate, 30, null)),
+                    Arguments.of("downPayment", new InvestmentFinancingRequest(price, BigDecimal.valueOf(-50000), rate, 30, null)),
+                    Arguments.of("annualInterestRate", new InvestmentFinancingRequest(price, down, BigDecimal.valueOf(-1), 30, null)),
+                    Arguments.of("annualInterestRate", new InvestmentFinancingRequest(price, down, BigDecimal.valueOf(500), 30, null)),
+                    Arguments.of("loanTermYears", new InvestmentFinancingRequest(price, down, rate, 0, null)),
+                    Arguments.of("loanTermYears", new InvestmentFinancingRequest(price, down, rate, -5, null)),
+                    Arguments.of("loanTermYears", new InvestmentFinancingRequest(price, down, rate, 51, null)),
+                    Arguments.of("closingCosts", new InvestmentFinancingRequest(price, down, rate, 30, BigDecimal.valueOf(-1))),
+                    // too large / too many decimal places
+                    Arguments.of("purchasePrice", new InvestmentFinancingRequest(new BigDecimal("1e200000"), down, rate, 30, null)),
+                    Arguments.of("downPayment", new InvestmentFinancingRequest(price, new BigDecimal("1e-200000"), rate, 30, null)),
+                    Arguments.of("annualInterestRate", new InvestmentFinancingRequest(price, down, new BigDecimal("1e-200000"), 30, null)));
+        }
+
+        @ParameterizedTest(name = "{0}: {1}")
+        @MethodSource("invalidRequests")
+        @DisplayName("When a supplied input is invalid, then throw IllegalArgumentException naming it without calculating")
+        void whenInputIsInvalid_thenThrowIllegalArgumentException(String field, InvestmentFinancingRequest request) {
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> investmentFinancingService.calculateFinancingMetrics(request, OPERATING));
+            assertTrue(exception.getMessage().contains(field), exception.getMessage());
+            verifyNoInteractions(mortgageCalculationService);
+        }
+
+        @Test
+        @DisplayName("When amounts are at the largest allowed size, then the metrics are calculated")
+        void whenAmountsAreAtTheLimit_thenReturnMetrics() {
+            // Arrange
+            InvestmentFinancingRequest request = new InvestmentFinancingRequest(
+                    new BigDecimal("999999999999.99"), new BigDecimal("0.01"), new BigDecimal("99.9999"), 50,
+                    new BigDecimal("999999999999.99"));
+
+            // Act
+            InvestmentFinancingResult result = investmentFinancingService.calculateFinancingMetrics(request, OPERATING);
+
+            // Assert
+            assertNotNull(result.monthlyDebtService());
+            assertNotNull(result.cashOnCashPercent());
         }
     }
 
