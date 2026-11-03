@@ -17,9 +17,11 @@ import com.geointelli.ai.notification.service.entity.Notification;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
     Optional<Notification> findByEventId(String eventId);
 
-    Page<Notification> findByRecipientKeycloakId(String recipientKeycloakId, Pageable pageable);
+    @Query("SELECT n FROM Notification n WHERE n.recipientKeycloakId=:recipient AND n.inAppVisible=true")
+    Page<Notification> findByRecipientKeycloakId(@Param("recipient") String recipientKeycloakId, Pageable pageable);
 
-    Optional<Notification> findByIdAndRecipientKeycloakId(Long id, String recipientKeycloakId);
+    @Query("SELECT n FROM Notification n WHERE n.id=:id AND n.recipientKeycloakId=:recipient AND n.inAppVisible=true")
+    Optional<Notification> findByIdAndRecipientKeycloakId(@Param("id") Long id, @Param("recipient") String recipientKeycloakId);
 
     /**
      * Sets the first read time only, including when multiple service instances
@@ -27,7 +29,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
      */
     @Modifying
     @Query("UPDATE Notification n SET n.readAt = :readAt WHERE n.id = :id "
-            + "AND n.recipientKeycloakId = :recipient AND n.readAt IS NULL")
+            + "AND n.recipientKeycloakId = :recipient AND n.inAppVisible=true AND n.readAt IS NULL")
     int markUnreadAsRead(@Param("id") Long id, @Param("recipient") String recipient,
             @Param("readAt") Instant readAt);
 }
