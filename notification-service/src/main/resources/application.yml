@@ -52,6 +52,18 @@ spring:
 server:
   port: ${APP_PORT:8082}
 notifications:
+  email:
+    inbox-url: ${NOTIFICATIONS_EMAIL_INBOX_URL:http://localhost:4200/notifications}
+    enabled: ${NOTIFICATIONS_EMAIL_ENABLED:false}
+    from-address: ${SES_FROM_ADDRESS:}
+    region: ${SES_REGION:us-east-1}
+    poll-delay-millis: ${NOTIFICATIONS_EMAIL_POLL_DELAY_MILLIS:30000}
+    steps-per-tick: ${NOTIFICATIONS_EMAIL_STEPS_PER_TICK:10}
+    max-digest-items: ${NOTIFICATIONS_EMAIL_MAX_DIGEST_ITEMS:100}
+    max-attempts: ${NOTIFICATIONS_EMAIL_MAX_ATTEMPTS:3}
+    retry-delay-seconds: ${NOTIFICATIONS_EMAIL_RETRY_DELAY_SECONDS:60}
+    timeout-seconds: ${SES_TIMEOUT_SECONDS:10}
+    lease-seconds: ${NOTIFICATIONS_EMAIL_LEASE_SECONDS:120}
   exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
   queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
   routing-key: ${ALERTS_ROUTING_KEY:alerts.v1}
