@@ -2,6 +2,8 @@ package com.geointelli.ai.property.service.dto;
 
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 public class SchoolAnalysisDTO {
     private Long id;
@@ -21,4 +23,6 @@ public class SchoolAnalysisDTO {
     private Double schoolDensityScore;
 
     private Double schoolScore;
+
+    private LocalDateTime updatedAt;
 }
