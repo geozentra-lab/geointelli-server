@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.service;
 
 import java.util.List;
+import com.geointelli.ai.property.service.dto.PropertySearchItem;
 
 import com.geointelli.ai.property.service.dto.PropertySearchRequest;
 import com.geointelli.ai.property.service.dto.PropertySearchResponse;
@@ -26,4 +27,14 @@ public interface PropertySearchService {
 
     /** Returns matching IDs after the cursor, ordered by ID, without a count query; limit is 1 to 1000. */
     List<Long> findMatchingIds(PropertySearchRequest request, long afterPropertyId, int limit);
+
+    /**
+     * Returns research candidates in the supplied counties, ordered by property ID.
+     * Uses the same property-card projection as search without running a count query.
+     *
+     * @param countyIds one to twenty positive county IDs
+     * @param limit maximum number of results, from one to fifty
+     * @return matching property records; these are not confirmed active listings
+     */
+    List<PropertySearchItem> findRecommendationCandidates(List<Long> countyIds, int limit);
 }
