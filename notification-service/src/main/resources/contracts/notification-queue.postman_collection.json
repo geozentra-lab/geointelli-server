@@ -1,0 +1,183 @@
+{
+  "info": {
+    "name": "GeoZentra notification delivery (SCRUM-69)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Use a development broker only. Start Docker RabbitMQ and create geozentra_notifications; configure .env and run yarn start:local. The service consumes NEW_MATCH v1 and stores unread in-app notifications. No inbox/email endpoints are part of SCRUM-69. Publish the example, inspect SQL, then publish the IDENTICAL event again: there must remain one notification and receipt. Invalid version should appear in the DLQ after 3 total processing attempts (configurable), with original JSON and a stable failure-code header. Recovery: fix the source/consumer problem, inspect the DLQ with requeue=true, then manually publish the original JSON to the main exchange while retaining eventId. Retire the DLQ copy only after confirming storage. Replaying identical successful events is safe. Reusing eventId with a changed recipient/payload is rejected as EVENT_ID_COLLISION. Retries are bounded per delivery; process/broker failure can cause redelivery. DLQ confirmation failure requeues rather than discards the original. The default queues/exchanges are durable and messages persistent. The existing main queue has no new immutable DLX arguments. DLQ duplicates are possible after a broker-ack/process-crash race and must be treated by eventId. Default test build needs no running broker or DB; real integration tests are opt-in against disposable infrastructure using notification.test.postgres.url and notification.test.rabbit.port."
+  },
+  "variable": [
+    {
+      "key": "serviceUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "rabbitManagementUrl",
+      "value": "http://localhost:15672"
+    },
+    {
+      "key": "rabbitUser",
+      "value": "guest"
+    },
+    {
+      "key": "rabbitPassword",
+      "value": "guest"
+    }
+  ],
+  "item": [
+    {
+      "name": "Service health",
+      "request": {
+        "method": "GET",
+        "url": "{{serviceUrl}}/actuator/health",
+        "header": [],
+        "description": ""
+      }
+    },
+    {
+      "name": "Main queue status",
+      "request": {
+        "method": "GET",
+        "url": "{{rabbitManagementUrl}}/api/queues/%2F/geozentra.notifications.alerts",
+        "header": [],
+        "description": "",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{rabbitUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{rabbitPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Publish NEW_MATCH (repeat unchanged for duplicate test)",
+      "request": {
+        "method": "POST",
+        "url": "{{rabbitManagementUrl}}/api/exchanges/%2F/geozentra.alerts/publish",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "Expected routed:true; verify one notification and receipt in the notification database.",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{rabbitUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{rabbitPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2,\n    \"message_id\": \"property-alert-1\"\n  },\n  \"routing_key\": \"alerts.v1\",\n  \"payload\": \"{\\\"eventId\\\": \\\"property-alert-1\\\", \\\"source\\\": \\\"property-service\\\", \\\"eventVersion\\\": 1, \\\"eventType\\\": \\\"NEW_MATCH\\\", \\\"userId\\\": \\\"test-keycloak-user\\\", \\\"alertRuleId\\\": 3, \\\"savedSearchId\\\": 10, \\\"propertyId\\\": null, \\\"sourceChangeId\\\": \\\"rule:3:generation:2\\\", \\\"occurredAt\\\": \\\"2026-10-29T10:00:00Z\\\", \\\"payload\\\": {\\\"ruleName\\\": \\\"Miami homes\\\", \\\"definitionHash\\\": \\\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\", \\\"matchedCount\\\": 1000, \\\"newMatchCount\\\": 2, \\\"propertyIds\\\": [1, 2], \\\"previewTruncated\\\": false, \\\"observationStartedAt\\\": \\\"2026-10-29T09:59:00Z\\\", \\\"observationFinishedAt\\\": \\\"2026-10-29T10:00:00Z\\\"}}\",\n  \"payload_encoding\": \"string\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Unsupported version goes to DLQ",
+      "request": {
+        "method": "POST",
+        "url": "{{rabbitManagementUrl}}/api/exchanges/%2F/geozentra.alerts/publish",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{rabbitUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{rabbitPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"properties\": {\n    \"content_type\": \"application/json\",\n    \"delivery_mode\": 2,\n    \"message_id\": \"invalid-version-test\"\n  },\n  \"routing_key\": \"alerts.v1\",\n  \"payload\": \"{\\\"eventId\\\": \\\"invalid-version-test\\\", \\\"source\\\": \\\"property-service\\\", \\\"eventVersion\\\": 999, \\\"eventType\\\": \\\"NEW_MATCH\\\", \\\"userId\\\": \\\"test-keycloak-user\\\", \\\"alertRuleId\\\": 3, \\\"savedSearchId\\\": 10, \\\"propertyId\\\": null, \\\"sourceChangeId\\\": \\\"rule:3:generation:2\\\", \\\"occurredAt\\\": \\\"2026-10-29T10:00:00Z\\\", \\\"payload\\\": {\\\"ruleName\\\": \\\"Miami homes\\\", \\\"definitionHash\\\": \\\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\", \\\"matchedCount\\\": 1000, \\\"newMatchCount\\\": 2, \\\"propertyIds\\\": [1, 2], \\\"previewTruncated\\\": false, \\\"observationStartedAt\\\": \\\"2026-10-29T09:59:00Z\\\", \\\"observationFinishedAt\\\": \\\"2026-10-29T10:00:00Z\\\"}}\",\n  \"payload_encoding\": \"string\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Dead-letter queue status",
+      "request": {
+        "method": "GET",
+        "url": "{{rabbitManagementUrl}}/api/queues/%2F/geozentra.notifications.alerts.dlq",
+        "header": [],
+        "description": "",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{rabbitUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{rabbitPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Inspect DLQ and keep message queued",
+      "request": {
+        "method": "POST",
+        "url": "{{rabbitManagementUrl}}/api/queues/%2F/geozentra.notifications.alerts.dlq/get",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "description": "",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{rabbitUser}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{rabbitPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"count\": 1,\n  \"ackmode\": \"ack_requeue_true\",\n  \"encoding\": \"auto\",\n  \"truncate\": 300000\n}"
+        }
+      }
+    }
+  ]
+}

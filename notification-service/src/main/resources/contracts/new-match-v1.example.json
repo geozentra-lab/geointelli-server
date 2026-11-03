@@ -1,0 +1,25 @@
+{
+  "eventId": "property-alert-1",
+  "source": "property-service",
+  "eventVersion": 1,
+  "eventType": "NEW_MATCH",
+  "userId": "test-keycloak-user",
+  "alertRuleId": 3,
+  "savedSearchId": 10,
+  "propertyId": null,
+  "sourceChangeId": "rule:3:generation:2",
+  "occurredAt": "2026-10-29T10:00:00Z",
+  "payload": {
+    "ruleName": "Miami homes",
+    "definitionHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "matchedCount": 1000,
+    "newMatchCount": 2,
+    "propertyIds": [
+      1,
+      2
+    ],
+    "previewTruncated": false,
+    "observationStartedAt": "2026-10-29T09:59:00Z",
+    "observationFinishedAt": "2026-10-29T10:00:00Z"
+  }
+}

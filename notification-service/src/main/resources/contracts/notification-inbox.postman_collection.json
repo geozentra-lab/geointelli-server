@@ -1,0 +1,347 @@
+{
+    "variable":  [
+                     {
+                         "key":  "serviceUrl",
+                         "value":  "http://localhost:8082"
+                     },
+                     {
+                         "key":  "ownerToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "otherUserToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "emptyUserToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "notificationId",
+                         "value":  ""
+                     }
+                 ],
+    "info":  {
+                 "description":  "Set ownerToken, otherUserToken and emptyUserToken to real signed Keycloak access tokens. Inbox rows come from SCRUM-69 queue delivery. notificationId must belong to ownerToken. No user ID is taken from request data. API schema is available at /v3/api-docs and Swagger UI at /swagger-ui/index.html. Read state is persisted in notification-service, independent of property-service users and alert rules.",
+                 "name":  "GeoZentra notification inbox (SCRUM-70)",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "item":  [
+                 {
+                     "name":  "List my inbox",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications?page=0\u0026size=20",
+                                     "description":  "200. Only the bearer subject recipient is returned. Order: createdAt DESC, id DESC; read=false iff readAt is null.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ]
+                                 }
+                 },
+                 {
+                     "name":  "Empty inbox",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications",
+                                     "description":  "200 for a valid user with no rows: content=[], totalElements=0, totalPages=0, first=true, last=true.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "auth":  {
+                                                  "bearer":  [
+                                                                 {
+                                                                     "key":  "token",
+                                                                     "type":  "string",
+                                                                     "value":  "{{emptyUserToken}}"
+                                                                 }
+                                                             ],
+                                                  "type":  "bearer"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Mark mine read",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/{{notificationId}}",
+                                     "description":  "200. read=true and readAt populated. Choose an owned unread item from GET first.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":true}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Repeat mark read",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/{{notificationId}}",
+                                     "description":  "200. The exact original readAt must remain unchanged. Repeat GET or restart the service to confirm persistence.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":true}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Invalid page",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications?page=-1",
+                                     "description":  "400. Also check page=abc and page=2147483647\u0026size=100.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ]
+                                 }
+                 },
+                 {
+                     "name":  "Invalid size",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications?size=101",
+                                     "description":  "400. Also check size=0 and size=abc.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ]
+                                 }
+                 },
+                 {
+                     "name":  "Missing notification",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/9223372036854775807",
+                                     "description":  "404. Use an ID that does not exist.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":true}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Other user cannot mark mine",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/{{notificationId}}",
+                                     "description":  "404. Owner A notification ID with user B token. Check as owner A that read status did not change.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":true}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              },
+                                     "auth":  {
+                                                  "bearer":  [
+                                                                 {
+                                                                     "key":  "token",
+                                                                     "type":  "string",
+                                                                     "value":  "{{otherUserToken}}"
+                                                                 }
+                                                             ],
+                                                  "type":  "bearer"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Invalid read=false",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/{{notificationId}}",
+                                     "description":  "400. Only marking read is supported.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":false}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Missing read",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/{{notificationId}}",
+                                     "description":  "400. Also check read:null, read:\"true\", unknown fields, missing body and malformed JSON.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Invalid ID",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/0",
+                                     "description":  "400. Also check -1 and abc.",
+                                     "method":  "PATCH",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"read\":true}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "No bearer token",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications",
+                                     "description":  "401. Also check an expired, tampered or wrong-issuer JWT.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "auth":  {
+                                                  "type":  "noauth"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "No cross-user listing",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications",
+                                     "description":  "200. Only user B rows appear. Adding a userId query parameter must not change the authenticated owner.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "auth":  {
+                                                  "bearer":  [
+                                                                 {
+                                                                     "key":  "token",
+                                                                     "type":  "string",
+                                                                     "value":  "{{otherUserToken}}"
+                                                                 }
+                                                             ],
+                                                  "type":  "bearer"
+                                              }
+                                 }
+                 }
+             ],
+    "auth":  {
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "type":  "string",
+                                    "value":  "{{ownerToken}}"
+                                }
+                            ],
+                 "type":  "bearer"
+             }
+}

@@ -27,7 +27,6 @@ public class MapLayerController {
         return ResponseEntity.ok(mapLayers);
     }
 
-
     /**
      * Returns the features of a supported map layer within a bounding box.
      *

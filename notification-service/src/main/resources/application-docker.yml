@@ -1,0 +1,19 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Validate the public issuer, but fetch keys through the Docker host gateway.
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://host.docker.internal:8090/realms/geozentra/protocol/openid-connect/certs}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+logging:
+  level:
+    root: INFO
+    com.geointelli: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

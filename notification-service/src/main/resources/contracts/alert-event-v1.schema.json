@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GeoZentra NEW_MATCH event v1",
+  "description": "SCRUM-68 producer and SCRUM-69 consumer deploy independently. UTF-8 JSON; no Java class headers are trusted. Replays retain eventId and the same body. Unknown additive fields are accepted; unsupported event types/versions are retained in the DLQ. NEW_MATCH preview IDs are not the complete result set.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "source",
+    "eventVersion",
+    "eventType",
+    "userId",
+    "alertRuleId",
+    "savedSearchId",
+    "sourceChangeId",
+    "occurredAt",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "source": {
+      "const": "property-service"
+    },
+    "eventVersion": {
+      "const": 1
+    },
+    "eventType": {
+      "const": "NEW_MATCH"
+    },
+    "userId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "External Keycloak subject, not internal property-service user ID."
+    },
+    "alertRuleId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "savedSearchId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "propertyId": {
+      "type": "null"
+    },
+    "sourceChangeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "ruleName",
+        "definitionHash",
+        "matchedCount",
+        "newMatchCount",
+        "propertyIds",
+        "previewTruncated",
+        "observationStartedAt",
+        "observationFinishedAt"
+      ],
+      "properties": {
+        "ruleName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "definitionHash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "matchedCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "newMatchCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807,
+          "description": "Exact new-match count, at most matchedCount and at least the preview length."
+        },
+        "propertyIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9223372036854775807
+          }
+        },
+        "previewTruncated": {
+          "type": "boolean",
+          "description": "True exactly when newMatchCount exceeds the preview length."
+        },
+        "observationStartedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "observationFinishedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "At or after observationStartedAt and at or before envelope occurredAt."
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
