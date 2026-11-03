@@ -13,6 +13,8 @@ import com.geointelli.ai.notification.service.exception.InvalidAlertEventExcepti
 import com.geointelli.ai.notification.service.repository.ConsumedAlertEventRepository;
 import com.geointelli.ai.notification.service.repository.NotificationRepository;
 import com.geointelli.ai.notification.service.service.AlertEventConsumptionService;
+import com.geointelli.ai.notification.service.service.NotificationPreferenceService;
+import com.geointelli.ai.notification.service.repository.EmailQueueRepository;
 
 /**
  * Receipt and notification commit together before listener success allows the
@@ -23,12 +25,17 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
     private final ConsumedAlertEventRepository receipts;
     private final NotificationRepository notifications;
     private final Clock clock;
+    private final NotificationPreferenceService preferences;
+    private final EmailQueueRepository emailQueue;
 
     public AlertEventConsumptionServiceImpl(ConsumedAlertEventRepository receipts, NotificationRepository notifications,
-            @Qualifier("notificationClock") Clock clock) {
+            @Qualifier("notificationClock") Clock clock, NotificationPreferenceService preferences,
+            EmailQueueRepository emailQueue) {
         this.receipts = receipts;
         this.notifications = notifications;
         this.clock = clock;
+        this.preferences = preferences;
+        this.emailQueue = emailQueue;
     }
 
     @Override
@@ -43,7 +50,11 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
                 throw new InvalidAlertEventException("EVENT_ID_COLLISION");
             return false;
         }
+        var preference = preferences.lockForRecipient(event.userId());
+        if (!preference.isNewMatchEnabled() || (!preference.isInAppEnabled() && !preference.isEmailEnabled()))
+            return true;
         Notification notification = new Notification();
+        notification.setInAppVisible(preference.isInAppEnabled());
         notification.setEventId(event.eventId());
         notification.setRecipientKeycloakId(event.userId());
         notification.setEventType(event.eventType());
@@ -59,6 +70,8 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
         notification.setMessage(count == 1 ? "1 property now matches your saved search."
                 : count + " properties now match your saved search.");
         notifications.saveAndFlush(notification);
+        if (preference.isEmailEnabled())
+            emailQueue.enqueue(notification.getId(), event.userId(), receivedAt);
         return true;
     }
 }
