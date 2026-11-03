@@ -21,7 +21,9 @@ public interface UserDashboardAffordabilityService {
      * @param inputs caller-supplied affordability inputs; may be partly or entirely empty
      * @return the card; {@code generatedAt} is the calculation date
      * @throws IllegalArgumentException if a supplied input is out of range (for example a negative
-     *         income or a rate above 100)
+     *         income, a rate above 100 or too many digits), even when other required inputs are missing
+     * @throws org.springframework.web.server.ResponseStatusException 401 when no bearer token
+     *         identifies the current user
      */
     AffordabilityCardDTO getAffordabilityCard(AffordabilityCalculationRequest inputs);
 }

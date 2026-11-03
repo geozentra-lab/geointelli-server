@@ -13,7 +13,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -148,6 +150,24 @@ public class UserDashboardAffordabilityControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error").value("Bad Request"))
                     .andExpect(jsonPath("$.message").value("annualInterestRate: must be less than or equal to 100"));
+        }
+
+        @Test
+        @DisplayName("When no bearer token identifies the user, then return 401")
+        void whenNoBearerToken_thenReturn401() throws Exception {
+            // Arrange
+            when(affordabilityCardService.getAffordabilityCard(any(AffordabilityCalculationRequest.class)))
+                    .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                            "A bearer token is required to identify the current user"));
+
+            // Act & Assert
+            mockMvc.perform(get(URL)
+                            .param("annualGrossIncome", "72000")
+                            .param("monthlyDebtPayments", "500")
+                            .param("downPayment", "50000")
+                            .param("annualInterestRate", "6.5")
+                            .param("loanTermYears", "30"))
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test

@@ -5,10 +5,13 @@ import com.geointelli.ai.property.service.dto.AffordabilityCalculationRequest;
 import com.geointelli.ai.property.service.dto.AffordabilityCalculationResponse;
 import com.geointelli.ai.property.service.dto.AffordabilityCardDTO;
 import com.geointelli.ai.property.service.service.AffordabilityCalculationService;
+import com.geointelli.ai.property.service.service.CurrentUserService;
 import jakarta.validation.Validation;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -19,9 +22,10 @@ import static org.mockito.Mockito.*;
 public class UserDashboardAffordabilityServiceImplTest {
 
     AffordabilityCalculationService affordabilityCalculationService = mock(AffordabilityCalculationService.class);
+    CurrentUserService currentUserService = mock(CurrentUserService.class);
 
     UserDashboardAffordabilityServiceImpl affordabilityCardService = new UserDashboardAffordabilityServiceImpl(
-            affordabilityCalculationService, Validation.buildDefaultValidatorFactory().getValidator());
+            affordabilityCalculationService, currentUserService, Validation.buildDefaultValidatorFactory().getValidator());
 
     private static AffordabilityCalculationRequest validInputs() {
         return new AffordabilityCalculationRequest(
@@ -175,6 +179,91 @@ public class UserDashboardAffordabilityServiceImplTest {
                     () -> affordabilityCardService.getAffordabilityCard(inputs));
             assertTrue(exception.getMessage().contains("annualPropertyTax"));
             verifyNoInteractions(affordabilityCalculationService);
+        }
+
+        @Test
+        @DisplayName("When no bearer token identifies the user, then throw 401 without calling the calculator")
+        void whenNoBearerToken_thenThrowUnauthorized() {
+            // Arrange
+            when(currentUserService.getCurrentKeycloakUserId())
+                    .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "A bearer token is required"));
+
+            // Act & Assert
+            ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                    () -> affordabilityCardService.getAffordabilityCard(validInputs()));
+            assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatusCode());
+            verifyNoInteractions(affordabilityCalculationService);
+        }
+
+        @Test
+        @DisplayName("When no bearer token and no input, then throw 401 instead of returning an INCOMPLETE card")
+        void whenNoBearerTokenAndNoInput_thenThrowUnauthorized() {
+            // Arrange
+            when(currentUserService.getCurrentKeycloakUserId())
+                    .thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "A bearer token is required"));
+
+            // Act & Assert
+            assertThrows(ResponseStatusException.class, () -> affordabilityCardService.getAffordabilityCard(null));
+        }
+
+        @Test
+        @DisplayName("When a supplied input is invalid and others are missing, then throw IllegalArgumentException, not INCOMPLETE")
+        void whenSuppliedInputIsInvalidAndOthersMissing_thenThrowIllegalArgumentException() {
+            // Arrange: only a negative income is supplied
+            AffordabilityCalculationRequest inputs = new AffordabilityCalculationRequest(
+                    BigDecimal.valueOf(-5), null, null, null, null, null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> affordabilityCardService.getAffordabilityCard(inputs));
+            assertEquals("annualGrossIncome: must be greater than 0", exception.getMessage());
+            verifyNoInteractions(affordabilityCalculationService);
+        }
+
+        @Test
+        @DisplayName("When an amount is too large, then throw IllegalArgumentException without calling the calculator")
+        void whenAmountIsTooLarge_thenThrowIllegalArgumentException() {
+            // Arrange
+            AffordabilityCalculationRequest inputs = new AffordabilityCalculationRequest(
+                    new BigDecimal("1e2000000"), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(6.5), 30,
+                    null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> affordabilityCardService.getAffordabilityCard(inputs));
+            assertTrue(exception.getMessage().contains("annualGrossIncome"));
+            verifyNoInteractions(affordabilityCalculationService);
+        }
+
+        @Test
+        @DisplayName("When the rate has too many decimal places, then throw IllegalArgumentException without calling the calculator")
+        void whenRateHasTooManyDecimals_thenThrowIllegalArgumentException() {
+            // Arrange
+            AffordabilityCalculationRequest inputs = new AffordabilityCalculationRequest(
+                    BigDecimal.valueOf(72000), BigDecimal.ZERO, BigDecimal.ZERO, new BigDecimal("1e-2000000"), 30,
+                    null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> affordabilityCardService.getAffordabilityCard(inputs));
+            assertTrue(exception.getMessage().contains("annualInterestRate"));
+            verifyNoInteractions(affordabilityCalculationService);
+        }
+
+        @Test
+        @DisplayName("When amounts are at the largest allowed size, then return OK")
+        void whenAmountsAreAtTheLimit_thenReturnOkCard() {
+            // Arrange
+            BigDecimal max = new BigDecimal("999999999999.99");
+            AffordabilityCalculationRequest inputs = new AffordabilityCalculationRequest(
+                    max, max, max, new BigDecimal("99.9999"), 50, max, max, max);
+            when(affordabilityCalculationService.calculateAffordability(inputs)).thenReturn(affordabilityResult());
+
+            // Act
+            AffordabilityCardDTO card = affordabilityCardService.getAffordabilityCard(inputs);
+
+            // Assert
+            assertEquals(AffordabilityCardDTO.STATUS_OK, card.getStatus());
         }
     }
 

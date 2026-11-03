@@ -4,9 +4,11 @@ import com.geointelli.ai.property.service.dto.AffordabilityCalculationRequest;
 import com.geointelli.ai.property.service.dto.AffordabilityCalculationResponse;
 import com.geointelli.ai.property.service.dto.AffordabilityCardDTO;
 import com.geointelli.ai.property.service.service.AffordabilityCalculationService;
+import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.UserDashboardAffordabilityService;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -17,8 +19,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Missing required inputs give an INCOMPLETE card; otherwise inputs are validated with the
- * {@link AffordabilityCalculationRequest} constraints and passed unchanged to the affordability calculator.
+ * Requires a bearer token. Supplied inputs are validated with the {@link AffordabilityCalculationRequest}
+ * constraints first; missing required inputs then give an INCOMPLETE card, otherwise the inputs are passed
+ * unchanged to the affordability calculator.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,10 +32,29 @@ public class UserDashboardAffordabilityServiceImpl implements UserDashboardAffor
             "annualGrossIncome", "monthlyDebtPayments", "downPayment", "annualInterestRate", "loanTermYears");
 
     private final AffordabilityCalculationService affordabilityCalculationService;
+    private final CurrentUserService currentUserService;
     private final Validator validator;
 
     @Override
     public AffordabilityCardDTO getAffordabilityCard(AffordabilityCalculationRequest inputs) {
+        // A user dashboard card: 401 without a bearer token, like the other cards (no user row is read or written)
+        currentUserService.getCurrentKeycloakUserId();
+
+        // Supplied values are checked first, so an out-of-range input is a 400 even when others are missing;
+        // missing required inputs (@NotNull) are reported below as INCOMPLETE instead
+        if (inputs != null) {
+            Set<ConstraintViolation<AffordabilityCalculationRequest>> violations = validator.validate(inputs).stream()
+                    .filter(violation -> !(violation.getConstraintDescriptor().getAnnotation() instanceof NotNull))
+                    .collect(Collectors.toSet());
+            if (!violations.isEmpty()) {
+                String message = violations.stream()
+                        .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                        .sorted()
+                        .collect(Collectors.joining(", "));
+                throw new IllegalArgumentException(message);
+            }
+        }
+
         // Required inputs are never assumed: any missing one gives an INCOMPLETE card
         List<String> missingInputs = new ArrayList<>();
 
@@ -48,16 +70,6 @@ public class UserDashboardAffordabilityServiceImpl implements UserDashboardAffor
 
         if (!missingInputs.isEmpty()) {
             return card(AffordabilityCardDTO.STATUS_INCOMPLETE, INCOMPLETE_ERROR, missingInputs, null);
-        }
-
-        // Same rules as POST /api/calculations/affordability; out-of-range values become a 400
-        Set<ConstraintViolation<AffordabilityCalculationRequest>> violations = validator.validate(inputs);
-        if (!violations.isEmpty()) {
-            String message = violations.stream()
-                    .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
-                    .sorted()
-                    .collect(Collectors.joining(", "));
-            throw new IllegalArgumentException(message);
         }
 
         // Reused unchanged: assumptions (28/36 ratios, rate, term, rate source), notes and disclaimer included
