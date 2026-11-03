@@ -137,6 +137,64 @@ public class LenderDashboardMortgageContextServiceImplTest {
         }
 
         @Test
+        @DisplayName("When an amount is too large, then throw IllegalArgumentException without calling the calculator")
+        void whenAmountIsTooLarge_thenThrowIllegalArgumentException() {
+            // Arrange
+            MortgageCalculationRequest inputs = new MortgageCalculationRequest(
+                    new BigDecimal("1e2000000"), BigDecimal.ZERO, BigDecimal.valueOf(3.5), 30, null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> mortgageContextService.getMortgageContextCard(inputs));
+            assertTrue(exception.getMessage().contains("price"));
+            verifyNoInteractions(mortgageCalculationService);
+        }
+
+        @Test
+        @DisplayName("When an amount has too many decimal places, then throw IllegalArgumentException without calling the calculator")
+        void whenAmountHasTooManyDecimals_thenThrowIllegalArgumentException() {
+            // Arrange
+            MortgageCalculationRequest inputs = new MortgageCalculationRequest(
+                    BigDecimal.valueOf(400000), new BigDecimal("1e-2000000"), BigDecimal.valueOf(3.5), 30, null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> mortgageContextService.getMortgageContextCard(inputs));
+            assertTrue(exception.getMessage().contains("downPayment"));
+            verifyNoInteractions(mortgageCalculationService);
+        }
+
+        @Test
+        @DisplayName("When the rate has too many decimal places, then throw IllegalArgumentException without calling the calculator")
+        void whenRateHasTooManyDecimals_thenThrowIllegalArgumentException() {
+            // Arrange
+            MortgageCalculationRequest inputs = new MortgageCalculationRequest(
+                    BigDecimal.valueOf(400000), BigDecimal.valueOf(80000), new BigDecimal("1e-2000000"), 30, null, null, null);
+
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> mortgageContextService.getMortgageContextCard(inputs));
+            assertTrue(exception.getMessage().contains("annualInterestRate"));
+            verifyNoInteractions(mortgageCalculationService);
+        }
+
+        @Test
+        @DisplayName("When amounts are at the largest allowed size, then return OK")
+        void whenAmountsAreAtTheLimit_thenReturnOkCard() {
+            // Arrange
+            MortgageCalculationRequest inputs = new MortgageCalculationRequest(
+                    new BigDecimal("999999999999.99"), new BigDecimal("0.01"), new BigDecimal("99.9999"), 50,
+                    new BigDecimal("999999999999.99"), new BigDecimal("999999999999.99"), new BigDecimal("999999999999.99"));
+            when(mortgageCalculationService.calculateMortgage(inputs)).thenReturn(mortgageResult());
+
+            // Act
+            MortgageContextCardDTO card = mortgageContextService.getMortgageContextCard(inputs);
+
+            // Assert
+            assertEquals(MortgageContextCardDTO.STATUS_OK, card.status());
+        }
+
+        @Test
         @DisplayName("When the calculator rejects the inputs, then its exception is propagated")
         void whenCalculatorRejectsInputs_thenPropagateException() {
             // Arrange
