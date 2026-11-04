@@ -54,10 +54,12 @@ public class PropertyTransportContextControllerTest {
         @DisplayName("When transport data exists, then return 200 with the AVAILABLE context")
         void whenTransportDataExists_thenReturn200WithAvailableContext() throws Exception {
             // Arrange
-            when(propertyTransportContextService.getTransportContext(42L))
-                    .thenReturn(context(TransportContextDTO.STATUS_AVAILABLE, List.of(
-                            new TransportOptionDTO(TransportCategory.RAIL, new BigDecimal("1200")),
-                            new TransportOptionDTO(TransportCategory.BUS, new BigDecimal("150"))), null));
+            TransportContextDTO available = context(TransportContextDTO.STATUS_AVAILABLE, List.of(
+                    new TransportOptionDTO(TransportCategory.RAIL, new BigDecimal("1200")),
+                    new TransportOptionDTO(TransportCategory.BUS, new BigDecimal("150"))), null);
+            available.setTransportationScore(59);
+            available.setTransportationScoreLabel(TransportContextDTO.LABEL_FAIR);
+            when(propertyTransportContextService.getTransportContext(42L)).thenReturn(available);
 
             // Act & Assert
             mockMvc.perform(get(URL, 42))
@@ -69,6 +71,9 @@ public class PropertyTransportContextControllerTest {
                     .andExpect(jsonPath("$.transport[0].category").value("RAIL"))
                     .andExpect(jsonPath("$.transport[0].nearestDistance").value(1200))
                     .andExpect(jsonPath("$.transport[1].category").value("BUS"))
+                    .andExpect(jsonPath("$.transportationScore").value(59))
+                    .andExpect(jsonPath("$.transportationScoreLabel").value("Fair"))
+                    .andExpect(jsonPath("$.dataUpdatedAt").doesNotExist())
                     .andExpect(jsonPath("$.source").value(TransportContextDTO.SOURCE));
         }
 

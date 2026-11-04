@@ -33,8 +33,8 @@ public class PropertyTransportContextController {
     @GetMapping("/id/{id}/location-intelligence/transport")
     @Operation(summary = "Transport context of a property", description = "Reads the stored transportation analysis "
             + "of the property and returns the distance to the nearest RAIL, PEOPLE_MOVER, BUS and HIGHWAY access, "
-            + "the number of bus stops within 500 m and the transportation score, with distance unit, source and "
-            + "freshness. NO_COVERAGE means no transport data for the property; UNAVAILABLE means the transport "
+            + "the number of bus stops within 500 m and the transportation score over the known values only, with "
+            + "its label, distance unit and source. NO_COVERAGE means no transport data for the property; UNAVAILABLE means the transport "
             + "data source failed (200, error in the section).")
     public ResponseEntity<TransportContextDTO> getTransportContext(@PathVariable Long id) {
         return ResponseEntity.ok(propertyTransportContextService.getTransportContext(id));

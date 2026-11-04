@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -27,26 +27,36 @@ public class PropertyTransportContextServiceImplTest {
             new PropertyTransportContextServiceImpl(propertyRepository, transportationAnalysisService);
 
     private static final Long PROPERTY_ID = 42L;
-    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 10, 15, 10, 0);
 
+    private static BigDecimal decimal(String value) {
+        return value == null ? null : new BigDecimal(value);
+    }
+
+    // raw values and the part scores stored for them: rail, mover, bus stop density, bus stop distance, highway
     private static TransportationAnalysisDTO analysis(String rail, String mover, String bus, String highway,
-                                                      Integer busStopsWithin500m) {
+                                                      Integer busStopsWithin500m, String railPart, String moverPart,
+                                                      String densityPart, String busPart, String highwayPart) {
         TransportationAnalysisDTO analysis = new TransportationAnalysisDTO();
         analysis.setPropertyId(PROPERTY_ID);
-        analysis.setDistMetroRail(rail == null ? null : new BigDecimal(rail));
-        analysis.setDistMetroMover(mover == null ? null : new BigDecimal(mover));
-        analysis.setDistBusStop(bus == null ? null : new BigDecimal(bus));
-        analysis.setDistHighway(highway == null ? null : new BigDecimal(highway));
+        analysis.setDistMetroRail(decimal(rail));
+        analysis.setDistMetroMover(decimal(mover));
+        analysis.setDistBusStop(decimal(bus));
+        analysis.setDistHighway(decimal(highway));
         analysis.setBusStopsWithin500m(busStopsWithin500m);
-        analysis.setTransportationScore(new BigDecimal("52.5"));
-        analysis.setUpdatedAt(UPDATED_AT);
+        analysis.setMetroRailScore(decimal(railPart));
+        analysis.setMetroMoverScore(decimal(moverPart));
+        analysis.setBusStopDensityScore(decimal(densityPart));
+        analysis.setBusStopDistanceScore(decimal(busPart));
+        analysis.setHighwayScore(decimal(highwayPart));
+        // stale stored score: the context recalculates it from the known parts
+        analysis.setTransportationScore(new BigDecimal("1"));
         return analysis;
     }
 
     private void givenStoredAnalysis(TransportationAnalysisDTO analysis) {
         when(propertyRepository.existsById(PROPERTY_ID)).thenReturn(true);
-        when(transportationAnalysisService.getPropertyTransportationAnalysisByIds(List.of(PROPERTY_ID)))
-                .thenReturn(analysis == null ? List.of() : List.of(analysis));
+        when(transportationAnalysisService.getPropertyTransportationAnalysis(PROPERTY_ID))
+                .thenReturn(Optional.ofNullable(analysis));
     }
 
     @Nested
@@ -54,10 +64,10 @@ public class PropertyTransportContextServiceImplTest {
     class GetTransportContext {
 
         @Test
-        @DisplayName("When the analysis is complete, then return AVAILABLE with the 4 normalized categories in order")
+        @DisplayName("When the analysis is complete, then return AVAILABLE with the 4 normalized categories and the score")
         void whenAnalysisIsComplete_thenReturnAvailableWithNormalizedCategories() {
-            // Arrange
-            givenStoredAnalysis(analysis("1200", "3400", "150", "900", 4));
+            // Arrange: 0.4*50 + 0.2*0 + 0.2*50 + 0.1*100 + 0.1*75 = 47.5
+            givenStoredAnalysis(analysis("1200", "3400", "150", "900", 4, "50", "0", "50", "100", "75"));
 
             // Act
             TransportContextDTO context = transportContextService.getTransportContext(PROPERTY_ID);
@@ -70,19 +80,20 @@ public class PropertyTransportContextServiceImplTest {
                     new TransportOptionDTO(TransportCategory.BUS, new BigDecimal("150")),
                     new TransportOptionDTO(TransportCategory.HIGHWAY, new BigDecimal("900"))), context.getTransport());
             assertEquals(4, context.getBusStopsWithin500m());
-            assertEquals(new BigDecimal("52.5"), context.getTransportationScore());
+            assertEquals(48, context.getTransportationScore());
+            assertEquals(TransportContextDTO.LABEL_FAIR, context.getTransportationScoreLabel());
             assertEquals(TransportContextDTO.DISTANCE_UNIT, context.getDistanceUnit());
             assertEquals(TransportContextDTO.SOURCE, context.getSource());
-            assertEquals(UPDATED_AT, context.getDataUpdatedAt());
             assertNull(context.getError());
             assertNull(context.getNote());
+            verify(propertyRepository, never()).existsById(any());
         }
 
         @Test
-        @DisplayName("When a distance is unknown, then leave that category out and name it in the note, never 0")
-        void whenDistanceIsUnknown_thenLeaveCategoryOutAndNameItInNote() {
-            // Arrange
-            givenStoredAnalysis(analysis("1200", null, "150", "900", 4));
+        @DisplayName("When a distance is unknown, then leave it out of the list and the score, even if stored as 0")
+        void whenDistanceIsUnknown_thenLeaveItOutOfListAndScore() {
+            // Arrange: older row stored the unknown mover part as 0; (20 + 10 + 10 + 7.5) / 0.8 = 59.4
+            givenStoredAnalysis(analysis("1200", null, "150", "900", 4, "50", "0", "50", "100", "75"));
 
             // Act
             TransportContextDTO context = transportContextService.getTransportContext(PROPERTY_ID);
@@ -91,7 +102,42 @@ public class PropertyTransportContextServiceImplTest {
             assertEquals(TransportContextDTO.STATUS_AVAILABLE, context.getStatus());
             assertEquals(List.of(TransportCategory.RAIL, TransportCategory.BUS, TransportCategory.HIGHWAY),
                     context.getTransport().stream().map(TransportOptionDTO::getCategory).toList());
-            assertEquals("Unknown distances: PEOPLE_MOVER", context.getNote());
+            assertEquals(59, context.getTransportationScore());
+            assertEquals(TransportContextDTO.LABEL_FAIR, context.getTransportationScoreLabel());
+            assertEquals("Score based on known values only, unknown values: PEOPLE_MOVER", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the bus stop count is unknown, then leave it out of the score and name it in the note")
+        void whenBusStopCountIsUnknown_thenLeaveItOutOfScore() {
+            // Arrange: (0.4*100 + 0.2*100 + 0.1*100 + 0.1*100) / 0.8 = 100
+            givenStoredAnalysis(analysis("300", "400", "100", "200", null, "100", "100", "0", "100", "100"));
+
+            // Act
+            TransportContextDTO context = transportContextService.getTransportContext(PROPERTY_ID);
+
+            // Assert
+            assertNull(context.getBusStopsWithin500m());
+            assertEquals(100, context.getTransportationScore());
+            assertEquals(TransportContextDTO.LABEL_EXCELLENT, context.getTransportationScoreLabel());
+            assertEquals("Score based on known values only, unknown values: busStopsWithin500m", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the analysis is not scored yet, then return the distances without a score")
+        void whenAnalysisIsNotScored_thenReturnNoScore() {
+            // Arrange
+            givenStoredAnalysis(analysis("1200", null, "150", "900", 4, null, null, null, null, null));
+
+            // Act
+            TransportContextDTO context = transportContextService.getTransportContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(TransportContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertEquals(3, context.getTransport().size());
+            assertNull(context.getTransportationScore());
+            assertNull(context.getTransportationScoreLabel());
+            assertEquals("Score unavailable, unknown values: PEOPLE_MOVER", context.getNote());
         }
 
         @Test
@@ -109,7 +155,7 @@ public class PropertyTransportContextServiceImplTest {
             assertTrue(context.getTransport().isEmpty());
             assertNull(context.getBusStopsWithin500m());
             assertNull(context.getTransportationScore());
-            assertNull(context.getDataUpdatedAt());
+            assertNull(context.getTransportationScoreLabel());
             assertNull(context.getError());
         }
 
@@ -117,7 +163,7 @@ public class PropertyTransportContextServiceImplTest {
         @DisplayName("When the analysis has no value, then return NO_COVERAGE")
         void whenAnalysisHasNoValue_thenReturnNoCoverage() {
             // Arrange
-            givenStoredAnalysis(analysis(null, null, null, null, null));
+            givenStoredAnalysis(analysis(null, null, null, null, null, "0", "0", "0", "0", "0"));
 
             // Act
             TransportContextDTO context = transportContextService.getTransportContext(PROPERTY_ID);
@@ -132,8 +178,7 @@ public class PropertyTransportContextServiceImplTest {
         @DisplayName("When the transport data source fails, then return UNAVAILABLE instead of throwing")
         void whenTransportSourceFails_thenReturnUnavailable() {
             // Arrange
-            when(propertyRepository.existsById(PROPERTY_ID)).thenReturn(true);
-            when(transportationAnalysisService.getPropertyTransportationAnalysisByIds(List.of(PROPERTY_ID)))
+            when(transportationAnalysisService.getPropertyTransportationAnalysis(PROPERTY_ID))
                     .thenThrow(new DataAccessResourceFailureException("connection refused"));
 
             // Act
@@ -149,6 +194,17 @@ public class PropertyTransportContextServiceImplTest {
         }
 
         @Test
+        @DisplayName("When reading fails for another reason than the data source, then rethrow it")
+        void whenReadingFailsWithBug_thenRethrow() {
+            // Arrange
+            when(transportationAnalysisService.getPropertyTransportationAnalysis(PROPERTY_ID))
+                    .thenThrow(new IllegalStateException("mapping failed"));
+
+            // Act & Assert
+            assertThrows(IllegalStateException.class, () -> transportContextService.getTransportContext(PROPERTY_ID));
+        }
+
+        @Test
         @DisplayName("When the ID is 0 or null, then throw IllegalArgumentException without reading data")
         void whenIdIsInvalid_thenThrowIllegalArgumentException() {
             // Act & Assert
@@ -161,13 +217,29 @@ public class PropertyTransportContextServiceImplTest {
         @DisplayName("When the property does not exist, then throw PropertyNotFoundException")
         void whenPropertyDoesNotExist_thenThrowPropertyNotFoundException() {
             // Arrange
+            when(transportationAnalysisService.getPropertyTransportationAnalysis(999L)).thenReturn(Optional.empty());
             when(propertyRepository.existsById(999L)).thenReturn(false);
 
             // Act & Assert
             PropertyNotFoundException exception = assertThrows(PropertyNotFoundException.class,
                     () -> transportContextService.getTransportContext(999L));
             assertEquals("No property found with id: 999", exception.getMessage());
-            verifyNoInteractions(transportationAnalysisService);
+        }
+    }
+
+    @Nested
+    @DisplayName("Label Tests")
+    class Label {
+
+        @Test
+        @DisplayName("When a score is given, then return the label of its band")
+        void whenScoreIsGiven_thenReturnLabelOfItsBand() {
+            assertEquals(TransportContextDTO.LABEL_EXCELLENT, PropertyTransportContextServiceImpl.label(80));
+            assertEquals(TransportContextDTO.LABEL_GOOD, PropertyTransportContextServiceImpl.label(79));
+            assertEquals(TransportContextDTO.LABEL_GOOD, PropertyTransportContextServiceImpl.label(60));
+            assertEquals(TransportContextDTO.LABEL_FAIR, PropertyTransportContextServiceImpl.label(40));
+            assertEquals(TransportContextDTO.LABEL_LIMITED, PropertyTransportContextServiceImpl.label(39));
+            assertNull(PropertyTransportContextServiceImpl.label(null));
         }
     }
 }

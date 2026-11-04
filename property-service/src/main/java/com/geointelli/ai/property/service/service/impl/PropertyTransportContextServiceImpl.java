@@ -10,6 +10,7 @@ import com.geointelli.ai.property.service.service.PropertyTransportContextServic
 import com.geointelli.ai.property.service.service.TransportationAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -19,9 +20,10 @@ import java.util.List;
 
 /**
  * Reads the stored transportation analysis of the property through {@link TransportationAnalysisService}
- * (nothing is recalculated or saved, no second provider client) and turns its distance columns into
- * normalized {@link TransportCategory} options. A failure of the transport data source gives an
- * UNAVAILABLE section, so the other location intelligence sections can still be shown.
+ * (nothing is saved, no second provider client) and turns its distance columns into normalized
+ * {@link TransportCategory} options. The score is the transportation formula over the known part scores only,
+ * so rows scored before unknown values were left out still get the right score. A failure of the transport
+ * data source gives an UNAVAILABLE section, so the other location intelligence sections can still be shown.
  */
 @Slf4j
 @Service
@@ -40,9 +42,6 @@ public class PropertyTransportContextServiceImpl implements PropertyTransportCon
         if (propertyId == null || propertyId <= 0) {
             throw new IllegalArgumentException("id must be a positive number");
         }
-        if (!propertyRepository.existsById(propertyId)) {
-            throw new PropertyNotFoundException("No property found with id: " + propertyId);
-        }
 
         TransportContextDTO context = new TransportContextDTO();
         context.setPropertyId(propertyId);
@@ -50,16 +49,19 @@ public class PropertyTransportContextServiceImpl implements PropertyTransportCon
         context.setSource(TransportContextDTO.SOURCE);
         context.setTransport(List.of());
 
-        // reuse the existing transport integration (read only); a failure is returned, not thrown
+        // reuse the existing transport integration (read only); a data source failure is returned, not thrown
         TransportationAnalysisDTO analysis;
         try {
-            analysis = transportationAnalysisService.getPropertyTransportationAnalysisByIds(List.of(propertyId))
-                    .stream().findFirst().orElse(null);
-        } catch (RuntimeException e) {
+            analysis = transportationAnalysisService.getPropertyTransportationAnalysis(propertyId).orElse(null);
+        } catch (DataAccessException e) {
             log.warn("Transport context unavailable for property {}", propertyId, e);
             context.setStatus(TransportContextDTO.STATUS_UNAVAILABLE);
             context.setError(UNAVAILABLE_ERROR);
             return context;
+        }
+        // an analysis always belongs to an existing property, so only check the property when there is none
+        if (analysis == null && !propertyRepository.existsById(propertyId)) {
+            throw new PropertyNotFoundException("No property found with id: " + propertyId);
         }
 
         // no analysis, or an analysis without any value -> NO_COVERAGE
@@ -80,14 +82,26 @@ public class PropertyTransportContextServiceImpl implements PropertyTransportCon
         addOption(transport, unknown, TransportCategory.PEOPLE_MOVER, analysis.getDistMetroMover());
         addOption(transport, unknown, TransportCategory.BUS, analysis.getDistBusStop());
         addOption(transport, unknown, TransportCategory.HIGHWAY, analysis.getDistHighway());
+        if (analysis.getBusStopsWithin500m() == null) {
+            unknown.add("busStopsWithin500m");
+        }
+
+        // part scores only for known values, since older rows store unknown ones as 0
+        Integer score = rounded(TransportationAnalysisServiceImpl.transportationScore(
+                part(analysis.getDistMetroRail(), analysis.getMetroRailScore()),
+                part(analysis.getDistMetroMover(), analysis.getMetroMoverScore()),
+                analysis.getBusStopsWithin500m() == null ? null : toDouble(analysis.getBusStopDensityScore()),
+                part(analysis.getDistBusStop(), analysis.getBusStopDistanceScore()),
+                part(analysis.getDistHighway(), analysis.getHighwayScore())));
 
         context.setStatus(TransportContextDTO.STATUS_AVAILABLE);
         context.setTransport(transport);
         context.setBusStopsWithin500m(analysis.getBusStopsWithin500m());
-        context.setTransportationScore(analysis.getTransportationScore());
-        context.setDataUpdatedAt(analysis.getUpdatedAt());
+        context.setTransportationScore(score);
+        context.setTransportationScoreLabel(label(score));
         if (!unknown.isEmpty()) {
-            context.setNote("Unknown distances: " + String.join(", ", unknown));
+            context.setNote((score == null ? "Score unavailable" : "Score based on known values only")
+                    + ", unknown values: " + String.join(", ", unknown));
         }
         return context;
     }
@@ -99,5 +113,25 @@ public class PropertyTransportContextServiceImpl implements PropertyTransportCon
         } else {
             transport.add(new TransportOptionDTO(category, distance));
         }
+    }
+
+    private static Double part(BigDecimal rawValue, BigDecimal partScore) {
+        return rawValue == null ? null : toDouble(partScore);
+    }
+
+    private static Double toDouble(BigDecimal value) {
+        return value == null ? null : value.doubleValue();
+    }
+
+    private static Integer rounded(Double value) {
+        return value == null ? null : (int) Math.round(value);
+    }
+
+    static String label(Integer score) {
+        if (score == null) return null;
+        if (score >= 80) return TransportContextDTO.LABEL_EXCELLENT;
+        if (score >= 60) return TransportContextDTO.LABEL_GOOD;
+        if (score >= 40) return TransportContextDTO.LABEL_FAIR;
+        return TransportContextDTO.LABEL_LIMITED;
     }
 }

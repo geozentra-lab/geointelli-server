@@ -10,8 +10,8 @@ public interface PropertyTransportContextService {
     /**
      * Returns the transport context of a property from its stored transportation analysis: distance to the
      * nearest access point of each supported, normalized category (RAIL, PEOPLE_MOVER, BUS, HIGHWAY), number of
-     * bus stops within 500 m and transportation score, with distance unit, source and freshness.
-     * Nothing is recalculated or saved.
+     * bus stops within 500 m and transportation score (over the known values only) with its label, distance unit
+     * and source. Nothing is saved.
      *
      * @param propertyId internal ID of the property
      * @return the transport context with status AVAILABLE, NO_COVERAGE (no transport data for the property)

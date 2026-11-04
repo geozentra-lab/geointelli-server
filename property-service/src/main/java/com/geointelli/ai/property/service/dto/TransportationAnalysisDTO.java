@@ -1,7 +1,6 @@
 package com.geointelli.ai.property.service.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -30,6 +29,4 @@ public class TransportationAnalysisDTO {
 
     // Final weighted score
     private BigDecimal transportationScore;
-
-    private LocalDateTime updatedAt;
 }
