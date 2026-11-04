@@ -19,6 +19,8 @@ import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.mapper.CrmMapper;
 import com.geointelli.ai.property.service.repository.CrmClientRepository;
 import com.geointelli.ai.property.service.repository.CrmLeadRepository;
+import com.geointelli.ai.property.service.repository.CrmTaskRepository;
+import com.geointelli.ai.property.service.repository.CrmTransactionRepository;
 import com.geointelli.ai.property.service.service.CrmActivityService;
 import com.geointelli.ai.property.service.service.CrmClientService;
 import com.geointelli.ai.property.service.service.CrmValidationService;
@@ -32,6 +34,8 @@ import lombok.RequiredArgsConstructor;
 public class CrmClientServiceImpl implements CrmClientService {
     private final CrmClientRepository clients;
     private final CrmLeadRepository leads;
+    private final CrmTaskRepository tasks;
+    private final CrmTransactionRepository transactions;
     private final CurrentUserService currentUser;
     private final CrmValidationService validation;
     private final CrmActivityService activity;
@@ -95,6 +99,9 @@ public class CrmClientServiceImpl implements CrmClientService {
         CrmClient client = owned(id, true);
         if (leads.existsByClient_Id(id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Client has leads and cannot be deleted");
+        }
+        if (tasks.existsByClientId(id) || transactions.existsByClientId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Client has tasks or transactions and cannot be deleted");
         }
         activity.record(client.getUser().getId(), id, CrmSubjectType.CLIENT, id,
             CrmActivityType.CLIENT_DELETED, "Client deleted");
