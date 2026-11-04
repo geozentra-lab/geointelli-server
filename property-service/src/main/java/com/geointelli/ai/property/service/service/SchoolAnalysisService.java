@@ -10,6 +10,6 @@ public interface SchoolAnalysisService {
     SchoolAnalysisDTO saveScore(SchoolAnalysis analysis);
     List<SchoolAnalysisDTO> getPropertySchoolAnalysisByIds(List<Long> propertyIds);
     Optional<SchoolAnalysisDTO> getPropertySchoolAnalysis(Long propertyId);
-    void calculateAndSaveAllScores();
+    void calculateAndSaveAllScores(boolean recalculateExisting);
     SchoolAnalysisDTO calculateAndSaveScore(Long propertyId);
 }

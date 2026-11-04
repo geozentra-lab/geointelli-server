@@ -14,10 +14,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads the stored school analysis of the property through {@link SchoolAnalysisService} (nothing is
- * recalculated or saved) and labels it AVAILABLE, NO_NEARBY_RESULTS or NO_COVERAGE from the raw values,
- * never from the score. The stored score turns unknown values into 0, so it is only returned when every
- * value is known.
+ * Reads the stored school analysis of the property through {@link SchoolAnalysisService} (nothing is saved)
+ * and labels it AVAILABLE, NO_NEARBY_RESULTS or NO_COVERAGE from the raw values, never from the score. The
+ * score is the school formula over the known part scores only, so rows scored before unknown values were
+ * left out still get the right score.
  */
 @Service
 @RequiredArgsConstructor
@@ -60,13 +60,16 @@ public class PropertySchoolContextServiceImpl implements PropertySchoolContextSe
             return context;
         }
 
-        // copy the stored values unchanged; part scores only for known values, since unknown ones are stored as 0
+        // copy the stored values unchanged; part scores only for known values, since older rows store unknown ones as 0
+        Double publicPart = distPublic == null ? null : analysis.getPublicSchoolDistanceScore();
+        Double charterPart = distCharter == null ? null : analysis.getCharterSchoolDistanceScore();
+        Double densityPart = within1km == null ? null : analysis.getSchoolDensityScore();
         context.setNearestPublicSchoolDistance(distPublic);
         context.setNearestCharterSchoolDistance(distCharter);
         context.setSchoolsWithin1km(within1km);
-        context.setPublicSchoolDistanceScore(distPublic == null ? null : rounded(analysis.getPublicSchoolDistanceScore()));
-        context.setCharterSchoolDistanceScore(distCharter == null ? null : rounded(analysis.getCharterSchoolDistanceScore()));
-        context.setSchoolDensityScore(within1km == null ? null : rounded(analysis.getSchoolDensityScore()));
+        context.setPublicSchoolDistanceScore(rounded(publicPart));
+        context.setCharterSchoolDistanceScore(rounded(charterPart));
+        context.setSchoolDensityScore(rounded(densityPart));
 
         List<String> unknown = new ArrayList<>();
         if (distPublic == null) unknown.add("nearestPublicSchoolDistance");
@@ -86,12 +89,12 @@ public class PropertySchoolContextServiceImpl implements PropertySchoolContextSe
             context.setStatus(SchoolContextDTO.STATUS_AVAILABLE);
         }
 
-        if (unknown.isEmpty()) {
-            Integer score = rounded(analysis.getSchoolScore());
-            context.setSchoolScore(score);
-            context.setSchoolScoreLabel(label(score));
-        } else {
-            notes.add("Score unavailable, unknown values: " + String.join(", ", unknown));
+        Integer score = rounded(SchoolAnalysisServiceImpl.schoolScore(publicPart, charterPart, densityPart));
+        context.setSchoolScore(score);
+        context.setSchoolScoreLabel(label(score));
+        if (!unknown.isEmpty()) {
+            notes.add((score == null ? "Score unavailable" : "Score based on known values only")
+                    + ", unknown values: " + String.join(", ", unknown));
         }
         context.setNote(notes.isEmpty() ? null : String.join(". ", notes));
         return context;
