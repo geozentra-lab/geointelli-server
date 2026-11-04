@@ -22,7 +22,7 @@ public class CrmActivity {
     private Long id;
     @Column(nullable = false, updatable = false)
     private Long userId;
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long clientId;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false, length = 20)

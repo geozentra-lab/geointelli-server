@@ -62,8 +62,8 @@ public class CrmClientController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete an unreferenced client", description = "Returns 204. A client referenced by any lead "
-        + "cannot be deleted (409), including closed leads. Historical activities, including the deletion, remain in "
+    @Operation(summary = "Delete an unreferenced client", description = "Returns 204. A client referenced by any lead, task "
+        + "or transaction cannot be deleted (409), including closed records. Historical activities, including the deletion, remain in "
         + "GET /api/crm/activities. No property records are changed.")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         clients.delete(id);
