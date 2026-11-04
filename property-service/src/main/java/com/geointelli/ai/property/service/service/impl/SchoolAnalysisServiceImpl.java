@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -98,6 +99,11 @@ public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
         List<Long> uniqueIds = propertyIds.stream().distinct().toList();
         List<SchoolAnalysis> analyses = schoolAnalysisRepository.findByPropertyIdIn(uniqueIds);
         return analyses.stream().map(schoolAnalysisMapper::toDTO).toList();
+    }
+
+    @Override
+    public Optional<SchoolAnalysisDTO> getPropertySchoolAnalysis(Long propertyId) {
+        return schoolAnalysisRepository.findByPropertyId(propertyId).map(schoolAnalysisMapper::toDTO);
     }
 
     @Override
