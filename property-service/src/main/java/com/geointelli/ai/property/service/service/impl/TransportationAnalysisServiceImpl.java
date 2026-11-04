@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -118,6 +119,12 @@ public class TransportationAnalysisServiceImpl implements TransportationAnalysis
         List<TransportationAnalysis> analyses = propertyTransportationAnalysisRepository
                         .findByPropertyIdIn(uniqueIds);
         return analyses.stream().map(propertyTransportationAnalysisMapper::toDTO).toList();
+    }
+
+    @Override
+    public Optional<TransportationAnalysisDTO> getPropertyTransportationAnalysis(Long propertyId) {
+        return propertyTransportationAnalysisRepository.findByPropertyId(propertyId)
+                .map(propertyTransportationAnalysisMapper::toDTO);
     }
 
     // walks the rows by id, so saved rows never shift the next batch and rows without any value are not reread
