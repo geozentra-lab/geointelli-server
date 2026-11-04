@@ -8,9 +8,10 @@ import com.geointelli.ai.property.service.service.SchoolAnalysisService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -24,23 +25,24 @@ public class PropertySchoolContextServiceImplTest {
             new PropertySchoolContextServiceImpl(propertyRepository, schoolAnalysisService);
 
     private static final Long PROPERTY_ID = 42L;
-    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 10, 15, 10, 0);
 
+    // stored part scores as SchoolAnalysisServiceImpl writes them: unknown values are stored as 0
     private static SchoolAnalysisDTO analysis(Double distPublic, Double distCharter, Integer within1km, Double score) {
         SchoolAnalysisDTO analysis = new SchoolAnalysisDTO();
         analysis.setPropertyId(PROPERTY_ID);
         analysis.setDistPublicSchool(distPublic);
         analysis.setDistCharterSchool(distCharter);
         analysis.setSchoolsWithin1km(within1km);
+        analysis.setPublicSchoolDistanceScore(distPublic == null ? 0.0 : 75.0);
+        analysis.setCharterSchoolDistanceScore(distCharter == null ? 0.0 : 25.0);
+        analysis.setSchoolDensityScore(within1km == null ? 0.0 : 50.0);
         analysis.setSchoolScore(score);
-        analysis.setUpdatedAt(UPDATED_AT);
         return analysis;
     }
 
     private void givenStoredAnalysis(SchoolAnalysisDTO analysis) {
         when(propertyRepository.existsById(PROPERTY_ID)).thenReturn(true);
-        when(schoolAnalysisService.getPropertySchoolAnalysisByIds(List.of(PROPERTY_ID)))
-                .thenReturn(analysis == null ? List.of() : List.of(analysis));
+        when(schoolAnalysisService.getPropertySchoolAnalysis(PROPERTY_ID)).thenReturn(Optional.ofNullable(analysis));
     }
 
     @Nested
@@ -48,10 +50,10 @@ public class PropertySchoolContextServiceImplTest {
     class GetSchoolContext {
 
         @Test
-        @DisplayName("When the analysis is complete, then return AVAILABLE with the stored values, unit, source and freshness")
+        @DisplayName("When the analysis is complete, then return AVAILABLE with the stored values, rounded score, label and parts")
         void whenAnalysisIsComplete_thenReturnAvailable() {
             // Arrange
-            givenStoredAnalysis(analysis(800.0, 1800.0, 3, 55.0));
+            givenStoredAnalysis(analysis(800.0, 1800.0, 3, 55.4));
 
             // Act
             SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
@@ -62,15 +64,54 @@ public class PropertySchoolContextServiceImplTest {
             assertEquals(800.0, context.getNearestPublicSchoolDistance());
             assertEquals(1800.0, context.getNearestCharterSchoolDistance());
             assertEquals(3, context.getSchoolsWithin1km());
-            assertEquals(55.0, context.getSchoolScore());
+            assertEquals(55, context.getSchoolScore());
+            assertEquals(SchoolContextDTO.LABEL_FAIR, context.getSchoolScoreLabel());
+            assertEquals(75, context.getPublicSchoolDistanceScore());
+            assertEquals(25, context.getCharterSchoolDistanceScore());
+            assertEquals(50, context.getSchoolDensityScore());
             assertEquals(SchoolContextDTO.DISTANCE_UNIT, context.getDistanceUnit());
             assertEquals(SchoolContextDTO.SOURCE, context.getSource());
-            assertEquals(UPDATED_AT, context.getDataUpdatedAt());
             assertNull(context.getNote());
         }
 
         @Test
-        @DisplayName("When no school is within 1 km, then return NO_NEARBY_RESULTS and keep the distances")
+        @DisplayName("When some values are unknown, then return AVAILABLE without a score and name the unknown values")
+        void whenSomeValuesAreUnknown_thenReturnAvailableWithoutScore() {
+            // Arrange: the stored 40 counts the unknown charter distance as 0
+            givenStoredAnalysis(analysis(800.0, null, 3, 40.0));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertNull(context.getNearestCharterSchoolDistance());
+            assertNull(context.getSchoolScore());
+            assertNull(context.getSchoolScoreLabel());
+            assertNull(context.getCharterSchoolDistanceScore());
+            assertEquals(75, context.getPublicSchoolDistanceScore());
+            assertEquals(50, context.getSchoolDensityScore());
+            assertEquals("Score unavailable, unknown values: nearestCharterSchoolDistance", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the score is not calculated yet, then return the values without a score or note")
+        void whenScoreIsNotCalculated_thenReturnNoScore() {
+            // Arrange
+            givenStoredAnalysis(analysis(800.0, 1800.0, 3, null));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertNull(context.getSchoolScore());
+            assertNull(context.getSchoolScoreLabel());
+            assertNull(context.getNote());
+        }
+
+        @Test
+        @DisplayName("When no school is within 1 km, then return NO_NEARBY_RESULTS, keep the distances and the score")
         void whenNoSchoolWithin1km_thenReturnNoNearbyResults() {
             // Arrange
             givenStoredAnalysis(analysis(2500.0, 3200.0, 0, 0.0));
@@ -84,7 +125,55 @@ public class PropertySchoolContextServiceImplTest {
             assertEquals(0, context.getSchoolsWithin1km());
             assertEquals(2500.0, context.getNearestPublicSchoolDistance());
             assertEquals(3200.0, context.getNearestCharterSchoolDistance());
-            assertEquals(UPDATED_AT, context.getDataUpdatedAt());
+            assertEquals(0, context.getSchoolScore());
+            assertEquals(SchoolContextDTO.LABEL_LIMITED, context.getSchoolScoreLabel());
+        }
+
+        @Test
+        @DisplayName("When no school is within 1 km and distances are unknown, then the note names both")
+        void whenNoSchoolWithin1kmAndDistancesUnknown_thenNoteNamesBoth() {
+            // Arrange
+            givenStoredAnalysis(analysis(null, null, 0, 0.0));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_NO_NEARBY_RESULTS, context.getStatus());
+            assertNull(context.getSchoolScore());
+            assertEquals("No school within 1 km. Score unavailable, unknown values: "
+                    + "nearestPublicSchoolDistance, nearestCharterSchoolDistance", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the count is unknown but both distances are over 1 km, then return NO_NEARBY_RESULTS")
+        void whenCountUnknownAndBothDistancesFar_thenReturnNoNearbyResults() {
+            // Arrange
+            givenStoredAnalysis(analysis(2500.0, 3200.0, null, 0.0));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_NO_NEARBY_RESULTS, context.getStatus());
+            assertNull(context.getSchoolScore());
+            assertEquals("No public or charter school within 1 km. Score unavailable, unknown values: "
+                    + "schoolsWithin1km", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the count is unknown and a school is within 1 km, then return AVAILABLE")
+        void whenCountUnknownAndSchoolNearby_thenReturnAvailable() {
+            // Arrange
+            givenStoredAnalysis(analysis(800.0, 3200.0, null, 30.0));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertNull(context.getSchoolDensityScore());
+            assertEquals("Score unavailable, unknown values: schoolsWithin1km", context.getNote());
         }
 
         @Test
@@ -104,7 +193,7 @@ public class PropertySchoolContextServiceImplTest {
             assertNull(context.getNearestCharterSchoolDistance());
             assertNull(context.getSchoolsWithin1km());
             assertNull(context.getSchoolScore());
-            assertNull(context.getDataUpdatedAt());
+            assertNull(context.getPublicSchoolDistanceScore());
         }
 
         @Test
@@ -119,22 +208,20 @@ public class PropertySchoolContextServiceImplTest {
             // Assert
             assertEquals(SchoolContextDTO.STATUS_NO_COVERAGE, context.getStatus());
             assertNull(context.getSchoolScore());
-            assertNull(context.getDataUpdatedAt());
+            assertNull(context.getSchoolDensityScore());
         }
 
         @Test
-        @DisplayName("When some values are unknown, then return AVAILABLE with a note naming them, never 0")
-        void whenSomeValuesAreUnknown_thenReturnAvailableWithNote() {
+        @DisplayName("When the analysis exists, then do not query the property separately")
+        void whenAnalysisExists_thenSkipPropertyLookup() {
             // Arrange
-            givenStoredAnalysis(analysis(800.0, null, 3, 50.0));
+            givenStoredAnalysis(analysis(800.0, 1800.0, 3, 55.0));
 
             // Act
-            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+            schoolContextService.getSchoolContext(PROPERTY_ID);
 
             // Assert
-            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
-            assertNull(context.getNearestCharterSchoolDistance());
-            assertEquals("Unknown values: nearestCharterSchoolDistance", context.getNote());
+            verify(propertyRepository, never()).existsById(any());
         }
 
         @Test
@@ -150,13 +237,20 @@ public class PropertySchoolContextServiceImplTest {
         @DisplayName("When the property does not exist, then throw PropertyNotFoundException")
         void whenPropertyDoesNotExist_thenThrowPropertyNotFoundException() {
             // Arrange
+            when(schoolAnalysisService.getPropertySchoolAnalysis(999L)).thenReturn(Optional.empty());
             when(propertyRepository.existsById(999L)).thenReturn(false);
 
             // Act & Assert
             PropertyNotFoundException exception = assertThrows(PropertyNotFoundException.class,
                     () -> schoolContextService.getSchoolContext(999L));
             assertEquals("No property found with id: 999", exception.getMessage());
-            verifyNoInteractions(schoolAnalysisService);
         }
+    }
+
+    @ParameterizedTest(name = "score {0} -> {1}")
+    @CsvSource({"100, Excellent", "80, Excellent", "79, Good", "60, Good", "59, Fair", "40, Fair", "39, Limited", "0, Limited"})
+    @DisplayName("Score labels follow the 80 / 60 / 40 boundaries")
+    void labelBoundaries(int score, String label) {
+        assertEquals(label, PropertySchoolContextServiceImpl.label(score));
     }
 }

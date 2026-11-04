@@ -3,8 +3,6 @@ package com.geointelli.ai.property.service.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-import java.time.LocalDateTime;
-
 /**
  * School section of the property location intelligence (SCRUM-125 / SCRUM-53). Built from the stored
  * school analysis of the property; nothing is recalculated. Distinguishes a property without school
@@ -18,6 +16,10 @@ public class SchoolContextDTO {
     public static final String STATUS_NO_COVERAGE = "NO_COVERAGE";
     public static final String DISTANCE_UNIT = "m";
     public static final String SOURCE = "GeoZentra school analysis (sales ML dataset)";
+    public static final String LABEL_EXCELLENT = "Excellent";
+    public static final String LABEL_GOOD = "Good";
+    public static final String LABEL_FAIR = "Fair";
+    public static final String LABEL_LIMITED = "Limited";
 
     @Schema(description = "Internal ID of the property", example = "42")
     private Long propertyId;
@@ -38,16 +40,27 @@ public class SchoolContextDTO {
     @Schema(description = "Number of schools within 1 km; 0 means none nearby, null means unknown", example = "3")
     private Integer schoolsWithin1km;
 
-    @Schema(description = "Stored school score (0-100); null if not calculated yet", example = "55.0")
-    private Double schoolScore;
+    @Schema(description = "School score (0-100), rounded; null if any value is unknown or the score is not "
+            + "calculated yet", example = "55")
+    private Integer schoolScore;
+
+    @Schema(description = "Excellent (80+), Good (60-79), Fair (40-59) or Limited (under 40); null when there is "
+            + "no score", example = LABEL_FAIR)
+    private String schoolScoreLabel;
+
+    @Schema(description = "Public school distance part of the score (0-100, 40% weight); null if unknown", example = "75")
+    private Integer publicSchoolDistanceScore;
+
+    @Schema(description = "Charter school distance part of the score (0-100, 20% weight); null if unknown", example = "25")
+    private Integer charterSchoolDistanceScore;
+
+    @Schema(description = "Schools within 1 km part of the score (0-100, 40% weight); null if unknown", example = "50")
+    private Integer schoolDensityScore;
 
     @Schema(description = "Where the school data comes from", example = SOURCE)
     private String source;
 
-    @Schema(description = "Freshness: when the school analysis was last updated; null if NO_COVERAGE")
-    private LocalDateTime dataUpdatedAt;
-
     @Schema(description = "Explanation when data is missing or incomplete; null otherwise",
-            example = "No school data available for this property")
+            example = "Score unavailable, unknown values: nearestCharterSchoolDistance")
     private String note;
 }

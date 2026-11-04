@@ -34,7 +34,7 @@ public class PropertyLocationIntelligenceController {
     @GetMapping("/id/{id}/location-intelligence/schools")
     @Operation(summary = "School context of a property", description = "Reads the stored school analysis of the "
             + "property: distances to the nearest public and charter schools, number of schools within 1 km and "
-            + "school score, with distance unit, source and freshness. NO_COVERAGE means no school data for the "
+            + "school score with its label and parts (null when any value is unknown), with distance unit and source. NO_COVERAGE means no school data for the "
             + "property; NO_NEARBY_RESULTS means data exists but no school is within 1 km.")
     public ResponseEntity<SchoolContextDTO> getSchoolContext(@PathVariable Long id) {
         return ResponseEntity.ok(propertySchoolContextService.getSchoolContext(id));

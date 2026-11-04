@@ -50,8 +50,11 @@ public class PropertyLocationIntelligenceControllerTest {
         @DisplayName("When school data exists, then return 200 with the AVAILABLE context")
         void whenSchoolDataExists_thenReturn200WithAvailableContext() throws Exception {
             // Arrange
-            when(propertySchoolContextService.getSchoolContext(42L))
-                    .thenReturn(context(SchoolContextDTO.STATUS_AVAILABLE, 800.0, 3, null));
+            SchoolContextDTO available = context(SchoolContextDTO.STATUS_AVAILABLE, 800.0, 3, null);
+            available.setSchoolScore(55);
+            available.setSchoolScoreLabel(SchoolContextDTO.LABEL_FAIR);
+            available.setPublicSchoolDistanceScore(75);
+            when(propertySchoolContextService.getSchoolContext(42L)).thenReturn(available);
 
             // Act & Assert
             mockMvc.perform(get(URL, 42))
@@ -61,6 +64,10 @@ public class PropertyLocationIntelligenceControllerTest {
                     .andExpect(jsonPath("$.distanceUnit").value("m"))
                     .andExpect(jsonPath("$.nearestPublicSchoolDistance").value(800.0))
                     .andExpect(jsonPath("$.schoolsWithin1km").value(3))
+                    .andExpect(jsonPath("$.schoolScore").value(55))
+                    .andExpect(jsonPath("$.schoolScoreLabel").value("Fair"))
+                    .andExpect(jsonPath("$.publicSchoolDistanceScore").value(75))
+                    .andExpect(jsonPath("$.dataUpdatedAt").doesNotExist())
                     .andExpect(jsonPath("$.source").value(SchoolContextDTO.SOURCE));
         }
 

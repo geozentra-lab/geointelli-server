@@ -9,8 +9,8 @@ public interface PropertySchoolContextService {
 
     /**
      * Returns the school context of a property from its stored school analysis: distances to the nearest
-     * public and charter schools, number of schools within 1 km, school score, distance unit, source and
-     * freshness. Nothing is recalculated or saved.
+     * public and charter schools, number of schools within 1 km, school score with its label and parts,
+     * distance unit and source. The score is null when any value is unknown. Nothing is recalculated or saved.
      *
      * @param propertyId internal ID of the property
      * @return the school context with status AVAILABLE, NO_NEARBY_RESULTS (data exists but no school
