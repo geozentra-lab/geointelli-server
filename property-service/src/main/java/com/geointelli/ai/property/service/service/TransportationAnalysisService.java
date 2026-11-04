@@ -8,6 +8,6 @@ import com.geointelli.ai.property.service.entity.TransportationAnalysis;
 public interface TransportationAnalysisService {
     TransportationAnalysisDTO saveScore(TransportationAnalysis analysis);
     List<TransportationAnalysisDTO> getPropertyTransportationAnalysisByIds(List<Long> propertyIds);
-    void calculateAndSaveAllScores();
+    void calculateAndSaveAllScores(boolean recalculateExisting);
     TransportationAnalysisDTO calculateAndSaveScore(Long propertyId);
 }

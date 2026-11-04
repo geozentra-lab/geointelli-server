@@ -40,7 +40,7 @@ public class SchoolContextDTO {
     @Schema(description = "Number of schools within 1 km; 0 means none nearby, null means unknown", example = "3")
     private Integer schoolsWithin1km;
 
-    @Schema(description = "School score (0-100), rounded; null if any value is unknown or the score is not "
+    @Schema(description = "School score (0-100), rounded, over the known values only; null if the score is not "
             + "calculated yet", example = "55")
     private Integer schoolScore;
 
@@ -61,6 +61,6 @@ public class SchoolContextDTO {
     private String source;
 
     @Schema(description = "Explanation when data is missing or incomplete; null otherwise",
-            example = "Score unavailable, unknown values: nearestCharterSchoolDistance")
+            example = "Score based on known values only, unknown values: nearestCharterSchoolDistance")
     private String note;
 }
