@@ -149,6 +149,13 @@ public class CalculationControllerTest {
                 // negative optional cost
                 """
                 {"price": 400000, "downPayment": 80000, "annualInterestRate": 3.5, "loanTermYears": 30, "annualPropertyTax": -5}""",
+                // amount too large / too many decimal places
+                """
+                {"price": 1e2000000, "downPayment": 0, "annualInterestRate": 3.5, "loanTermYears": 30}""",
+                """
+                {"price": 400000, "downPayment": 1e-2000000, "annualInterestRate": 3.5, "loanTermYears": 30}""",
+                """
+                {"price": 400000, "downPayment": 80000, "annualInterestRate": 1e-2000000, "loanTermYears": 30}""",
                 // empty object
                 "{}",
                 // malformed JSON / wrong type
@@ -235,6 +242,11 @@ public class CalculationControllerTest {
                 // negative optional cost
                 """
                         {"annualGrossIncome": 72000, "monthlyDebtPayments": 500, "downPayment": 50000, "annualInterestRate": 6.5, "loanTermYears": 30, "annualPropertyTax": -5}""",
+                // amount too large / too many decimal places
+                """
+                        {"annualGrossIncome": 1e2000000, "monthlyDebtPayments": 0, "downPayment": 0, "annualInterestRate": 6.5, "loanTermYears": 30}""",
+                """
+                        {"annualGrossIncome": 72000, "monthlyDebtPayments": 0, "downPayment": 0, "annualInterestRate": 1e-2000000, "loanTermYears": 30}""",
                 // empty object
                 "{}",
                 // wrong type / malformed JSON

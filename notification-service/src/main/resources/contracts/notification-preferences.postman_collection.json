@@ -1,0 +1,372 @@
+{
+    "variable":  [
+                     {
+                         "key":  "serviceUrl",
+                         "value":  "http://localhost:8082"
+                     },
+                     {
+                         "key":  "ownerToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "otherUserToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "unverifiedEmailToken",
+                         "value":  ""
+                     }
+                 ],
+    "info":  {
+                 "description":  "Use only verified test identities with SES sandbox initially. Actual delivery is disabled by default (NOTIFICATIONS_EMAIL_ENABLED=false). Configure SES_FROM_ADDRESS, SES_REGION and the standard AWS credential chain before enabling. AWS needs ses:SendEmail permission for the verified sender. SUCCESS from SES is ACCEPTED, not mailbox delivery. Timeouts/crashes become UNKNOWN and are not automatically replayed. Only explicit SES throttling receives bounded retries. No real email needs to be sent for the automated SDK/database tests. Swagger documents request/response at /swagger-ui/index.html. Inspect notification-email-checks.sql for queue/delivery state.",
+                 "name":  "GeoZentra notification preferences and SES (SCRUM-71)",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "item":  [
+                 {
+                     "name":  "Get my preferences",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. Defaults: inAppEnabled=true, emailEnabled=false, enabledEventTypes=[NEW_MATCH], emailCadence=DAILY. emailDeliveryEnabled reports the server worker flag, not delivery success.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ]
+                                 }
+                 },
+                 {
+                     "name":  "Enable immediate email",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200 with a JWT containing email_verified=true and email. SES sandbox also requires SES verification of that recipient. Publish a NEW event through SCRUM-69; no historical inbox rows are emailed. Check delivery SQL.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Repeat identical preferences",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. With DAILY or WEEKLY, nextEmailAt must remain unchanged on repeated identical PUTs.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Daily digest",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. Email queued after this update is grouped into bounded digests at the next UTC midnight. Remaining queued items continue the next day.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"DAILY\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Weekly digest",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. Next digest is next Monday at 00:00 UTC, independently of the saved-search evaluation cadence.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"WEEKLY\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Opt out of email",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. Pending email queue items and retry batches are suppressed. Already dispatching/accepted email cannot be recalled. Existing inbox history stays visible.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":false,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Opt out of NEW_MATCH",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. New NEW_MATCH events retain a dedup receipt but do not create inbox/email notifications. Existing messages remain.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Email only",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. Future email-only notifications are not returned by GET /api/notifications and cannot be marked read through that API.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":false,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Invalid missing fields",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "400. Also try null channel values, unknown cadence HOURLY, unknown event type, null event types or malformed JSON.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Reject recipient override",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "400. Recipient/owner values are never accepted in the body.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\",\"emailAddress\":\"someone-else@example.com\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Unverified email JWT",
+                     "request":  {
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "400. A valid JWT without email_verified=true cannot opt into email.",
+                                     "method":  "PUT",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    },
+                                                    {
+                                                        "key":  "Content-Type",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "body":  {
+                                                  "raw":  "{\"inAppEnabled\":true,\"emailEnabled\":true,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"IMMEDIATE\"}",
+                                                  "options":  {
+                                                                  "raw":  {
+                                                                              "language":  "json"
+                                                                          }
+                                                              },
+                                                  "mode":  "raw"
+                                              },
+                                     "auth":  {
+                                                  "bearer":  [
+                                                                 {
+                                                                     "key":  "token",
+                                                                     "value":  "{{unverifiedEmailToken}}",
+                                                                     "type":  "string"
+                                                                 }
+                                                             ],
+                                                  "type":  "bearer"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "Other user defaults and choices",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "200. User B must see only their preferences, independent of user A updates.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "auth":  {
+                                                  "bearer":  [
+                                                                 {
+                                                                     "key":  "token",
+                                                                     "value":  "{{otherUserToken}}",
+                                                                     "type":  "string"
+                                                                 }
+                                                             ],
+                                                  "type":  "bearer"
+                                              }
+                                 }
+                 },
+                 {
+                     "name":  "No authentication",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{serviceUrl}}/api/notifications/preferences",
+                                     "description":  "401. PUT without authentication must also return 401.",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Accept",
+                                                        "value":  "application/json"
+                                                    }
+                                                ],
+                                     "auth":  {
+                                                  "type":  "noauth"
+                                              }
+                                 }
+                 }
+             ],
+    "auth":  {
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "type":  "string",
+                                    "value":  "{{ownerToken}}"
+                                }
+                            ],
+                 "type":  "bearer"
+             }
+}

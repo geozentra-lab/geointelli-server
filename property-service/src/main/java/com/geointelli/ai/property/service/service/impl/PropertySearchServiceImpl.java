@@ -24,6 +24,7 @@ import com.geointelli.ai.property.service.service.PropertySearchValidationServic
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
@@ -55,13 +56,7 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         var query = cb.createQuery(PropertySearchItem.class);
         Root<Property> property = query.from(Property.class);
         var joins = new SearchJoins(property);
-        query.select(cb.construct(PropertySearchItem.class,
-            property.get("id"), property.get("folio"), joins.county.get("id"), joins.county.get("name"),
-            joins.state.get("code"), joins.state.get("name"), joins.address.get("address"),
-            joins.address.get("city"), joins.address.get("zip"), property.get("dorCode"),
-            property.get("dorDescription"), property.get("bedroomCount"), property.get("bathroomCount"),
-            property.get("buildingHeatedArea"), property.get("lotSize"), property.get("yearBuilt"),
-            property.get("neighborhood"), property.get("neighborhoodDescription")));
+        selectCard(query, property, joins, cb);
         query.where(predicates(request, query, property, joins, cb));
 
         Expression<?> sort = "yearBuilt".equals(request.getSortBy())
@@ -85,6 +80,37 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         long totalPages = (total + request.getSize() - 1) / request.getSize();
         return new PropertySearchResponse(content, request.getPage(), request.getSize(), total,
             totalPages, request.getPage() == 0, (long) request.getPage() + 1 >= totalPages);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(readOnly = true)
+    public List<PropertySearchItem> findRecommendationCandidates(List<Long> countyIds, int limit) {
+        if (countyIds == null || countyIds.isEmpty() || countyIds.size() > 20
+                || countyIds.stream().anyMatch(id -> id == null || id <= 0)
+                || limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("Expected 1 to 20 county IDs and a limit between 1 and 50");
+        }
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<PropertySearchItem> query = cb.createQuery(PropertySearchItem.class);
+        Root<Property> property = query.from(Property.class);
+        SearchJoins joins = new SearchJoins(property);
+        selectCard(query, property, joins, cb);
+        query.where(joins.county.get("id").in(countyIds));
+        query.orderBy(cb.asc(property.get("id")));
+        return entityManager.createQuery(query).setMaxResults(limit).getResultList();
+    }
+
+    /** Keeps search and recommendations on the same lightweight property-card contract. */
+    private void selectCard(CriteriaQuery<PropertySearchItem> query, Root<Property> property,
+            SearchJoins joins, CriteriaBuilder cb) {
+        query.select(cb.construct(PropertySearchItem.class,
+            property.get("id"), property.get("folio"), joins.county.get("id"), joins.county.get("name"),
+            joins.state.get("code"), joins.state.get("name"), joins.address.get("address"),
+            joins.address.get("city"), joins.address.get("zip"), property.get("dorCode"),
+            property.get("dorDescription"), property.get("bedroomCount"), property.get("bathroomCount"),
+            property.get("buildingHeatedArea"), property.get("lotSize"), property.get("yearBuilt"),
+            property.get("neighborhood"), property.get("neighborhoodDescription")));
     }
 
     @Override
