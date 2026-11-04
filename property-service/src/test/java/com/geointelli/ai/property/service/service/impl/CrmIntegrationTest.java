@@ -19,11 +19,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -73,10 +71,8 @@ class CrmIntegrationTest {
 
     @BeforeAll
     void schema() throws Exception {
-        jdbc.execute("CREATE TABLE users(id BIGINT PRIMARY KEY)");
-        jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
         try (Connection connection = jdbc.getDataSource().getConnection()) {
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V21__add_clients_leads_and_activity.sql"));
+            CrmWorkIntegrationTest.createCrmTables(jdbc, connection);
         }
     }
 

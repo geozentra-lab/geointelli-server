@@ -16,7 +16,8 @@ CREATE TABLE crm_transactions (
     user_id BIGINT NOT NULL REFERENCES users(id),
     client_id BIGINT NOT NULL,
     lead_id BIGINT,
-    property_id BIGINT NOT NULL REFERENCES properties(id),
+    -- A deal is a sale record for one property, so it blocks deleting that property.
+    property_id BIGINT NOT NULL REFERENCES properties(id) ON DELETE RESTRICT,
     title VARCHAR(160) NOT NULL CHECK (BTRIM(title) <> ''),
     description VARCHAR(2000),
     stage VARCHAR(30) NOT NULL DEFAULT 'PROSPECT'
@@ -42,7 +43,7 @@ CREATE TABLE crm_tasks (
     user_id BIGINT NOT NULL REFERENCES users(id),
     client_id BIGINT,
     lead_id BIGINT,
-    property_id BIGINT REFERENCES properties(id),
+    property_id BIGINT REFERENCES properties(id) ON DELETE SET NULL,
     transaction_id BIGINT,
     title VARCHAR(160) NOT NULL CHECK (BTRIM(title) <> ''),
     description VARCHAR(2000),

@@ -95,20 +95,25 @@ class CrmWorkIntegrationTest {
             assertTrue(url.startsWith("jdbc:h2:mem:crm-work")
                 || (url.startsWith("jdbc:postgresql://127.0.0.1:") && url.endsWith("/crm_work_test")),
                 "Only the disposable CRM work database is allowed");
-            jdbc.execute("CREATE TABLE users(id BIGINT PRIMARY KEY)");
-            jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
-            ClassPathResource base = new ClassPathResource("db/migration/V21__add_clients_leads_and_activity.sql");
-            if (url.startsWith("jdbc:h2:")) {
-                // H2 generates random CHECK names; give the fixture PostgreSQL's deterministic names.
-                String sql = base.getContentAsString(StandardCharsets.UTF_8)
-                    .replace("subject_type VARCHAR(20) NOT NULL CHECK", "subject_type VARCHAR(20) NOT NULL CONSTRAINT crm_activities_subject_type_check CHECK")
-                    .replace("activity_type VARCHAR(40) NOT NULL CHECK", "activity_type VARCHAR(40) NOT NULL CONSTRAINT crm_activities_activity_type_check CHECK");
-                ScriptUtils.executeSqlScript(connection, new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));
-            } else {
-                ScriptUtils.executeSqlScript(connection, base);
-            }
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V23__add_crm_tasks_and_transactions.sql"));
+            createCrmTables(jdbc, connection);
         }
+    }
+
+    /** Creates the CRM tables from V21 and V23, as any CRM service test now needs both. */
+    static void createCrmTables(JdbcTemplate jdbc, Connection connection) throws Exception {
+        jdbc.execute("CREATE TABLE users(id BIGINT PRIMARY KEY)");
+        jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
+        ClassPathResource base = new ClassPathResource("db/migration/V21__add_clients_leads_and_activity.sql");
+        if (connection.getMetaData().getURL().startsWith("jdbc:h2:")) {
+            // H2 generates random CHECK names; give the fixture PostgreSQL's deterministic names.
+            String sql = base.getContentAsString(StandardCharsets.UTF_8)
+                .replace("subject_type VARCHAR(20) NOT NULL CHECK", "subject_type VARCHAR(20) NOT NULL CONSTRAINT crm_activities_subject_type_check CHECK")
+                .replace("activity_type VARCHAR(40) NOT NULL CHECK", "activity_type VARCHAR(40) NOT NULL CONSTRAINT crm_activities_activity_type_check CHECK");
+            ScriptUtils.executeSqlScript(connection, new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));
+        } else {
+            ScriptUtils.executeSqlScript(connection, base);
+        }
+        ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V23__add_crm_tasks_and_transactions.sql"));
     }
 
     @BeforeEach
@@ -315,6 +320,28 @@ class CrmWorkIntegrationTest {
         assertNotNull(clients.get(clientId));
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM properties", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM crm_activities WHERE activity_type='TASK_DELETED'", Integer.class));
+    }
+
+    @Test
+    void clientWithOnlyTaskOrDealCannotBeDeleted() {
+        Long withTask = clients.create(new CrmClientCreateRequest("Task client", "task@example.com", null, null)).id();
+        tasks.create(new CrmTaskCreateRequest("Call", null, null, withTask, null, null, null));
+        Long withDeal = clients.create(new CrmClientCreateRequest("Deal client", "deal@example.com", null, null)).id();
+        transactions.create(new CrmTransactionCreateRequest("Deal", null, withDeal, null, 101L, null));
+        hasStatus(HttpStatus.CONFLICT, () -> clients.delete(withTask));
+        hasStatus(HttpStatus.CONFLICT, () -> clients.delete(withDeal));
+        assertNotNull(clients.get(withTask));
+        assertNotNull(clients.get(withDeal));
+    }
+
+    @Test
+    void deletingPropertyClearsTaskLinkButIsBlockedByDeal() {
+        Long taskId = tasks.create(new CrmTaskCreateRequest("Visit", null, null, null, null, 101L, null)).id();
+        deal();
+        entityManager.flush();
+        jdbc.update("DELETE FROM properties WHERE id=101");
+        assertNull(jdbc.queryForObject("SELECT property_id FROM crm_tasks WHERE id=?", Long.class, taskId));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("DELETE FROM properties WHERE id=100"));
     }
 
     @Test

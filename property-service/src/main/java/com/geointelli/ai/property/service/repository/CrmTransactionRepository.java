@@ -17,6 +17,7 @@ public interface CrmTransactionRepository extends JpaRepository<CrmTransaction, 
     Page<CrmTransaction> findByUserId(Long userId, Pageable pageable);
     Page<CrmTransaction> findByUserIdAndStage(Long userId, CrmTransactionStage stage, Pageable pageable);
     Optional<CrmTransaction> findByIdAndUserId(Long id, Long userId);
+    boolean existsByClientId(Long clientId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM CrmTransaction t WHERE t.id = :id AND t.userId = :owner")

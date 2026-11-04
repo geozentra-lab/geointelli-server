@@ -17,6 +17,7 @@ public interface CrmTaskRepository extends JpaRepository<CrmTask, Long> {
     Page<CrmTask> findByUserId(Long userId, Pageable pageable);
     Page<CrmTask> findByUserIdAndStatus(Long userId, CrmTaskStatus status, Pageable pageable);
     Optional<CrmTask> findByIdAndUserId(Long id, Long userId);
+    boolean existsByClientId(Long clientId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM CrmTask t WHERE t.id = :id AND t.userId = :owner")
