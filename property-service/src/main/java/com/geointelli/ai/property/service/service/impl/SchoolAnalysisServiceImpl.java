@@ -1,11 +1,8 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.util.List;
+import java.util.Optional;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.geointelli.ai.property.service.dto.SchoolAnalysisDTO;
@@ -20,6 +17,9 @@ import lombok.AllArgsConstructor;
 @Service
 @AllArgsConstructor
 public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
+    static final double[] SCORE_WEIGHTS = {0.40, 0.20, 0.40};
+    static final int BATCH_SIZE = 2000;
+
     private final SchoolAnalysisRepository schoolAnalysisRepository;
     private final SchoolAnalysisMapper schoolAnalysisMapper;
 
@@ -29,9 +29,10 @@ public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
         return schoolAnalysisMapper.toDTO(schoolAnalysisRepository.save(analysis));
     }
 
+    // unknown values have no part score, so they are left out of the school score instead of counting as 0
     private Double calculateDistanceScore(Double distance) {
         if (distance == null) {
-            return 0.0;
+            return null;
         }
 
         if (distance <= 500) {
@@ -54,7 +55,10 @@ public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
     }
 
     private Double calculateSchoolDensityScore(Integer schoolsWithin1km) {
-        if (schoolsWithin1km == null || schoolsWithin1km <= 0) {
+        if (schoolsWithin1km == null) {
+            return null;
+        }
+        if (schoolsWithin1km <= 0) {
             return 0.0;
         }
         if (schoolsWithin1km >= 8) {
@@ -70,17 +74,21 @@ public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
     }
 
     private void calculateScores(SchoolAnalysis analysis) {
-        double publicSchoolDistanceScore = calculateDistanceScore(analysis.getDistPublicSchool());
-        double charterSchoolDistanceScore = calculateDistanceScore(analysis.getDistCharterSchool());
-        double schoolDensityScore = calculateSchoolDensityScore(analysis.getSchoolsWithin1km());
-
-        double schoolScore = publicSchoolDistanceScore * 0.40 + charterSchoolDistanceScore * 0.20
-                                + schoolDensityScore * 0.40;
+        Double publicSchoolDistanceScore = calculateDistanceScore(analysis.getDistPublicSchool());
+        Double charterSchoolDistanceScore = calculateDistanceScore(analysis.getDistCharterSchool());
+        Double schoolDensityScore = calculateSchoolDensityScore(analysis.getSchoolsWithin1km());
 
         analysis.setPublicSchoolDistanceScore(publicSchoolDistanceScore);
         analysis.setCharterSchoolDistanceScore(charterSchoolDistanceScore);
         analysis.setSchoolDensityScore(schoolDensityScore);
-        analysis.setSchoolScore(schoolScore);
+        analysis.setSchoolScore(schoolScore(publicSchoolDistanceScore, charterSchoolDistanceScore, schoolDensityScore));
+    }
+
+    /** Public distance 40%, charter distance 20%, schools within 1 km 40%, over the known parts only. */
+    static Double schoolScore(Double publicSchoolDistanceScore, Double charterSchoolDistanceScore,
+                              Double schoolDensityScore) {
+        return WeightedScore.average(SCORE_WEIGHTS, publicSchoolDistanceScore, charterSchoolDistanceScore,
+                schoolDensityScore);
     }
 
     @Override
@@ -101,25 +109,26 @@ public class SchoolAnalysisServiceImpl implements SchoolAnalysisService {
     }
 
     @Override
-    public void calculateAndSaveAllScores() {
-        int pageNumber = 0;
-        int pageSize = 2000;
-        Page<SchoolAnalysis> page;
+    public Optional<SchoolAnalysisDTO> getPropertySchoolAnalysis(Long propertyId) {
+        return schoolAnalysisRepository.findByPropertyId(propertyId).map(schoolAnalysisMapper::toDTO);
+    }
 
+    // walks the rows by id, so saved rows never shift the next batch and rows without any value are not reread
+    @Override
+    public void calculateAndSaveAllScores(boolean recalculateExisting) {
+        long lastId = 0;
+        List<SchoolAnalysis> batch;
         do {
-            Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.ASC, "id"));
-            page = schoolAnalysisRepository.findBySchoolScoreIsNull(pageable);
-
-            List<SchoolAnalysis> analyses = page.getContent();
-
-            for (SchoolAnalysis analysis : analyses) {
-                calculateScores(analysis);
+            batch = recalculateExisting
+                    ? schoolAnalysisRepository.findTop2000ByIdGreaterThanOrderByIdAsc(lastId)
+                    : schoolAnalysisRepository.findTop2000BySchoolScoreIsNullAndIdGreaterThanOrderByIdAsc(lastId);
+            if (batch.isEmpty()) {
+                return;
             }
-
-            schoolAnalysisRepository.saveAll(analyses);
+            batch.forEach(this::calculateScores);
+            schoolAnalysisRepository.saveAll(batch);
             schoolAnalysisRepository.flush();
-
-            pageNumber++;
-        } while (page.hasNext());
+            lastId = batch.get(batch.size() - 1).getId();
+        } while (batch.size() == BATCH_SIZE);
     }
 }

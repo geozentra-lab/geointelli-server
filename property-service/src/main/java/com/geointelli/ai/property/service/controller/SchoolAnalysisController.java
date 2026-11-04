@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geointelli.ai.property.service.dto.PropertyIdsRequest;
@@ -37,8 +38,9 @@ public class SchoolAnalysisController {
     }
 
     @PostMapping("/calculate-all")
-    public ResponseEntity<Void> calculateAndSaveAllScores() {
-        propertySchoolAnalysisService.calculateAndSaveAllScores();
+    public ResponseEntity<Void> calculateAndSaveAllScores(
+            @RequestParam(defaultValue = "false") boolean recalculateExisting) {
+        propertySchoolAnalysisService.calculateAndSaveAllScores(recalculateExisting);
         return ResponseEntity.noContent().build();
     }
 
