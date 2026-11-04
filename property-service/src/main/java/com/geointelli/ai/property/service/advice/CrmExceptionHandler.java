@@ -12,9 +12,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.geointelli.ai.property.service.controller.CrmActivityController;
 import com.geointelli.ai.property.service.controller.CrmClientController;
 import com.geointelli.ai.property.service.controller.CrmLeadController;
+import com.geointelli.ai.property.service.controller.CrmTaskController;
+import com.geointelli.ai.property.service.controller.CrmTransactionController;
 
 /** Keeps concurrent duplicate/reference/locking errors out of HTTP responses. */
-@RestControllerAdvice(assignableTypes = {CrmClientController.class, CrmLeadController.class, CrmActivityController.class})
+@RestControllerAdvice(assignableTypes = {CrmClientController.class, CrmLeadController.class, CrmActivityController.class,
+    CrmTaskController.class, CrmTransactionController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class CrmExceptionHandler {
     @ExceptionHandler({DataIntegrityViolationException.class, PessimisticLockingFailureException.class})
