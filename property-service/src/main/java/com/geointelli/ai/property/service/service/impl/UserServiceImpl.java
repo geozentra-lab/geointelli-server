@@ -26,12 +26,15 @@ public class UserServiceImpl implements UserService {
     }
 
     public User createUserFromJwt(Jwt jwt){
-        User user = new User();
-        user.setKeycloakUserId(jwt.getSubject());
-        user.setUsername(jwt.getClaimAsString("preferred_username"));
-        user.setEmail(jwt.getClaimAsString("email"));
-        user.setFirstName(jwt.getClaimAsString("given_name"));
-        user.setLastName(jwt.getClaimAsString("family_name"));
-        return userRepository.save(user);
+        // A new account's first page load sends several requests at once; insert-if-absent lets
+        // every one of them succeed instead of all but one failing on the unique Keycloak ID.
+        userRepository.insertIfAbsent(
+            jwt.getSubject(),
+            jwt.getClaimAsString("preferred_username"),
+            jwt.getClaimAsString("email"),
+            jwt.getClaimAsString("given_name"),
+            jwt.getClaimAsString("family_name"));
+        return userRepository.findByKeycloakUserId(jwt.getSubject())
+            .orElseThrow(() -> new IllegalStateException("User provisioning failed"));
     }
 }
