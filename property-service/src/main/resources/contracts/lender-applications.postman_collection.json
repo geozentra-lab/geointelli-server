@@ -1,0 +1,894 @@
+{
+  "info": {
+    "name": "SCRUM-82 Lender applications",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Apply V24 to your chosen property-service database first. Set baseUrl and a real Keycloak bearer token. Run Workflow in order; organizationId and applicationId are captured automatically. Organization creation is allowed independently of persona configuration. All-time pipeline metrics come only from recorded statuses, USD only. No credit approval or real funds movement. Rejected import rows roll back individually. For organization isolation use another valid user's token in Ownership checks; that user must not be a member. Optional membership requests need an existing local memberUserId. Swagger contains full validation/transition rules."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "organizationId",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "otherUserToken",
+      "value": ""
+    },
+    {
+      "key": "memberUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Workflow - run in order",
+      "item": [
+        {
+          "name": "1 Create organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/organizations",
+            "description": "201. Current user becomes owner. A new organization is created each run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman lender\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"organizationId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2 List my organizations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/organizations",
+            "description": "200. Only owned/member organizations."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3 Empty pipeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/pipeline?organizationId={{organizationId}}",
+            "description": "200, total 0 for the fresh organization; seven zero stage buckets."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Fresh organization has no applications\", () => pm.expect(pm.response.json().total).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4 Create manual application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+            "description": "201, stage DRAFT, source/externalId and approval/funding fields null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicantName\": \"Postman applicant\",\n  \"applicantEmail\": \"applicant@example.com\",\n  \"requestedAmount\": 300000,\n  \"currency\": \"USD\",\n  \"notes\": \"Manual tracking only\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"applicationId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5 Read details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "200. Same organization and applicant."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6 List applications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}&page=0&size=20&stage=DRAFT",
+            "description": "200; one DRAFT on first run."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7 Submit",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "200.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"SUBMITTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8 Start review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "200.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"UNDER_REVIEW\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9 Record approval",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "200; approvedAt is recorded now in UTC.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"APPROVED\",\n  \"approvedAmount\": 250000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 Record funding",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "200; fundedAt >= approvedAt. No payment is performed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"FUNDED\",\n  \"fundedAmount\": 240000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 Pipeline totals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/pipeline?organizationId={{organizationId}}",
+            "description": "200, total=1, approvedCount=1, approvedAmount=250000, fundedCount=1, fundedAmount=240000."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Recorded funded metrics\", () => { const v=pm.response.json(); pm.expect(v.total).to.eql(1); pm.expect(v.approvedCount).to.eql(1); pm.expect(v.fundedAmount).to.eql(240000); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Imports - run after workflow",
+      "item": [
+        {
+          "name": "Import funded partner snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/import?organizationId={{organizationId}}",
+            "description": "200; first request CREATED. Sub-microsecond digits normalize to .123456Z and .987654Z in the stored details.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"POSTMAN_PARTNER\",\n  \"rows\": [\n    {\n      \"externalId\": \"demo-1\",\n      \"applicantName\": \"Imported applicant\",\n      \"requestedAmount\": 300000,\n      \"currency\": \"USD\",\n      \"stage\": \"FUNDED\",\n      \"approvedAmount\": 250000,\n      \"fundedAmount\": 240000,\n      \"approvedAt\": \"2020-01-01T00:00:00.123456789Z\",\n      \"fundedAt\": \"2020-01-02T00:00:00.987654321Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const v=pm.response.json(); if(v.rows[0].applicationId) pm.collectionVariables.set(\"importedApplicationId\",v.rows[0].applicationId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Repeat identical import",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/import?organizationId={{organizationId}}",
+            "description": "200; unchanged=1. No duplicate row or changed audit timestamps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"POSTMAN_PARTNER\",\n  \"rows\": [\n    {\n      \"externalId\": \"demo-1\",\n      \"applicantName\": \"Imported applicant\",\n      \"requestedAmount\": 300000,\n      \"currency\": \"USD\",\n      \"stage\": \"FUNDED\",\n      \"approvedAmount\": 250000,\n      \"fundedAmount\": 240000,\n      \"approvedAt\": \"2020-01-01T00:00:00.123456789Z\",\n      \"fundedAt\": \"2020-01-02T00:00:00.987654321Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Idempotent replay\", () => pm.expect(pm.response.json().unchanged).to.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read imported timestamps",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications/{{importedApplicationId}}?organizationId={{organizationId}}",
+            "description": "200. Timestamp precision survives the database round trip."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Microsecond milestones\", () => { const v=pm.response.json(); pm.expect(v.approvedAt).to.eql(\"2020-01-01T00:00:00.123456Z\"); pm.expect(v.fundedAt).to.eql(\"2020-01-02T00:00:00.987654Z\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Partial failure",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/import?organizationId={{organizationId}}",
+            "description": "200. Good row commits (or is UNCHANGED on retry); row 2 is REJECTED/INVALID_ROW.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"POSTMAN_PARTNER\",\n  \"rows\": [\n    {\n      \"externalId\": \"demo-good\",\n      \"applicantName\": \"Valid\",\n      \"requestedAmount\": 100000,\n      \"currency\": \"USD\",\n      \"stage\": \"DRAFT\"\n    },\n    {\n      \"externalId\": \"demo-invalid\",\n      \"applicantName\": \"Invalid\",\n      \"requestedAmount\": -5,\n      \"currency\": \"USD\",\n      \"stage\": \"DRAFT\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Bad row reported safely\", () => { const v=pm.response.json(); pm.expect(v.rejected).to.eql(1); pm.expect(v.rows[1].errorCode).to.eql(\"INVALID_ROW\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Invalid and empty cases",
+      "item": [
+        {
+          "name": "Terminal stage cannot reopen",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "409 after funded workflow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"DRAFT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+            "description": "400; no row created.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicantName\": \"Invalid\",\n  \"requestedAmount\": -10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unsupported currency",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+            "description": "400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicantName\": \"Invalid\",\n  \"requestedAmount\": 10,\n  \"currency\": \"EUR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications/9223372036854775807?organizationId={{organizationId}}",
+            "description": "404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing organization scope",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications",
+            "description": "400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Empty filtered list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}&stage=REJECTED",
+            "description": "200, content empty if no REJECTED records have been added."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}&size=101",
+            "description": "400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Membership - optional existing user",
+      "item": [
+        {
+          "name": "Read organization member IDs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/organizations/{{organizationId}}/members",
+            "description": "200, includes owner."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner grants member access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/organizations/{{organizationId}}/members",
+            "description": "Set memberUserId to an existing local user ID. 204; repeats are no-ops.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{memberUserId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Owner revokes member access",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/organizations/{{organizationId}}/members/{{memberUserId}}",
+            "description": "204; applications remain stored."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ownership checks - another valid user",
+      "item": [
+        {
+          "name": "Foreign details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+            "description": "Set otherUserToken to a valid user who does not belong to this organization. Expected 404.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+            "description": "Set otherUserToken to a valid user who does not belong to this organization. Expected 404.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign pipeline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/lender/pipeline?organizationId={{organizationId}}",
+            "description": "Set otherUserToken to a valid user who does not belong to this organization. Expected 404.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign import",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/lender/applications/import?organizationId={{organizationId}}",
+            "description": "Set otherUserToken to a valid user who does not belong to this organization. Expected 404.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"POSTMAN_PARTNER\",\n  \"rows\": [\n    {\n      \"externalId\": \"demo-1\",\n      \"applicantName\": \"Imported applicant\",\n      \"requestedAmount\": 300000,\n      \"currency\": \"USD\",\n      \"stage\": \"FUNDED\",\n      \"approvedAmount\": 250000,\n      \"fundedAmount\": 240000,\n      \"approvedAt\": \"2020-01-01T00:00:00.123456789Z\",\n      \"fundedAt\": \"2020-01-02T00:00:00.987654321Z\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherUserToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
