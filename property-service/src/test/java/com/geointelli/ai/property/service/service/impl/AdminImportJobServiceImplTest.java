@@ -155,6 +155,26 @@ public class AdminImportJobServiceImplTest {
             assertThrows(IllegalArgumentException.class, () -> adminImportJobService.listJobs(0, 101));
             verifyNoInteractions(imageBackfillClaimService, imageBackfillJobService, propertyImageBackfillService);
         }
+
+        @Test
+        @DisplayName("When page * size exceeds Integer.MAX_VALUE, then throw IllegalArgumentException without reading jobs")
+        void whenPageOffsetOverflows_thenThrowIllegalArgumentException() {
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> adminImportJobService.listJobs(Integer.MAX_VALUE, 100));
+            assertEquals("page is too large for size 100", exception.getMessage());
+            verifyNoInteractions(imageBackfillClaimService, imageBackfillJobService, propertyImageBackfillService);
+        }
+
+        @Test
+        @DisplayName("When page * size is exactly Integer.MAX_VALUE, then accept it")
+        void whenPageOffsetIsAtTheLimit_thenAcceptIt() {
+            // Arrange
+            givenStoredJobs();
+
+            // Act & Assert: 2147483647 * 1 is still a valid offset
+            assertNotNull(adminImportJobService.listJobs(Integer.MAX_VALUE, 1));
+        }
     }
 
     @Nested

@@ -77,6 +77,24 @@ public class AdminImportJobControllerTest {
         }
 
         @Test
+        @DisplayName("When a job has timestamps, then they are returned as ISO-8601 UTC strings")
+        void whenJobHasTimestamps_thenReturnIsoStrings() throws Exception {
+            // Arrange
+            ImportJobDTO job = job(7L);
+            job.setCreatedAt(java.time.Instant.parse("2026-11-05T10:00:00Z"));
+            job.setFinishedAt(java.time.Instant.parse("2026-11-05T10:05:00Z"));
+            ImportJobPageDTO page = new ImportJobPageDTO();
+            page.setJobs(new PageResponse<>(List.of(job), 0, 20, 1, 1, true, true));
+            when(adminImportJobService.listJobs(0, 20)).thenReturn(page);
+
+            // Act & Assert
+            mockMvc.perform(get(LIST_URL))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.jobs.content[0].createdAt").value("2026-11-05T10:00:00Z"))
+                    .andExpect(jsonPath("$.jobs.content[0].finishedAt").value("2026-11-05T10:05:00Z"));
+        }
+
+        @Test
         @DisplayName("When the service rejects the size, then return 400")
         void whenServiceRejectsSize_thenReturn400() throws Exception {
             // Arrange

@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.geointelli.ai.property.service.enums.ImportJobType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -32,8 +33,10 @@ public class ImportJobDTO {
     @Schema(description = "Error code of a failed or interrupted job; null when there is none", example = "MAPILLARY_API_ERROR")
     private String errorCode;
     @Schema(description = "When the job was created (UTC)", example = "2026-11-05T10:00:00Z")
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Instant createdAt;
     @Schema(description = "When the job finished (UTC); null while it is queued or running")
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Instant finishedAt;
 
     @Schema(description = "Per-property outcomes; only returned by the detail endpoint")

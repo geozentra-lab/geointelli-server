@@ -38,6 +38,10 @@ public class AdminImportJobServiceImpl implements AdminImportJobService {
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
         }
+        // page * size is the row offset; past Integer.MAX_VALUE Spring Data fails with a 500
+        if ((long) page * size > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("page is too large for size " + size);
+        }
 
         // Same as the existing detail endpoint: jobs whose worker died are shown as INTERRUPTED, not RUNNING.
         imageBackfillClaimService.interruptExpired();
