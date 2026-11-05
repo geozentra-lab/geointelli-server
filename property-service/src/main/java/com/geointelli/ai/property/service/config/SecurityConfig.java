@@ -33,6 +33,8 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(requests -> {
             // requests.requestMatchers("/api/properties/**", "/api/users/**").hasRole("USER");
+            // Admin endpoints need the Keycloak realm role "admin" (ROLE_admin): 401 without a token, 403 without the role
+            requests.requestMatchers("/api/admin/**").hasRole("admin");
             requests.anyRequest().permitAll();
         });
 
