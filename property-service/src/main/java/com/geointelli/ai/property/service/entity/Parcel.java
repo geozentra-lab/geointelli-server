@@ -4,6 +4,7 @@ import org.locationtech.jts.geom.MultiPolygon;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -36,7 +37,7 @@ public class Parcel extends AuditableEntity {
     @Column(name = "lot_size")
     private Double lotSize;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "property_id")
     private Property property;
 }

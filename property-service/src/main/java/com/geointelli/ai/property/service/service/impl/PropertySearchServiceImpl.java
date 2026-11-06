@@ -2,10 +2,13 @@ package com.geointelli.ai.property.service.service.impl;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
+import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.locationtech.jts.geom.Geometry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +45,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PropertySearchServiceImpl implements PropertySearchService {
     private static final int WGS84_SRID = 4326;
+    /**
+     * Above this many matches an ID-sorted page walks the primary key and stops at the first page of hits.
+     * Below it, matches may sit far into the key, so the planner must collect and top-N sort them instead.
+     */
+    private static final long INDEX_ORDER_MIN_MATCHES = 10_000;
     private final EntityManager entityManager;
     private final PropertySearchValidationService searchValidation;
     private static final Map<String, String> SORT_FIELDS = Map.of(
@@ -53,33 +61,44 @@ public class PropertySearchServiceImpl implements PropertySearchService {
     public PropertySearchResponse search(PropertySearchRequest request) {
         searchValidation.validate(request);
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        var countQuery = cb.createQuery(Long.class);
+        Root<Property> countProperty = countQuery.from(Property.class);
+        countQuery.select(cb.count(countProperty));
+        countQuery.where(predicates(request, countQuery, countProperty, new SearchJoins(countProperty), cb));
+        long total = entityManager.createQuery(countQuery).getSingleResult();
+
+        long offset = (long) request.getPage() * request.getSize();
+        List<PropertySearchItem> content = offset < total ? page(request, total, cb) : List.of();
+        long totalPages = (total + request.getSize() - 1) / request.getSize();
+        return new PropertySearchResponse(content, request.getPage(), request.getSize(), total,
+            totalPages, request.getPage() == 0, (long) request.getPage() + 1 >= totalPages);
+    }
+
+    private List<PropertySearchItem> page(PropertySearchRequest request, long total, CriteriaBuilder cb) {
         var query = cb.createQuery(PropertySearchItem.class);
         Root<Property> property = query.from(Property.class);
         var joins = new SearchJoins(property);
         selectCard(query, property, joins, cb);
         query.where(predicates(request, query, property, joins, cb));
 
-        Expression<?> sort = "yearBuilt".equals(request.getSortBy())
-            ? validYear(property, cb) : property.get(SORT_FIELDS.get(request.getSortBy()));
+        boolean ascending = "asc".equalsIgnoreCase(request.getDirection());
         List<Order> order = new ArrayList<>();
-        order.add(cb.asc(cb.<Integer>selectCase().when(cb.isNull(sort), 1).otherwise(0)));
-        order.add("asc".equalsIgnoreCase(request.getDirection()) ? cb.asc(sort) : cb.desc(sort));
-        if (!"id".equals(request.getSortBy())) {
-            order.add(cb.asc(property.get("id")));
+        if ("id".equals(request.getSortBy()) && total > INDEX_ORDER_MIN_MATCHES) {
+            // IDs are never null, so a bare ID order returns the same rows and can use the primary key.
+            order.add(ascending ? cb.asc(property.get("id")) : cb.desc(property.get("id")));
+        } else {
+            Expression<?> sort = "yearBuilt".equals(request.getSortBy())
+                ? validYear(property, cb) : property.get(SORT_FIELDS.get(request.getSortBy()));
+            order.add(cb.asc(cb.<Integer>selectCase().when(cb.isNull(sort), 1).otherwise(0)));
+            order.add(ascending ? cb.asc(sort) : cb.desc(sort));
+            if (!"id".equals(request.getSortBy())) {
+                order.add(cb.asc(property.get("id")));
+            }
         }
         query.orderBy(order);
-        List<PropertySearchItem> content = entityManager.createQuery(query)
+        return entityManager.createQuery(query)
             .setFirstResult(Math.toIntExact((long) request.getPage() * request.getSize()))
             .setMaxResults(request.getSize()).getResultList();
-
-        var countQuery = cb.createQuery(Long.class);
-        Root<Property> countProperty = countQuery.from(Property.class);
-        countQuery.select(cb.count(countProperty));
-        countQuery.where(predicates(request, countQuery, countProperty, new SearchJoins(countProperty), cb));
-        long total = entityManager.createQuery(countQuery).getSingleResult();
-        long totalPages = (total + request.getSize() - 1) / request.getSize();
-        return new PropertySearchResponse(content, request.getPage(), request.getSize(), total,
-            totalPages, request.getPage() == 0, (long) request.getPage() + 1 >= totalPages);
     }
 
     /** {@inheritDoc} */
@@ -101,7 +120,25 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         return entityManager.createQuery(query).setMaxResults(limit).getResultList();
     }
 
-    /** Keeps search and recommendations on the same lightweight property-card contract. */
+    /** {@inheritDoc} */
+    @Override
+    @Transactional(readOnly = true)
+    public List<PropertySearchItem> findCards(List<Long> propertyIds) {
+        if (propertyIds.size() > 100) {
+            throw new IllegalArgumentException("At most 100 property IDs can be loaded at once");
+        }
+        if (propertyIds.isEmpty()) return List.of();
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<PropertySearchItem> query = cb.createQuery(PropertySearchItem.class);
+        Root<Property> property = query.from(Property.class);
+        selectCard(query, property, new SearchJoins(property), cb);
+        query.where(property.get("id").in(propertyIds));
+        Map<Long, PropertySearchItem> byId = new HashMap<>();
+        entityManager.createQuery(query).getResultList().forEach(card -> byId.put(card.id(), card));
+        return propertyIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    }
+
+    /** Keeps search, recommendations and address search on the same lightweight property-card contract. */
     private void selectCard(CriteriaQuery<PropertySearchItem> query, Root<Property> property,
             SearchJoins joins, CriteriaBuilder cb) {
         query.select(cb.construct(PropertySearchItem.class,
@@ -146,7 +183,8 @@ public class PropertySearchServiceImpl implements PropertySearchService {
         if (hasText(r.getAddress())) {
             String literal = normalized(r.getAddress()).replace("\\", "\\\\")
                 .replace("%", "\\%").replace("_", "\\_");
-            filters.add(cb.like(cb.lower(j.address.get("address")), "%" + literal + "%", '\\'));
+            // ILIKE on the bare column shares the trigram index used by address suggestions.
+            filters.add(((HibernateCriteriaBuilder) cb).ilike(j.address.get("address"), "%" + literal + "%", '\\'));
         }
         if (hasText(r.getNeighborhood())) {
             String neighborhood = normalized(r.getNeighborhood());
