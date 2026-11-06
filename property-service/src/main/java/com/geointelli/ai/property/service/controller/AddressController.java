@@ -9,9 +9,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geointelli.ai.property.service.dto.AddressSearchRequest;
-import com.geointelli.ai.property.service.dto.PropertyDTO;
+import com.geointelli.ai.property.service.dto.PropertySearchItem;
 import com.geointelli.ai.property.service.service.AddressService;
-import com.geointelli.ai.property.service.mapper.PropertyMapper;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,11 +20,10 @@ import lombok.RequiredArgsConstructor;
 public class AddressController {
 
     private final AddressService addressService;
-    private final PropertyMapper propertyMapper;
 
     @GetMapping("/search")
-    public ResponseEntity<List<PropertyDTO>> search(AddressSearchRequest req) {
-        return ResponseEntity.ok(addressService.search(req).stream().map(propertyMapper::toDTO).toList());
+    public ResponseEntity<List<PropertySearchItem>> search(AddressSearchRequest req) {
+        return ResponseEntity.ok(addressService.search(req));
     }
 
     @GetMapping("/suggest")

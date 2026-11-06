@@ -37,4 +37,11 @@ public interface PropertySearchService {
      * @return matching property records; these are not confirmed active listings
      */
     List<PropertySearchItem> findRecommendationCandidates(List<Long> countyIds, int limit);
+
+    /**
+     * Returns property cards for the given IDs, in the same order; IDs with no property are skipped.
+     *
+     * @param propertyIds at most 100 IDs
+     */
+    List<PropertySearchItem> findCards(List<Long> propertyIds);
 }

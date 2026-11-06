@@ -25,12 +25,22 @@ public interface ParcelRepository extends JpaRepository<Parcel,Long>{
     @Query("SELECT DISTINCT p.folio FROM Parcel p WHERE p.property.county.id = :countyId")
     List<String> findAllFolios(@Param("countyId") Long countyId);
 
+    // COUNT(*) lets PostgreSQL answer from the partial mapped-parcel index without reading rows.
+    @Query(value = "SELECT COUNT(*) FROM parcels WHERE geom IS NOT NULL", nativeQuery = true)
     Long countByGeomIsNotNull();
 
     @Query("SELECT MAX(p.updatedAt) FROM Parcel p WHERE p.geom IS NOT NULL")
     LocalDateTime findMaxUpdatedAt();
 
-    @Query("SELECT DISTINCT c.name FROM Parcel p JOIN p.property pr JOIN pr.county c WHERE p.geom IS NOT NULL ORDER BY c.name")
+    // LIMIT 1 per county stops at the first mapped parcel; a plain EXISTS is planned as a join over every parcel.
+    @Query(value = """
+            SELECT DISTINCT c.name FROM counties c
+            CROSS JOIN LATERAL (
+                SELECT 1 FROM properties pr JOIN parcels p ON p.property_id = pr.id
+                WHERE pr.county_id = c.id AND p.geom IS NOT NULL
+                LIMIT 1) mapped
+            ORDER BY c.name
+            """, nativeQuery = true)
     List<String> findDistinctCountyNames();
 
     @Query(value = """
