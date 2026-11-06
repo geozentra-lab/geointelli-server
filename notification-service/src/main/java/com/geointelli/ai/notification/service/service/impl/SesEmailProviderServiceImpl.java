@@ -89,7 +89,7 @@ public class SesEmailProviderServiceImpl implements EmailProviderService {
                         <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#756a60;">If the button does not work, open:<br><a href="%s" style="color:#8b5e3c;word-break:break-all;">%s</a></p>
                       </td></tr>
                       <tr><td style="padding:24px 32px;border-top:1px solid #eee7df;font-size:12px;line-height:1.6;color:#756a60;">
-                        You received this email because you enabled GeoZentra property alerts.
+                        You received this email because you enabled GeoZentra email notifications.
                         You can change your email preferences in the app.
                       </td></tr>
                     </table>

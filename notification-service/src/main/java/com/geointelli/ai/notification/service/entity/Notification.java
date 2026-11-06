@@ -30,7 +30,6 @@ public class Notification {
     private String recipientKeycloakId;
     @Column(nullable = false, length = 40)
     private String eventType;
-    @Column(nullable = false)
     private Long alertRuleId;
     private Long savedSearchId;
     private Long propertyId;

@@ -1,0 +1,721 @@
+{
+    "info":  {
+                 "name":  "SCRUM-81 Property contact requests",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+                 "description":  "Apply property-service V25 (V24 is reserved for lender applications), and notification-service V3 (normally applied by Flyway at startup). Start updated notification-service before enabling CONTACT_REQUEST_PUBLISHER_ENABLED=true in property-service. Use the same RabbitMQ exchange/queue and CONTACT_REQUEST_ROUTING_KEY in both services. RabbitMQ publisher confirms and mandatory routing are required (already in application.yml). Alerts monitoring can stay disabled. Without the publisher enabled, request/CRM/outbox commit and delivery stays PENDING. SENT means broker-confirmed, not inbox storage or email delivery. Email follows existing opt-in and verified recipient preferences. No SES call is made by the property endpoint. Each outbox row retries with stable eventId; after bounded attempts FAILED remains visible. Never replay by making a new event ID. Use two registered accounts: requesterToken and professionalToken (a REALTOR persona, set through the existing profile endpoint); outsiderToken is a third nonparticipant. Directory returns only ID/display name, not private contact details or evidence of professional credential verification. In the real UI the user must select the professional and explicitly consent to sharing contact details and message about this property. These examples set consent=true only to demonstrate that already-confirmed action. Set a known internal propertyId, select professionalUserId from the directory, and generate a new idempotencyKey for a distinct enquiry. Same requester/key/normalized body replays without creating another CRM lead or notification. Phone-only new enquiries do not infer an existing client\u0027s identity. Historical request property and lead IDs remain if those source rows are removed. Delivery preferences support NEW_MATCH and CONTACT_REQUEST independently. PUT /api/notifications/preferences is full replacement: include CONTACT_REQUEST to enable contact notifications; [] disables both types. Defaults enable both types in-app with email off. The optional preferences folder demonstrates in-app-only contact delivery and intentionally changes those settings."
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:8081"
+                     },
+                     {
+                         "key":  "notificationUrl",
+                         "value":  "http://localhost:8082"
+                     },
+                     {
+                         "key":  "requesterToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "professionalToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "outsiderToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "propertyId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "professionalUserId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "requestId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "leadId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "idempotencyKey",
+                         "value":  ""
+                     }
+                 ],
+    "event":  [
+                  {
+                      "listen":  "prerequest",
+                      "script":  {
+                                     "type":  "text/javascript",
+                                     "exec":  [
+                                                  "if (!pm.collectionVariables.get(\"idempotencyKey\")) pm.collectionVariables.set(\"idempotencyKey\", \"postman-contact-\" + pm.variables.replaceIn(\"{{$guid}}\"));"
+                                              ]
+                                 }
+                  }
+              ],
+    "item":  [
+                 {
+                     "name":  "Submit and replay",
+                     "item":  [
+                                  {
+                                      "name":  "List selectable professionals",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests/professionals?page=0\u0026size=20",
+                                                      "description":  "Choose a REALTOR account ID and set professionalUserId. Empty content means no such registered account exists."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Submit contact request",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "201 for a new idempotency key. Saves consent, professional-owned client/lead/activity and delivery event atomically.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"requester@example.com\",\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": true,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 201\", () =\u003e pm.response.to.have.status(201));",
+                                                                                    "const v=pm.response.json(); pm.collectionVariables.set(\"requestId\",v.id); pm.collectionVariables.set(\"leadId\",v.leadId);",
+                                                                                    "pm.test(\"Saved submission\",()=\u003e{const v=pm.response.json();pm.expect(v.status).to.eql(\"SUBMITTED\");pm.expect([\"PENDING\",\"SENT\",\"FAILED\"]).to.include(v.deliveryStatus);});"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Replay identical request",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "200 with the same request and lead ID; no duplicate event or activity.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"requester@example.com\",\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": true,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));",
+                                                                                    "pm.test(\"Same request\",()=\u003epm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get(\"requestId\"))));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Read request and delivery status",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests/{{requestId}}",
+                                                      "description":  "200. Requester can see their own consented contact details and broker delivery status."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Changed input with same key",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "409. Original saved request stays unchanged.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"requester@example.com\",\n  \"contactPhone\": null,\n  \"message\": \"Changed enquiry\",\n  \"consent\": true,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 409\", () =\u003e pm.response.to.have.status(409));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Professional workflow",
+                     "item":  [
+                                  {
+                                      "name":  "Professional reads request",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{professionalToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests/{{requestId}}",
+                                                      "description":  "200 only when professionalToken belongs to the selected professional."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Professional reads CRM lead",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{professionalToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/leads/{{leadId}}",
+                                                      "description":  "200, stage NEW and source PROPERTY_CONTACT_REQUEST. Lead is owned by the selected professional."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Professional reads notification inbox",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{professionalToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{notificationUrl}}/api/notifications?page=0\u0026size=20",
+                                                      "description":  "After publisher SENT and consumer processing: CONTACT_REQUEST inbox item, alertRuleId null, propertyId populated and shared details in payload. Requires in-app delivery enabled."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\", () =\u003e pm.response.to.have.status(200));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Ownership and invalid input",
+                     "item":  [
+                                  {
+                                      "name":  "Outsider cannot read contact details",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{outsiderToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests/{{requestId}}",
+                                                      "description":  "404, even for an existing request."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 404\", () =\u003e pm.response.to.have.status(404));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Requester cannot read professional CRM lead",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/leads/{{leadId}}",
+                                                      "description":  "404; the contact request does not grant access to the recipient\u0027s CRM."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 404\", () =\u003e pm.response.to.have.status(404));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Missing consent",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "400 before any request, lead or event is saved.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"requester@example.com\",\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": false,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 400\", () =\u003e pm.response.to.have.status(400));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Missing contact details",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "400.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": null,\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": true,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 400\", () =\u003e pm.response.to.have.status(400));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Invalid email",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "400.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"not an email\",\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": true,\n  \"consentVersion\": \"property-contact-v1\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 400\", () =\u003e pm.response.to.have.status(400));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Invalid consent version",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Idempotency-Key",
+                                                                         "value":  "{{idempotencyKey}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests",
+                                                      "description":  "400.",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"professionalUserId\": \"{{professionalUserId}}\",\n  \"contactName\": \"Postman requester\",\n  \"contactEmail\": \"requester@example.com\",\n  \"contactPhone\": null,\n  \"message\": \"I would like to arrange a viewing.\",\n  \"consent\": true,\n  \"consentVersion\": \"old\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 400\", () =\u003e pm.response.to.have.status(400));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Invalid pagination",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{requesterToken}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/contact-requests/professionals?size=101",
+                                                      "description":  "400."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 400\", () =\u003e pm.response.to.have.status(400));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Optional professional delivery preferences",
+                     "item":  [
+                                  {
+                                      "request":  {
+                                                      "body":  {
+                                                                   "raw":  "{ \"inAppEnabled\": true, \"emailEnabled\": false, \"enabledEventTypes\": [\"CONTACT_REQUEST\"], \"emailCadence\": \"IMMEDIATE\" }",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               },
+                                                                   "mode":  "raw"
+                                                               },
+                                                      "description":  "Optional: replaces all delivery preferences with in-app enabled, email disabled, CONTACT_REQUEST enabled and IMMEDIATE cadence. Add NEW_MATCH to enabledEventTypes to retain saved-search alerts too. Email opt-in requires a verified email claim and SES configuration.",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "method":  "PUT",
+                                                      "auth":  {
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "type":  "string",
+                                                                                      "value":  "{{professionalToken}}"
+                                                                                  }
+                                                                              ],
+                                                                   "type":  "bearer"
+                                                               },
+                                                      "url":  "{{notificationUrl}}/api/notifications/preferences"
+                                                  },
+                                      "name":  "Enable contact notifications in-app (full preference replacement)",
+                                      "event":  [
+                                                    {
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "pm.test(\"HTTP 200\",()=\u003epm.response.to.have.status(200));"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   },
+                                                        "listen":  "test"
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 }
+             ]
+}

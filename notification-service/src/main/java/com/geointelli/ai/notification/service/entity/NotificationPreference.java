@@ -23,6 +23,7 @@ public class NotificationPreference {
     private boolean inAppEnabled = true;
     private boolean emailEnabled;
     private boolean newMatchEnabled = true;
+    private boolean contactRequestEnabled = true;
     @Enumerated(EnumType.STRING)
     private EmailCadence emailCadence = EmailCadence.DAILY;
     private String emailAddress;

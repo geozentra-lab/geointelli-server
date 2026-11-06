@@ -1,6 +1,9 @@
 package com.geointelli.ai.property.service.repository;
 
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import com.geointelli.ai.property.service.entity.UserPersona;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geointelli.ai.property.service.entity.User;
 
 public interface UserRepository extends JpaRepository<User, Long> {
+    /** Orders multi-user contact submissions without blocking ordinary foreign-key checks. */
+    @Query(value = "SELECT * FROM users WHERE id = :id FOR NO KEY UPDATE", nativeQuery = true)
+    Optional<User> lockForContact(@Param("id") Long id);
+
+    Page<User> findByPersona(UserPersona persona, Pageable pageable);
     Optional<User> findByKeycloakUserId(String keycloakUserId);
     Optional<User> findByEmail(String email);
     boolean existsByKeycloakUserId(String keycloakUserId);

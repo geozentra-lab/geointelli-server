@@ -75,7 +75,7 @@ public class EmailDeliveryStateServiceImpl implements EmailDeliveryStateService 
             delivery.setCreatedAt(now);
             delivery.setSubject(preference.getEmailCadence() == EmailCadence.IMMEDIATE ? "New GeoZentra alert"
                     : "Your GeoZentra alert digest");
-            StringBuilder body = new StringBuilder("Your saved-search alerts:\n\n");
+            StringBuilder body = new StringBuilder("Your GeoZentra notifications:\n\n");
             for (EmailQueueRepository.Item item : items) {
                 body.append(item.ruleName() == null ? "Saved search" : item.ruleName()).append(": ")
                         .append(item.message()).append('\n');
