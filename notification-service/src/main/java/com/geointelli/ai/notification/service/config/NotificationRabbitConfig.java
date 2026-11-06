@@ -31,6 +31,7 @@ public class NotificationRabbitConfig {
         DirectExchange dead = new DirectExchange(settings.getDeadLetterExchange(), true, false);
         Queue dlq = new Queue(settings.getDeadLetterQueue(), true);
         return new Declarables(main, queue, BindingBuilder.bind(queue).to(main).with(settings.getRoutingKey()),
+                BindingBuilder.bind(queue).to(main).with(settings.getContactRoutingKey()),
                 dead, dlq, BindingBuilder.bind(dlq).to(dead).with(settings.getDeadLetterRoutingKey()));
     }
 

@@ -17,7 +17,7 @@ public record AlertEventEnvelopeDTO(
         @NotNull Integer eventVersion,
         @NotBlank @Size(max = 40) String eventType,
         @NotBlank @Size(max = 255) String userId,
-        @NotNull @Positive Long alertRuleId,
+        @Positive Long alertRuleId,
         @Positive Long savedSearchId, @Positive Long propertyId,
         @NotBlank @Size(max = 160) String sourceChangeId,
         @NotNull Instant occurredAt, @NotNull JsonNode payload) {

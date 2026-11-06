@@ -36,7 +36,7 @@ class NotificationPreferenceControllerTest {
     @MockitoBean
     JwtDecoder decoder;
     private static final String VALID = "{\"inAppEnabled\":true,\"emailEnabled\":false,\"enabledEventTypes\":[\"NEW_MATCH\"],\"emailCadence\":\"DAILY\"}";
-    private final NotificationPreferencesDTO defaults = new NotificationPreferencesDTO(true, false, Set.of("NEW_MATCH"),
+    private final NotificationPreferencesDTO defaults = new NotificationPreferencesDTO(true, false, Set.of("NEW_MATCH", "CONTACT_REQUEST"),
             EmailCadence.DAILY, null, null, null, false);
 
     @BeforeEach

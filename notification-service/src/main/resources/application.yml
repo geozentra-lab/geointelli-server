@@ -67,6 +67,7 @@ notifications:
   exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
   queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
   routing-key: ${ALERTS_ROUTING_KEY:alerts.v1}
+  contact-routing-key: ${CONTACT_REQUEST_ROUTING_KEY:contacts.v1}
   dead-letter-exchange: ${NOTIFICATIONS_DLX:geozentra.notifications.dead}
   dead-letter-queue: ${NOTIFICATIONS_DLQ:geozentra.notifications.alerts.dlq}
   dead-letter-routing-key: ${NOTIFICATIONS_DLQ_ROUTING_KEY:alerts.failed.v1}

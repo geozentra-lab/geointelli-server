@@ -27,6 +27,8 @@ public class NotificationProperties {
     @NotBlank
     private String routingKey = "alerts.v1";
     @NotBlank
+    private String contactRoutingKey = "contacts.v1";
+    @NotBlank
     private String deadLetterExchange = "geozentra.notifications.dead";
     @NotBlank
     private String deadLetterQueue = "geozentra.notifications.alerts.dlq";
