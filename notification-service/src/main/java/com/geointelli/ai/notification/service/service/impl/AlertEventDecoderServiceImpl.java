@@ -14,6 +14,7 @@ import com.geointelli.ai.notification.service.config.NotificationProperties;
 import com.geointelli.ai.notification.service.dto.AlertEventEnvelopeDTO;
 import com.geointelli.ai.notification.service.dto.DecodedAlertEventDTO;
 import com.geointelli.ai.notification.service.dto.NewMatchPayloadDTO;
+import com.geointelli.ai.notification.service.dto.ContactRequestPayloadDTO;
 import com.geointelli.ai.notification.service.exception.InvalidAlertEventException;
 import com.geointelli.ai.notification.service.service.AlertEventDecoderService;
 import tools.jackson.databind.JsonNode;
@@ -22,7 +23,7 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Supports the producer's NEW_MATCH v1 events; future types/versions are
+ * Supports NEW_MATCH and CONTACT_REQUEST v1 events; future types/versions are
  * retained in the DLQ for recovery.
  */
 @Service
@@ -52,6 +53,10 @@ public class AlertEventDecoderServiceImpl implements AlertEventDecoderService {
             throw invalid("INVALID_ENVELOPE");
         if (!"property-service".equals(event.source()) || event.eventVersion() != 1)
             throw invalid("UNSUPPORTED_SOURCE_OR_VERSION");
+        if ("CONTACT_REQUEST".equals(event.eventType())) return decodeContact(event);
+        // Alert rules remain mandatory for NEW_MATCH; contact requests are not alert rules.
+        if ("NEW_MATCH".equals(event.eventType()) && event.alertRuleId() == null)
+            throw invalid("INVALID_ENVELOPE");
         if (!"NEW_MATCH".equals(event.eventType()))
             throw invalid("UNSUPPORTED_EVENT_TYPE");
         if (event.savedSearchId() == null || event.propertyId() != null || !event.payload().isObject())
@@ -78,6 +83,27 @@ public class AlertEventDecoderServiceImpl implements AlertEventDecoderService {
         } catch (NoSuchAlgorithmException impossible) {
             throw new IllegalStateException("SHA-256 unavailable", impossible);
         }
+    }
+
+    private DecodedAlertEventDTO decodeContact(AlertEventEnvelopeDTO event) {
+        if (event.alertRuleId() != null || event.savedSearchId() != null || event.propertyId() == null
+                || !event.payload().isObject()) throw invalid("INVALID_CONTACT_TARGET");
+        ContactRequestPayloadDTO payload;
+        try { payload = json.treeToValue(event.payload(), ContactRequestPayloadDTO.class); }
+        catch (RuntimeException invalidPayload) { throw invalid("INVALID_CONTACT_PAYLOAD"); }
+        if (payload == null || !validator.validate(payload).isEmpty()
+                || ((payload.contactEmail() == null || payload.contactEmail().isBlank())
+                    && (payload.contactPhone() == null || payload.contactPhone().isBlank())))
+            throw invalid("INVALID_CONTACT_PAYLOAD");
+        if (!event.propertyId().equals(payload.propertyId())
+                || !event.eventId().equals("property-contact-" + payload.contactRequestId())
+                || !event.sourceChangeId().equals("contact-request:" + payload.contactRequestId()))
+            throw invalid("INCONSISTENT_CONTACT_PAYLOAD");
+        try {
+            String fingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(json.writeValueAsString(sorted(json.valueToTree(event))).getBytes(StandardCharsets.UTF_8)));
+            return new DecodedAlertEventDTO(event, null, fingerprint, payload);
+        } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
     }
 
     /**

@@ -2,6 +2,7 @@ package com.geointelli.ai.notification.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -131,7 +132,7 @@ class NotificationEmailIntegrationTest {
         var defaults = preferences.get();
         assertTrue(defaults.inAppEnabled());
         assertFalse(defaults.emailEnabled());
-        assertEquals(Set.of("NEW_MATCH"), defaults.enabledEventTypes());
+        assertEquals(Set.of("NEW_MATCH", "CONTACT_REQUEST"), defaults.enabledEventTypes());
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM notification_preferences", Integer.class));
         event(1);
         assertEquals(1, inbox.list(0, 20).totalElements());
@@ -341,5 +342,52 @@ class NotificationEmailIntegrationTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    private void contactEvent() throws Exception {
+        try (var stream = getClass().getResourceAsStream("/contact-request-v1.json")) {
+            consumption.consume(decoder.decode(stream.readAllBytes()));
+        }
+    }
+
+    @Test
+    void contactOnlyEmailDispatchesEvenWhenSavedSearchAlertsAreDisabled() throws Exception {
+        authenticate("professional", "professional@example.com", true);
+        preferences.update(new NotificationPreferencesRequest(true, true, Set.of("CONTACT_REQUEST"), EmailCadence.IMMEDIATE));
+        contactEvent();
+        contactEvent();
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_email_queue", Integer.class));
+        assertTrue(worker.processNext());
+        assertEquals("ACCEPTED", status());
+        assertFalse(worker.processNext());
+        verify(ses, times(1)).sendEmail(argThat((SendEmailRequest request) ->
+            request.content().simple().body().text().data().contains("New property contact request")));
+    }
+
+    @Test
+    void optingOutOfSavedSearchesDoesNotSuppressPendingContactEmail() throws Exception {
+        authenticate("professional", "professional@example.com", true);
+        preferences.update(new NotificationPreferencesRequest(true, true, Set.of("NEW_MATCH", "CONTACT_REQUEST"), EmailCadence.IMMEDIATE));
+        contactEvent();
+        consumption.consume(decoder.decode(EventTestFixtures.text().replace("test-keycloak-user", "professional")
+            .getBytes(StandardCharsets.UTF_8)));
+        preferences.update(new NotificationPreferencesRequest(true, true, Set.of("CONTACT_REQUEST"), EmailCadence.IMMEDIATE));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_email_queue WHERE status='SUPPRESSED'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_email_queue WHERE status='PENDING'", Integer.class));
+        assertTrue(worker.processNext());
+        assertEquals("ACCEPTED", status());
+        verify(ses, times(1)).sendEmail(argThat((SendEmailRequest request) ->
+            request.content().simple().body().text().data().contains("New property contact request")));
+    }
+
+    @Test
+    void optingOutOfContactsRetainsReceiptWithoutCreatingNotification() throws Exception {
+        authenticate("professional", "professional@example.com", true);
+        preferences.update(new NotificationPreferencesRequest(true, true, Set.of("NEW_MATCH"), EmailCadence.IMMEDIATE));
+        contactEvent();
+        assertEquals(0, notifications.count());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM consumed_alert_events", Integer.class));
+        assertFalse(worker.processNext());
+        verifyNoInteractions(ses);
     }
 }

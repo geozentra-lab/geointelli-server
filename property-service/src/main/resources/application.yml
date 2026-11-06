@@ -43,6 +43,17 @@ mapillary:
 images:
   local-directory: ${IMAGES_LOCAL_DIRECTORY:images}
 
+contact-requests:
+  publisher-enabled: ${CONTACT_REQUEST_PUBLISHER_ENABLED:false}
+  exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
+  queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
+  routing-key: ${CONTACT_REQUEST_ROUTING_KEY:contacts.v1}
+  poll-delay-millis: ${CONTACT_REQUEST_POLL_DELAY_MILLIS:5000}
+  batch-size: ${CONTACT_REQUEST_BATCH_SIZE:20}
+  max-attempts: ${CONTACT_REQUEST_MAX_ATTEMPTS:10}
+  confirm-timeout-seconds: ${CONTACT_REQUEST_CONFIRM_TIMEOUT_SECONDS:10}
+  retry-base-seconds: ${CONTACT_REQUEST_RETRY_BASE_SECONDS:30}
+
 alerts:
   enabled: ${ALERTS_ENABLED:false}
   poll-delay-millis: ${ALERTS_POLL_DELAY_MILLIS:30000}

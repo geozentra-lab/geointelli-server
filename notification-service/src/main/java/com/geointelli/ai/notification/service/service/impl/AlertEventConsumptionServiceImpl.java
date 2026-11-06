@@ -51,7 +51,9 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
             return false;
         }
         var preference = preferences.lockForRecipient(event.userId());
-        if (!preference.isNewMatchEnabled() || (!preference.isInAppEnabled() && !preference.isEmailEnabled()))
+        boolean contact = decoded.contactPayload() != null;
+        if ((contact ? !preference.isContactRequestEnabled() : !preference.isNewMatchEnabled())
+                || (!preference.isInAppEnabled() && !preference.isEmailEnabled()))
             return true;
         Notification notification = new Notification();
         notification.setInAppVisible(preference.isInAppEnabled());
@@ -65,10 +67,16 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
         notification.setOccurredAt(event.occurredAt());
         notification.setCreatedAt(receivedAt);
         notification.setPayload(event.payload().toString());
-        long count = decoded.payload().newMatchCount();
-        notification.setTitle("New matching properties");
-        notification.setMessage(count == 1 ? "1 property now matches your saved search."
-                : count + " properties now match your saved search.");
+        if (contact) {
+            notification.setTitle("New property contact request");
+            notification.setMessage("A user requested contact about property " + event.propertyId()
+                + ". Open GeoZentra to view the request and contact details.");
+        } else {
+            long count = decoded.payload().newMatchCount();
+            notification.setTitle("New matching properties");
+            notification.setMessage(count == 1 ? "1 property now matches your saved search."
+                    : count + " properties now match your saved search.");
+        }
         notifications.saveAndFlush(notification);
         if (preference.isEmailEnabled())
             emailQueue.enqueue(notification.getId(), event.userId(), receivedAt);
