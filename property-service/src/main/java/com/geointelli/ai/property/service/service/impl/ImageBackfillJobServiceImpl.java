@@ -2,6 +2,9 @@ package com.geointelli.ai.property.service.service.impl;
 
 import java.time.Instant;
 import java.util.Optional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,6 +100,12 @@ public class ImageBackfillJobServiceImpl implements ImageBackfillJobService {
             dto.setResults(results.findByJob_IdOrderByProperty_IdAsc(id).stream().map(mapper::toDTO).toList());
             return dto;
         });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ImageBackfillJobDTO> list(Pageable pageable) {
+        return jobs.findAll(pageable).map(mapper::toDTO);
     }
 
     private ImageBackfillJob getForUpdate(Long id) {
