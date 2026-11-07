@@ -23,10 +23,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -39,6 +41,7 @@ public class AdminImportJobSecurityTest {
 
     private static final String LIST_URL = "/api/admin/import-jobs";
     private static final String DETAIL_URL = "/api/admin/import-jobs/7";
+    private static final String RETRY_URL = "/api/admin/import-jobs/4f1c7d2e-9b2a-4c1e-8f3a-2d9e6b7c1a55/retry";
 
     @Autowired
     MockMvc mockMvc;
@@ -69,8 +72,11 @@ public class AdminImportJobSecurityTest {
 
         ImportJobPageDTO page = new ImportJobPageDTO();
         page.setJobs(new PageResponse<>(List.of(), 0, 20, 0, 0, true, true));
-        when(adminImportJobService.listJobs(anyInt(), anyInt())).thenReturn(page);
-        when(adminImportJobService.getJob(anyLong())).thenReturn(new ImportJobDTO());
+        when(adminImportJobService.listJobs(anyInt(), anyInt(), any(), any())).thenReturn(page);
+        when(adminImportJobService.getJob(anyString())).thenReturn(new ImportJobDTO());
+        ImportJobDTO queued = new ImportJobDTO();
+        queued.setId("8a9f1b2c-3d4e-4f50-9a6b-7c8d9e0f1a2b");
+        when(adminImportJobService.retryJob(anyString(), any())).thenReturn(queued);
     }
 
     @Nested
@@ -82,6 +88,7 @@ public class AdminImportJobSecurityTest {
         void whenNoToken_thenReturn401() throws Exception {
             mockMvc.perform(get(LIST_URL)).andExpect(status().isUnauthorized());
             mockMvc.perform(get(DETAIL_URL)).andExpect(status().isUnauthorized());
+            mockMvc.perform(post(RETRY_URL)).andExpect(status().isUnauthorized());
             verifyNoInteractions(adminImportJobService);
         }
 
@@ -89,6 +96,8 @@ public class AdminImportJobSecurityTest {
         @DisplayName("When the token is invalid, then return 401 without calling the service")
         void whenInvalidToken_thenReturn401() throws Exception {
             mockMvc.perform(get(LIST_URL).header("Authorization", "Bearer bad-token"))
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(post(RETRY_URL).header("Authorization", "Bearer bad-token"))
                     .andExpect(status().isUnauthorized());
             verifyNoInteractions(adminImportJobService);
         }
@@ -100,18 +109,23 @@ public class AdminImportJobSecurityTest {
                     .andExpect(status().isForbidden());
             mockMvc.perform(get(DETAIL_URL).header("Authorization", "Bearer user-token"))
                     .andExpect(status().isForbidden());
+            mockMvc.perform(post(RETRY_URL).header("Authorization", "Bearer user-token"))
+                    .andExpect(status().isForbidden());
             verifyNoInteractions(adminImportJobService);
         }
 
         @Test
-        @DisplayName("When the user has the admin realm role, then return 200")
+        @DisplayName("When the user has the admin realm role, then list and detail return 200 and retry returns 202 with the caller")
         void whenUserIsAdmin_thenReturn200() throws Exception {
             mockMvc.perform(get(LIST_URL).header("Authorization", "Bearer admin-token"))
                     .andExpect(status().isOk());
             mockMvc.perform(get(DETAIL_URL).header("Authorization", "Bearer admin-token"))
                     .andExpect(status().isOk());
-            verify(adminImportJobService).listJobs(0, 20);
-            verify(adminImportJobService).getJob(7L);
+            mockMvc.perform(post(RETRY_URL).header("Authorization", "Bearer admin-token"))
+                    .andExpect(status().isAccepted());
+            verify(adminImportJobService).listJobs(0, 20, null, null);
+            verify(adminImportJobService).getJob("7");
+            verify(adminImportJobService).retryJob("4f1c7d2e-9b2a-4c1e-8f3a-2d9e6b7c1a55", "user-admin-token");
         }
     }
 }
