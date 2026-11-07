@@ -20,6 +20,13 @@ spring:
         # Loads lazy associations for up to 100 parents per query instead of one query each.
         default_batch_fetch_size: 100
 
+  servlet:
+    multipart:
+      # CSV uploads for /api/ingestion/import/*; a folder upload sends up to 13 files in one request.
+      max-file-size: ${INGESTION_MAX_UPLOAD_SIZE:1024MB}
+      max-request-size: ${INGESTION_MAX_REQUEST_SIZE:4096MB}
+      file-size-threshold: 1MB
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:geozentra}
     driver-class-name: org.postgresql.Driver
@@ -48,6 +55,30 @@ mapillary:
 
 images:
   local-directory: ${IMAGES_LOCAL_DIRECTORY:images}
+
+# Background CSV import and Miami-Dade ingestion jobs (SCRUM-188).
+ingestion:
+  input:
+    # s3: inputs are shared, any instance can run or retry a job. local: jobs are pinned to this instance.
+    storage: ${INGESTION_INPUT_STORAGE:s3}
+    s3-bucket: ${INGESTION_S3_BUCKET:${aws.s3.bucket}}
+    s3-prefix: ${INGESTION_S3_PREFIX:ingestion/inputs}
+    local-directory: ${INGESTION_INPUT_DIRECTORY:ingestion-inputs}
+    # Files in this directory may be named (stagedFile=...) instead of uploaded; empty disables it.
+    staging-directory: ${INGESTION_STAGING_DIRECTORY:}
+  jobs:
+    enabled: ${INGESTION_JOBS_ENABLED:true}
+    instance-id: ${INGESTION_INSTANCE_ID:}
+    poll-delay-millis: ${INGESTION_JOBS_POLL_DELAY_MILLIS:5000}
+    lease-seconds: ${INGESTION_JOBS_LEASE_SECONDS:600}
+    heartbeat-seconds: 30
+    queue-deadline-seconds: ${INGESTION_JOBS_QUEUE_DEADLINE_SECONDS:600}
+    csv-batch-size: ${INGESTION_CSV_BATCH_SIZE:500}
+    max-items-per-job: 1000
+    api-workers: ${INGESTION_API_WORKERS:10}
+    api-batch-size: 50
+    api-batch-pause-millis: 2000
+    api-attempts: 3
 
 contact-requests:
   publisher-enabled: ${CONTACT_REQUEST_PUBLISHER_ENABLED:false}

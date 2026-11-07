@@ -23,5 +23,17 @@ public interface PropertyImageService {
      */
     PropertyImage save(Property property, ImageSaveRequest request, boolean primary, int order);
 
+    /**
+     * Downloads an image and detects its format, without touching the database; call it outside a transaction.
+     * @throws com.geointelli.ai.property.service.exception.ImageDownloadException if the download or format detection fails
+     */
+    ImageSaveRequest download(String imageUrl);
+
+    /**
+     * Stores a downloaded image unless the property already has one with the same URL or content.
+     * @return saved image, or null if it was skipped
+     */
+    PropertyImage saveDownloaded(Property property, ImageSaveRequest request, boolean primary, int order);
+
     public List<PropertyImageDTO> getImages(Long propertyId);                                 
 }
