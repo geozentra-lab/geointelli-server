@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.enums.IngestionDataset;
 import com.geointelli.ai.property.service.service.CountyService;
 import com.geointelli.ai.property.service.service.PropertyImageService;
 
@@ -50,9 +51,13 @@ import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Parses county CSV files with commons-csv and persists one entity per row. The whole-file methods keep
+ * their single transaction; the public row importers expose the same per-row logic to background jobs.
+ */
 @Service
 @Slf4j
-@AllArgsConstructor 
+@AllArgsConstructor
 public class CsvImportServiceImpl implements CsvImportService {
         private PropertyImportMappingRepository propertyImportMappingRepository;
         private EntityManager entityManager;
@@ -63,7 +68,13 @@ public class CsvImportServiceImpl implements CsvImportService {
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importProperties(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRecords(csvPath, record -> {
+                importRecords(csvPath, propertyRowImporter(sourceCounty, sourceState));
+                importParentRelationships(csvPath, sourceCounty, sourceState);
+        }
+
+        @Override
+        public Consumer<CSVRecord> propertyRowImporter(String sourceCounty, String sourceState) {
+                return record -> {
                         Long sourcePropertyId = Long.valueOf(record.get("id").trim());
                         countyService.ensureExists(sourceCounty, sourceState);
                         var existingMapping = propertyImportMappingRepository.findBySourceCountyAndSourceStateAndSourcePropertyId(
@@ -96,7 +107,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                         property.setStatus(emptyToNull(record.get("status")));
                         property.setSubdivision(emptyToNull(record.get("subdivision")));
                         property.setUnitCount(parseInteger(record.get("unit_count")));
-                        property.setYearBuilt(emptyToNull(record.get("year_built"))); 
+                        property.setYearBuilt(emptyToNull(record.get("year_built")));
                         log.info("inserting property with folio {}", property.getFolio());
                         entityManager.persist(property);
                         PropertyImportMapping mapping = existingMapping.orElseGet(PropertyImportMapping::new);
@@ -108,20 +119,29 @@ public class CsvImportServiceImpl implements CsvImportService {
                         if (existingMapping.isEmpty()) {
                                 entityManager.persist(mapping);
                         }
-                });
-                importParentRelationships(csvPath, sourceCounty, sourceState);
+                };
         }
 
         private void importParentRelationships(Path csvPath, String sourceCounty, String sourceState)
                         throws IOException {
+                if (!hasParentLinks(csvPath)) {
+                        return;
+                }
+                importRecords(csvPath, parentLinkImporter(sourceCounty, sourceState));
+        }
+
+        @Override
+        public boolean hasParentLinks(Path csvPath) throws IOException {
                 try (Reader reader = Files.newBufferedReader(csvPath, StandardCharsets.UTF_8);
                         CSVParser parser = CSVFormat.DEFAULT.builder().setHeader()
                                 .setSkipHeaderRecord(true).get().parse(reader)) {
-                        if (!parser.getHeaderMap().containsKey("parent_property_id")) {
-                                return;
-                        }
+                        return parser.getHeaderMap().containsKey("parent_property_id");
                 }
-                importRecords(csvPath, record -> {
+        }
+
+        @Override
+        public Consumer<CSVRecord> parentLinkImporter(String sourceCounty, String sourceState) {
+                return record -> {
                         Long parentSourceId = parseLong(record.get("parent_property_id"));
                         if (parentSourceId == null) {
                                 return;
@@ -139,7 +159,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                         assignCounty(parent, sourceCounty, sourceState);
                         validateParentRelationship(child, parent);
                         child.setParentProperty(parent);
-                });
+                };
         }
 
         private void validateParentRelationship(Property child, Property parent) {
@@ -158,71 +178,19 @@ public class CsvImportServiceImpl implements CsvImportService {
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importAddresses(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Address address = new Address();
-                        address.setProperty(property);
-                        address.setAddress(emptyToNull(record.get("address")));
-                        address.setBuildingNumber(parseInteger(record.get("building_number")));
-                        address.setCity(emptyToNull(record.get("city")));
-                        address.setHouseNumberSuffix(emptyToNull(record.get("house_number_suffix")));
-                        address.setMessage(emptyToNull(record.get("message")));
-                        address.setStreetName(emptyToNull(record.get("street_name")));
-                        address.setStreetNumber(parseInteger(record.get("street_number")));
-                        address.setStreetPrefix(emptyToNull(record.get("street_prefix")));
-                        address.setStreetSuffix(emptyToNull(record.get("street_suffix")));
-                        address.setStreetSuffixDirection(emptyToNull(record.get("street_suffix_direction")));
-                        address.setUnit(emptyToNull(record.get("unit")));
-                        address.setZip(emptyToNull(record.get("zip")));
-
-                        entityManager.persist(address);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.ADDRESSES));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importAssessments(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Assessment assessment = new Assessment();
-                        assessment.setProperty(property);
-                        assessment.setAssessedValue(parseBigDecimal(record.get("assessed_value")));
-                        assessment.setBuildingOnlyValue(parseBigDecimal(record.get("building_only_value")));
-                        assessment.setExtraFeatureValue(parseBigDecimal(record.get("extra_feature_value")));
-                        assessment.setLandValue(parseBigDecimal(record.get("land_value")));
-                        assessment.setTotalValue(parseBigDecimal(record.get("total_value")));
-                        assessment.setYear(parseInteger(record.get("year")));
-                        assessment.setMessage(emptyToNull(record.get("message")));
-
-                        entityManager.persist(assessment);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.ASSESSMENTS));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importBuildings(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Building building = new Building();
-                        building.setProperty(property);
-                        building.setActual(parseInteger(record.get("actual")));
-                        building.setActualArea(parseInteger(record.get("actual_area")));
-                        building.setAdjustedBasePrice(parseDouble(record.get("adjusted_base_price")));
-                        building.setBuildingNo(parseInteger(record.get("building_no")));
-                        building.setDepreciatedValue(parseBigDecimal(record.get("depreciated_value")));
-                        building.setEffective(parseInteger(record.get("effective")));
-                        building.setEffectiveArea(parseInteger(record.get("effective_area")));
-                        building.setGrossArea(parseInteger(record.get("gross_area")));
-                        building.setHeatedArea(parseBigDecimal(record.get("heated_area")));
-                        building.setImprovementModelDesc(emptyToNull(record.get("improvement_model_desc")));
-                        building.setMessage(emptyToNull(record.get("message")));
-                        building.setPercentComp(parseDouble(record.get("percent_comp")));
-                        building.setPercentageGood(parseDouble(record.get("percentage_good")));
-                        building.setReplacementCostNew(parseBigDecimal(record.get("replacement_cost_new")));
-                        building.setRollYear(parseInteger(record.get("roll_year")));
-                        building.setSegNo(parseInteger(record.get("seg_no")));
-                        building.setTotalAdjustedPoints(parseInteger(record.get("total_adjusted_points")));
-                        building.setTraversePoints(emptyToNull(record.get("traverse_points")));
-
-                        entityManager.persist(building);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.BUILDINGS));
         }
 
         @Override
@@ -268,156 +236,239 @@ public class CsvImportServiceImpl implements CsvImportService {
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importLands(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Land entity = new Land();
-                        entity.setAdjustedUnitPrice(parseDouble(record.get("adjusted_unit_price")));
-                        entity.setCalculatedValue(parseBigDecimal(record.get("calculated_value")));
-                        entity.setDepth(parseDouble(record.get("depth")));
-                        entity.setFrontFeet(parseDouble(record.get("front_feet")));
-                        entity.setLandUse(emptyToNull(record.get("land_use")));
-                        entity.setLandlineType(emptyToNull(record.get("landline_type")));
-                        entity.setMessage(emptyToNull(record.get("message")));
-                        entity.setMuniZone(emptyToNull(record.get("muni_zone")));
-                        entity.setMuniZoneDescription(emptyToNull(record.get("muni_zone_description")));
-                        entity.setPaZoneDescription(emptyToNull(record.get("pa_zone_description")));
-                        entity.setPercentCondition(parseDouble(record.get("percent_condition")));
-                        entity.setRollYear(parseInteger(record.get("roll_year")));
-                        entity.setTotalAdjustments(parseInteger(record.get("total_adjustments")));
-                        entity.setUnitType(emptyToNull(record.get("unit_type")));
-                        entity.setUnits(parseDouble(record.get("units")));
-                        entity.setUseCode(emptyToNull(record.get("use_code")));
-                        entity.setZone(emptyToNull(record.get("zone")));
-                        entity.setProperty(property);
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.LANDS));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importSales(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Sale entity = new Sale();
-                        entity.setSaleId(parseInteger(record.get("sale_id")));
-                        entity.setSaleDate(parseLocalDate(record.get("sale_date")));
-                        entity.setSalePrice(parseBigDecimal(record.get("sale_price")));
-                        entity.setSaleType(emptyToNull(record.get("sale_type")));
-                        entity.setInstrumentNumber(emptyToNull(record.get("instrument_number")));
-                        entity.setOfficialRecordBook(emptyToNull(record.get("official_record_book")));
-                        entity.setOfficialRecordPage(emptyToNull(record.get("official_record_page")));
-                        entity.setEncodedRecordBookAndPage(emptyToNull(record.get("encoded_record_book_and_page")));
-                        entity.setSaleInstrument(emptyToNull(record.get("sale_instrument")));
-                        entity.setDocumentStamps(parseInteger(record.get("document_stamps")));
-                        entity.setQualifiedFlag(emptyToNull(record.get("qualified_flag")));
-                        entity.setQualificationDescription(emptyToNull(record.get("qualification_description")));
-                        entity.setQualifiedSYear(parseInteger(record.get("qualifiedsyear")));
-                        entity.setQualifiedSourceCode(emptyToNull(record.get("qualified_source_code")));
-                        entity.setReasonCode(emptyToNull(record.get("reason_code")));
-                        entity.setReviewCode(emptyToNull(record.get("review_code")));
-                        entity.setGrantorName1(emptyToNull(record.get("grantor_name1")));
-                        entity.setGrantorName2(emptyToNull(record.get("grantor_name2")));
-                        entity.setGranteeName1(emptyToNull(record.get("grantee_name1")));
-                        entity.setGranteeName2(emptyToNull(record.get("grantee_name2")));
-                        entity.setVacantFlag(parseBoolean(record.get("vacant_flag")));
-                        entity.setMessage(emptyToNull(record.get("message")));
-                        entity.setProperty(property);
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.SALES));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importTaxes(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Tax entity = new Tax();
-                        entity.setCityExemptionValue(parseBigDecimal(record.get("city_exemption_value")));
-                        entity.setCityTaxableValue(parseBigDecimal(record.get("city_taxable_value")));
-                        entity.setCountyExemptionValue(parseBigDecimal(record.get("county_exemption_value")));
-                        entity.setCountyTaxableValue(parseBigDecimal(record.get("county_taxable_value")));
-                        entity.setRegionalExemptionValue(parseBigDecimal(record.get("regional_exemption_value")));
-                        entity.setRegionalTaxableValue(parseBigDecimal(record.get("regional_taxable_value")));
-                        entity.setSchoolExemptionValue(parseBigDecimal(record.get("school_exemption_value")));
-                        entity.setSchoolTaxableValue(parseBigDecimal(record.get("school_taxable_value")));
-                        entity.setYear(parseInteger(record.get("year")));
-                        entity.setMessage(emptyToNull(record.get("message")));
-                        entity.setProperty(property);
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.TAXES));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importExtraFeatures(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        ExtraFeature entity = new ExtraFeature();
-                        entity.setActualYearBuilt(parseInteger(record.get("actual_year_built")));
-                        entity.setAdjustedUnitPrice(parseDouble(record.get("adjusted_unit_price")));
-                        entity.setDepreciatedValue(parseBigDecimal(record.get("depreciated_value")));
-                        entity.setDescription(emptyToNull(record.get("description")));
-                        entity.setMessage(emptyToNull(record.get("message")));
-                        entity.setPercentCondition(parseDouble(record.get("percent_condition")));
-                        entity.setRollYear(parseInteger(record.get("roll_year")));
-                        entity.setUnits(parseInteger(record.get("units")));
-                        entity.setUseCode(emptyToNull(record.get("use_code")));
-                        entity.setProperty(property);
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.EXTRA_FEATURES));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importParcels(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        Parcel entity = new Parcel();
-                        entity.setId(parseLong(record.get("id")));
-                        entity.setFolio(emptyToNull(record.get("folio")));
-                        entity.setGeom(parseMultiPolygon(record.get("geom")));
-                        entity.setLotSize(parseDouble(record.get("lot_size")));
-                        entity.setProperty(property);
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.PARCELS));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importPropertyValuePredictions(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        PropertyValuePrediction entity = new PropertyValuePrediction();
-                        entity.setPropertyId(property.getId());
-                        entity.setPredictedPrice(parseBigDecimal(record.get("predicted_price")));
-                        entity.setPredictedPriceLow(parseBigDecimal(record.get("predicted_price_low")));
-                        entity.setPredictedPriceHigh(parseBigDecimal(record.get("predicted_price_high")));
-                        entity.setLastSalePrice(parseBigDecimal(record.get("last_sale_price")));
-                        entity.setLastSaleDate(parseLocalDate(record.get("last_sale_date")));
-                        entity.setConfidenceScore(parseInteger(record.get("confidence_score")));
-                        entity.setPredictionDate(parseLocalDate(record.get("prediction_date")));
-                        entity.setModelVersion(emptyToNull(record.get("model_version")));
-                        entityManager.persist(entity);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState,
+                        relatedImporter(IngestionDataset.PROPERTY_VALUE_PREDICTIONS));
         }
 
         @Override
         @Transactional(rollbackOn = IOException.class)
         public void importPropertyImages(Path csvPath, String sourceCounty, String sourceState) throws IOException {
-                importRelatedRecords(csvPath, sourceCounty, sourceState, (record, property) -> {
-                        String originalUrl = emptyToNull(record.get("original_url"));
-                        Boolean primary = parseBoolean(record.get("primary_image"));
-                        Integer displayOrder = parseInteger(record.get("display_order"));
-                        if(displayOrder == 1) {
-                                primary = true;
-                        }
-                        if (originalUrl == null || primary == null || displayOrder == null) {
-                                throw new IllegalArgumentException("original_url, primary_image and display_order are required");
-                        }
-                        propertyImageService.processAndSave(property, originalUrl, primary, displayOrder);
-                });
+                importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.PROPERTY_IMAGES));
+        }
+
+        @Override
+        public Consumer<CSVRecord> relatedRowImporter(IngestionDataset dataset, String sourceCounty, String sourceState) {
+                BiConsumer<CSVRecord, Property> importer = relatedImporter(dataset);
+                return record -> importer.accept(record, mappedProperty(sourceCounty, sourceState, sourceRecordPropertyId(record)));
+        }
+
+        @Override
+        public Property mappedProperty(String sourceCounty, String sourceState, Long sourcePropertyId) {
+                return getMappedProperty(sourceCounty, sourceState, sourcePropertyId);
+        }
+
+        /** Per-row logic of each file keyed by property_id; the property is already resolved. */
+        private BiConsumer<CSVRecord, Property> relatedImporter(IngestionDataset dataset) {
+                return switch (dataset) {
+                        case ADDRESSES -> (record, property) -> {
+                                Address address = new Address();
+                                address.setProperty(property);
+                                address.setAddress(emptyToNull(record.get("address")));
+                                address.setBuildingNumber(parseInteger(record.get("building_number")));
+                                address.setCity(emptyToNull(record.get("city")));
+                                address.setHouseNumberSuffix(emptyToNull(record.get("house_number_suffix")));
+                                address.setMessage(emptyToNull(record.get("message")));
+                                address.setStreetName(emptyToNull(record.get("street_name")));
+                                address.setStreetNumber(parseInteger(record.get("street_number")));
+                                address.setStreetPrefix(emptyToNull(record.get("street_prefix")));
+                                address.setStreetSuffix(emptyToNull(record.get("street_suffix")));
+                                address.setStreetSuffixDirection(emptyToNull(record.get("street_suffix_direction")));
+                                address.setUnit(emptyToNull(record.get("unit")));
+                                address.setZip(emptyToNull(record.get("zip")));
+
+                                entityManager.persist(address);
+                        };
+                        case ASSESSMENTS -> (record, property) -> {
+                                Assessment assessment = new Assessment();
+                                assessment.setProperty(property);
+                                assessment.setAssessedValue(parseBigDecimal(record.get("assessed_value")));
+                                assessment.setBuildingOnlyValue(parseBigDecimal(record.get("building_only_value")));
+                                assessment.setExtraFeatureValue(parseBigDecimal(record.get("extra_feature_value")));
+                                assessment.setLandValue(parseBigDecimal(record.get("land_value")));
+                                assessment.setTotalValue(parseBigDecimal(record.get("total_value")));
+                                assessment.setYear(parseInteger(record.get("year")));
+                                assessment.setMessage(emptyToNull(record.get("message")));
+
+                                entityManager.persist(assessment);
+                        };
+                        case BUILDINGS -> (record, property) -> {
+                                Building building = new Building();
+                                building.setProperty(property);
+                                building.setActual(parseInteger(record.get("actual")));
+                                building.setActualArea(parseInteger(record.get("actual_area")));
+                                building.setAdjustedBasePrice(parseDouble(record.get("adjusted_base_price")));
+                                building.setBuildingNo(parseInteger(record.get("building_no")));
+                                building.setDepreciatedValue(parseBigDecimal(record.get("depreciated_value")));
+                                building.setEffective(parseInteger(record.get("effective")));
+                                building.setEffectiveArea(parseInteger(record.get("effective_area")));
+                                building.setGrossArea(parseInteger(record.get("gross_area")));
+                                building.setHeatedArea(parseBigDecimal(record.get("heated_area")));
+                                building.setImprovementModelDesc(emptyToNull(record.get("improvement_model_desc")));
+                                building.setMessage(emptyToNull(record.get("message")));
+                                building.setPercentComp(parseDouble(record.get("percent_comp")));
+                                building.setPercentageGood(parseDouble(record.get("percentage_good")));
+                                building.setReplacementCostNew(parseBigDecimal(record.get("replacement_cost_new")));
+                                building.setRollYear(parseInteger(record.get("roll_year")));
+                                building.setSegNo(parseInteger(record.get("seg_no")));
+                                building.setTotalAdjustedPoints(parseInteger(record.get("total_adjusted_points")));
+                                building.setTraversePoints(emptyToNull(record.get("traverse_points")));
+
+                                entityManager.persist(building);
+                        };
+                        case LANDS -> (record, property) -> {
+                                Land entity = new Land();
+                                entity.setAdjustedUnitPrice(parseDouble(record.get("adjusted_unit_price")));
+                                entity.setCalculatedValue(parseBigDecimal(record.get("calculated_value")));
+                                entity.setDepth(parseDouble(record.get("depth")));
+                                entity.setFrontFeet(parseDouble(record.get("front_feet")));
+                                entity.setLandUse(emptyToNull(record.get("land_use")));
+                                entity.setLandlineType(emptyToNull(record.get("landline_type")));
+                                entity.setMessage(emptyToNull(record.get("message")));
+                                entity.setMuniZone(emptyToNull(record.get("muni_zone")));
+                                entity.setMuniZoneDescription(emptyToNull(record.get("muni_zone_description")));
+                                entity.setPaZoneDescription(emptyToNull(record.get("pa_zone_description")));
+                                entity.setPercentCondition(parseDouble(record.get("percent_condition")));
+                                entity.setRollYear(parseInteger(record.get("roll_year")));
+                                entity.setTotalAdjustments(parseInteger(record.get("total_adjustments")));
+                                entity.setUnitType(emptyToNull(record.get("unit_type")));
+                                entity.setUnits(parseDouble(record.get("units")));
+                                entity.setUseCode(emptyToNull(record.get("use_code")));
+                                entity.setZone(emptyToNull(record.get("zone")));
+                                entity.setProperty(property);
+                                entityManager.persist(entity);
+                        };
+                        case SALES -> (record, property) -> {
+                                Sale entity = new Sale();
+                                entity.setSaleId(parseInteger(record.get("sale_id")));
+                                entity.setSaleDate(parseLocalDate(record.get("sale_date")));
+                                entity.setSalePrice(parseBigDecimal(record.get("sale_price")));
+                                entity.setSaleType(emptyToNull(record.get("sale_type")));
+                                entity.setInstrumentNumber(emptyToNull(record.get("instrument_number")));
+                                entity.setOfficialRecordBook(emptyToNull(record.get("official_record_book")));
+                                entity.setOfficialRecordPage(emptyToNull(record.get("official_record_page")));
+                                entity.setEncodedRecordBookAndPage(emptyToNull(record.get("encoded_record_book_and_page")));
+                                entity.setSaleInstrument(emptyToNull(record.get("sale_instrument")));
+                                entity.setDocumentStamps(parseInteger(record.get("document_stamps")));
+                                entity.setQualifiedFlag(emptyToNull(record.get("qualified_flag")));
+                                entity.setQualificationDescription(emptyToNull(record.get("qualification_description")));
+                                entity.setQualifiedSYear(parseInteger(record.get("qualifiedsyear")));
+                                entity.setQualifiedSourceCode(emptyToNull(record.get("qualified_source_code")));
+                                entity.setReasonCode(emptyToNull(record.get("reason_code")));
+                                entity.setReviewCode(emptyToNull(record.get("review_code")));
+                                entity.setGrantorName1(emptyToNull(record.get("grantor_name1")));
+                                entity.setGrantorName2(emptyToNull(record.get("grantor_name2")));
+                                entity.setGranteeName1(emptyToNull(record.get("grantee_name1")));
+                                entity.setGranteeName2(emptyToNull(record.get("grantee_name2")));
+                                entity.setVacantFlag(parseBoolean(record.get("vacant_flag")));
+                                entity.setMessage(emptyToNull(record.get("message")));
+                                entity.setProperty(property);
+                                entityManager.persist(entity);
+                        };
+                        case TAXES -> (record, property) -> {
+                                Tax entity = new Tax();
+                                entity.setCityExemptionValue(parseBigDecimal(record.get("city_exemption_value")));
+                                entity.setCityTaxableValue(parseBigDecimal(record.get("city_taxable_value")));
+                                entity.setCountyExemptionValue(parseBigDecimal(record.get("county_exemption_value")));
+                                entity.setCountyTaxableValue(parseBigDecimal(record.get("county_taxable_value")));
+                                entity.setRegionalExemptionValue(parseBigDecimal(record.get("regional_exemption_value")));
+                                entity.setRegionalTaxableValue(parseBigDecimal(record.get("regional_taxable_value")));
+                                entity.setSchoolExemptionValue(parseBigDecimal(record.get("school_exemption_value")));
+                                entity.setSchoolTaxableValue(parseBigDecimal(record.get("school_taxable_value")));
+                                entity.setYear(parseInteger(record.get("year")));
+                                entity.setMessage(emptyToNull(record.get("message")));
+                                entity.setProperty(property);
+                                entityManager.persist(entity);
+                        };
+                        case EXTRA_FEATURES -> (record, property) -> {
+                                ExtraFeature entity = new ExtraFeature();
+                                entity.setActualYearBuilt(parseInteger(record.get("actual_year_built")));
+                                entity.setAdjustedUnitPrice(parseDouble(record.get("adjusted_unit_price")));
+                                entity.setDepreciatedValue(parseBigDecimal(record.get("depreciated_value")));
+                                entity.setDescription(emptyToNull(record.get("description")));
+                                entity.setMessage(emptyToNull(record.get("message")));
+                                entity.setPercentCondition(parseDouble(record.get("percent_condition")));
+                                entity.setRollYear(parseInteger(record.get("roll_year")));
+                                entity.setUnits(parseInteger(record.get("units")));
+                                entity.setUseCode(emptyToNull(record.get("use_code")));
+                                entity.setProperty(property);
+                                entityManager.persist(entity);
+                        };
+                        case PARCELS -> (record, property) -> {
+                                Parcel entity = new Parcel();
+                                entity.setId(parseLong(record.get("id")));
+                                entity.setFolio(emptyToNull(record.get("folio")));
+                                entity.setGeom(parseMultiPolygon(record.get("geom")));
+                                entity.setLotSize(parseDouble(record.get("lot_size")));
+                                entity.setProperty(property);
+                                entityManager.persist(entity);
+                        };
+                        case PROPERTY_VALUE_PREDICTIONS -> (record, property) -> {
+                                PropertyValuePrediction entity = new PropertyValuePrediction();
+                                entity.setPropertyId(property.getId());
+                                entity.setPredictedPrice(parseBigDecimal(record.get("predicted_price")));
+                                entity.setPredictedPriceLow(parseBigDecimal(record.get("predicted_price_low")));
+                                entity.setPredictedPriceHigh(parseBigDecimal(record.get("predicted_price_high")));
+                                entity.setLastSalePrice(parseBigDecimal(record.get("last_sale_price")));
+                                entity.setLastSaleDate(parseLocalDate(record.get("last_sale_date")));
+                                entity.setConfidenceScore(parseInteger(record.get("confidence_score")));
+                                entity.setPredictionDate(parseLocalDate(record.get("prediction_date")));
+                                entity.setModelVersion(emptyToNull(record.get("model_version")));
+                                entityManager.persist(entity);
+                        };
+                        case PROPERTY_IMAGES -> (record, property) -> {
+                                String originalUrl = emptyToNull(record.get("original_url"));
+                                Boolean primary = parseBoolean(record.get("primary_image"));
+                                Integer displayOrder = parseInteger(record.get("display_order"));
+                                if(displayOrder == 1) {
+                                        primary = true;
+                                }
+                                if (originalUrl == null || primary == null || displayOrder == null) {
+                                        throw new IllegalArgumentException("original_url, primary_image and display_order are required");
+                                }
+                                propertyImageService.processAndSave(property, originalUrl, primary, displayOrder);
+                        };
+                        default -> throw new IllegalArgumentException("Dataset " + dataset + " has no property_id file");
+                };
+        }
+
+        private Long sourceRecordPropertyId(CSVRecord record) {
+                return Long.valueOf(record.get("property_id").trim());
         }
 
         private void importRelatedRecords(Path csvPath, String sourceCounty, String sourceState,
                         BiConsumer<CSVRecord, Property> importer) throws IOException {
-                importRecords(csvPath, record -> {
-                        Long sourcePropertyId = Long.valueOf(record.get("property_id").trim());
-                        importer.accept(record, getMappedProperty(sourceCounty, sourceState, sourcePropertyId));
-                });
+                importRecords(csvPath, record -> importer.accept(record,
+                        getMappedProperty(sourceCounty, sourceState, sourceRecordPropertyId(record))));
         }
 
         private void importRecords(Path csvPath, Consumer<CSVRecord> importer) throws IOException {

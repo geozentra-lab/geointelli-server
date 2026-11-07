@@ -57,22 +57,34 @@ public class PropertyImageServiceImpl implements PropertyImageService {
     public PropertyImage processAndSave(Property property, String imageUrl, boolean primary, int order) {
         if (imageUrl == null || imageUrl.isBlank()) return null;
         try {
-            boolean urlAlreadyProcessed = property.getImages().stream()
-                    .anyMatch(img -> imageUrl.equals(img.getOriginalUrl()));
-            if (urlAlreadyProcessed) {
-                log.info("Image URL already processed for property {}", property.getId());
-                return null;
-            }
-
-            ImageSaveRequest request = new ImageSaveRequest();
-            request.setContent(imageDownloadService.download(imageUrl));
-            request.setExtension(imageExtension(request.getContent()));
-            request.setOriginalUrl(imageUrl);
-            return save(property, request, primary, order);
+            if (urlAlreadyProcessed(property, imageUrl)) return null;
+            return saveDownloaded(property, download(imageUrl), primary, order);
         } catch (ImageDownloadException e) {
             log.warn("Skipping broken image for property {}", property.getId());
             return null;
         }
+    }
+
+    @Override
+    public ImageSaveRequest download(String imageUrl) {
+        ImageSaveRequest request = new ImageSaveRequest();
+        request.setContent(imageDownloadService.download(imageUrl));
+        request.setExtension(imageExtension(request.getContent()));
+        request.setOriginalUrl(imageUrl);
+        return request;
+    }
+
+    @Override
+    public PropertyImage saveDownloaded(Property property, ImageSaveRequest request, boolean primary, int order) {
+        if (urlAlreadyProcessed(property, request.getOriginalUrl())) return null;
+        return save(property, request, primary, order);
+    }
+
+    private boolean urlAlreadyProcessed(Property property, String imageUrl) {
+        boolean processed = property.getImages() != null && property.getImages().stream()
+                .anyMatch(img -> imageUrl.equals(img.getOriginalUrl()));
+        if (processed) log.info("Image URL already processed for property {}", property.getId());
+        return processed;
     }
 
     @Override

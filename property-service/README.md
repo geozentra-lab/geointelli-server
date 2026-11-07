@@ -55,6 +55,14 @@ container's network. Keycloak still uses the Compose PostgreSQL service.
 The base Compose stack uses `postgres:15`; it does not install PostGIS or import
 an application schema. Provision those separately before exercising spatial APIs.
 
+### Ingestion jobs
+
+CSV imports (`POST /api/ingestion/import/*`) and Miami-Dade ingestion (`POST /api/ingestion/run`,
+`ingest_*`) run as persisted background jobs with retries; files are uploaded or named inside
+`INGESTION_STAGING_DIRECTORY`, and inputs are kept in S3 (`INGESTION_INPUT_STORAGE=s3`, the default)
+or locally. See [docs/ingestion-jobs.md](docs/ingestion-jobs.md) and the Postman collection
+`docs/postman/SCRUM-188-ingestion-jobs.postman_collection.json`.
+
 ### Tests
 
 The `test` profile overrides the connection with in-memory H2 and keeps

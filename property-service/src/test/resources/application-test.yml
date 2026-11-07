@@ -22,3 +22,10 @@ aws:
 mapillary:
   access-token: ""
   roads-file: ""
+
+ingestion:
+  input:
+    storage: local
+    local-directory: ${java.io.tmpdir}/geozentra-ingestion-test
+  jobs:
+    enabled: false
