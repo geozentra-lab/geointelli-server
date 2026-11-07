@@ -1,0 +1,210 @@
+{
+  "info": {
+    "name": "SCRUM-188 Ingestion jobs",
+    "description": "Manual checks for the background CSV import and Miami-Dade ingestion jobs. Variables: baseUrl (app), access_token (bearer token of a Keycloak user; the admin requests need the realm role 'admin'), csvDir (folder on your machine holding addresses.csv and the other county CSV files), county and sourceState. 01 starts a single-file import and stores its id in jobId; 02 polls it; 03 starts a folder import; 04 starts an owners import; 05 starts the Miami-Dade property ingestion (409 when one is already active); 06-08 are the admin list, detail and retry; 09-12 are the error cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8081" },
+    { "key": "access_token", "value": "" },
+    { "key": "csvDir", "value": "C:/data/miami-dade" },
+    { "key": "county", "value": "Miami-Dade" },
+    { "key": "sourceState", "value": "FL" },
+    { "key": "jobId", "value": "" },
+    { "key": "retryJobId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{access_token}}", "type": "string" } ]
+  },
+  "item": [
+    {
+      "name": "01 Start addresses import (upload)",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/addresses", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "addresses" ] },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": "{{csvDir}}/addresses.csv" },
+            { "key": "county", "value": "{{county}}", "type": "text" },
+            { "key": "sourceState", "value": "{{sourceState}}", "type": "text" }
+          ]
+        }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 202', () => pm.response.to.have.status(202));",
+        "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+        "const job = pm.response.json();",
+        "pm.test('job is queued for ADDRESSES', () => { pm.expect(job.status).to.eql('QUEUED'); pm.expect(job.dataset).to.eql('ADDRESSES'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+        "pm.collectionVariables.set('jobId', job.id);"
+      ] } } ]
+    },
+    {
+      "name": "02 Poll the job",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/jobs/{{jobId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "jobs", "{{jobId}}" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const job = pm.response.json();",
+        "pm.test('counters are consistent', () => pm.expect(job.processed).to.eql(job.completed + job.skipped + job.failed));",
+        "pm.test('status is a known one', () => pm.expect(['QUEUED','RUNNING','COMPLETED','PARTIAL','FAILED','INTERRUPTED']).to.include(job.status));",
+        "console.log(job.status, job.currentStep, job.processed + '/' + job.total, job.errorCode || '');"
+      ] } } ]
+    },
+    {
+      "name": "03 Start folder import (upload all county files)",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/folder", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "folder" ] },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "files", "type": "file", "src": "{{csvDir}}/properties.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/addresses.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/assessments.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/buildings.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/owners.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/property_owner.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/lands.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/sales.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/taxes.csv" },
+            { "key": "files", "type": "file", "src": "{{csvDir}}/extra_features.csv" },
+            { "key": "county", "value": "{{county}}", "type": "text" },
+            { "key": "sourceState", "value": "{{sourceState}}", "type": "text" }
+          ]
+        }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 202', () => pm.response.to.have.status(202));",
+        "pm.test('dataset is FOLDER', () => pm.expect(pm.response.json().dataset).to.eql('FOLDER'));"
+      ] } } ]
+    },
+    {
+      "name": "04 Start owners import (two files)",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/owners", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "owners" ] },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "ownersFile", "type": "file", "src": "{{csvDir}}/owners.csv" },
+            { "key": "propertyOwnersFile", "type": "file", "src": "{{csvDir}}/property_owner.csv" },
+            { "key": "county", "value": "{{county}}", "type": "text" },
+            { "key": "sourceState", "value": "{{sourceState}}", "type": "text" }
+          ]
+        }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 202', () => pm.response.to.have.status(202));",
+        "pm.test('dataset is OWNERS', () => pm.expect(pm.response.json().dataset).to.eql('OWNERS'));"
+      ] } } ]
+    },
+    {
+      "name": "05 Start Miami-Dade property ingestion",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/run", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "run" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 202 or 409 when already active', () => pm.expect([202, 409]).to.include(pm.response.code));",
+        "if (pm.response.code === 202) { pm.test('dataset is API_PROPERTIES', () => pm.expect(pm.response.json().dataset).to.eql('API_PROPERTIES')); }",
+        "else { pm.test('reason is DATASET_JOB_ACTIVE', () => pm.expect(pm.response.json().message).to.include('DATASET_JOB_ACTIVE')); }"
+      ] } } ]
+    },
+    {
+      "name": "06 Admin: list jobs (CSV imports first page)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/import-jobs?page=0&size=20&type=CSV_IMPORT", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "import-jobs" ],
+          "query": [ { "key": "page", "value": "0" }, { "key": "size", "value": "20" }, { "key": "type", "value": "CSV_IMPORT" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const page = pm.response.json();",
+        "pm.test('only CSV jobs, newest first', () => { page.jobs.content.forEach(j => pm.expect(j.jobType).to.eql('CSV_IMPORT')); for (let i = 1; i < page.jobs.content.length; i++) pm.expect(page.jobs.content[i-1].createdAt >= page.jobs.content[i].createdAt).to.be.true; });",
+        "pm.test('only the legacy image loader is untracked', () => pm.expect(page.untrackedJobTypes).to.eql(['PROPERTY_IMAGE_CSV_IMPORT']));"
+      ] } } ]
+    },
+    {
+      "name": "07 Admin: job detail with items",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/import-jobs/{{jobId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "import-jobs", "{{jobId}}" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 200', () => pm.response.to.have.status(200));",
+        "const job = pm.response.json();",
+        "pm.test('ingestion job has a UUID id and items', () => { pm.expect(job.id).to.eql(pm.collectionVariables.get('jobId')); pm.expect(job.jobId).to.be.null; pm.expect(job.items).to.be.an('array'); });",
+        "pm.test('retryable is explained', () => pm.expect(job.retryable ? job.retryBlockedReason === null : typeof job.retryBlockedReason === 'string').to.be.true);"
+      ] } } ]
+    },
+    {
+      "name": "08 Admin: retry the job",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/admin/import-jobs/{{jobId}}/retry", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "import-jobs", "{{jobId}}", "retry" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('202 when FAILED/PARTIAL/INTERRUPTED, otherwise 409 with a reason code', () => pm.expect([202, 409]).to.include(pm.response.code));",
+        "if (pm.response.code === 202) { const job = pm.response.json(); pm.test('new job resumes the old one', () => { pm.expect(job.retryOfJobId).to.eql(pm.collectionVariables.get('jobId')); pm.expect(job.attempt).to.be.above(1); pm.expect(job.status).to.eql('QUEUED'); }); pm.collectionVariables.set('retryJobId', job.id); }",
+        "else { pm.test('reason code present', () => pm.expect(pm.response.json().message).to.match(/^(JOB_NOT_FINISHED|JOB_COMPLETED|RETRY_ALREADY_ACTIVE|INPUT_ON_OTHER_INSTANCE|INPUT_UNAVAILABLE|INPUT_CHANGED|DATASET_JOB_ACTIVE|RETRY_NOT_SUPPORTED):/)); }"
+      ] } } ]
+    },
+    {
+      "name": "09 Error: missing column is rejected before starting",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/addresses", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "addresses" ] },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": "{{csvDir}}/sales.csv" },
+            { "key": "county", "value": "{{county}}", "type": "text" },
+            { "key": "sourceState", "value": "{{sourceState}}", "type": "text" }
+          ]
+        }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('names the missing columns', () => pm.expect(pm.response.json().message).to.include('missing the columns'));"
+      ] } } ]
+    },
+    {
+      "name": "10 Error: unknown dataset",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/unknown?county={{county}}&sourceState={{sourceState}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "unknown" ],
+          "query": [ { "key": "county", "value": "{{county}}" }, { "key": "sourceState", "value": "{{sourceState}}" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));",
+        "pm.test('message names the dataset', () => pm.expect(pm.response.json().message).to.eql('Unknown dataset: unknown'));"
+      ] } } ]
+    },
+    {
+      "name": "11 Error: county missing",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/ingestion/import/addresses?stagedFile=addresses.csv&sourceState={{sourceState}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "ingestion", "import", "addresses" ],
+          "query": [ { "key": "stagedFile", "value": "addresses.csv" }, { "key": "sourceState", "value": "{{sourceState}}" } ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 400', () => pm.response.to.have.status(400));"
+      ] } } ]
+    },
+    {
+      "name": "12 Error: admin retry of a Mapillary backfill job is refused",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/admin/import-jobs/1/retry", "host": [ "{{baseUrl}}" ], "path": [ "api", "admin", "import-jobs", "1", "retry" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('status 409', () => pm.response.to.have.status(409));",
+        "pm.test('reason is RETRY_NOT_SUPPORTED', () => pm.expect(pm.response.json().message).to.include('RETRY_NOT_SUPPORTED'));"
+      ] } } ]
+    }
+  ]
+}
