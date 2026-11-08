@@ -154,13 +154,22 @@ public class PropertyImageServiceImpl implements PropertyImageService {
 
                     PropertyImageDTO dto = propertyImageMapper.toDTO(image);
 
-                    String storagePath = image.getStoragePath();
-                    String key = storagePath.startsWith("https://") || storagePath.startsWith("http://")
-                        ? URI.create(storagePath).getPath().replaceFirst("^/", "") : storagePath;
-                    dto.setStoragePath(s3Service.generatePresignedUrl(key));
+                    dto.setStoragePath(s3Service.generatePresignedUrl(objectKey(image.getStoragePath())));
 
                     return dto;
                 })
                 .toList();
+    }
+
+    /**
+     * The S3 object key for a stored image. S3 storage records a bucket URL; local storage records an
+     * absolute file path such as C:\...\images\1_abc.png. Both upload under the bare file name, so a
+     * file path is reduced to its last segment instead of being presigned whole (which S3 answers 404).
+     */
+    static String objectKey(String storagePath) {
+        if (storagePath.startsWith("https://") || storagePath.startsWith("http://"))
+            return URI.create(storagePath).getPath().replaceFirst("^/", "");
+        int slash = Math.max(storagePath.lastIndexOf('/'), storagePath.lastIndexOf('\\'));
+        return storagePath.substring(slash + 1);
     }
 }

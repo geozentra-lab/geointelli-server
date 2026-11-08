@@ -11,6 +11,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Data;
 
+/**
+ * One row per property, written monthly by geointelli-models (src/pipeline/score_all.py --write).
+ * predicted_price_low/high is the 80% range; the _90 columns the 90% range. Forecast ranges are
+ * illustrative (current-value plus forecast error). notes holds a JSON array of display notes.
+ */
 @Entity
 @Table(name = "property_value_predictions")
 @Data
@@ -31,6 +36,19 @@ public class PropertyValuePrediction extends AuditableEntity {
     @Column(name = "predicted_price_high", precision = 38, scale = 2)
     private BigDecimal predictedPriceHigh;
 
+    @Column(name = "predicted_price_low_90", precision = 38, scale = 2)
+    private BigDecimal predictedPriceLow90;
+
+    @Column(name = "predicted_price_high_90", precision = 38, scale = 2)
+    private BigDecimal predictedPriceHigh90;
+
+    /** high / medium / low */
+    @Column(name = "confidence", length = 10)
+    private String confidence;
+
+    @Column(name = "has_sale_history")
+    private Boolean hasSaleHistory;
+
     @Column(name = "last_sale_price", precision = 38, scale = 2)
     private BigDecimal lastSalePrice;
 
@@ -40,9 +58,51 @@ public class PropertyValuePrediction extends AuditableEntity {
     @Column(name = "confidence_score")
     private Integer confidenceScore;
 
+    @Column(name = "forecast_1y", precision = 38, scale = 2)
+    private BigDecimal forecast1y;
+
+    @Column(name = "forecast_1y_low", precision = 38, scale = 2)
+    private BigDecimal forecast1yLow;
+
+    @Column(name = "forecast_1y_high", precision = 38, scale = 2)
+    private BigDecimal forecast1yHigh;
+
+    /** 1-year value from the market index alone, without the property adjustment. */
+    @Column(name = "unchanged_home_value_1y", precision = 38, scale = 2)
+    private BigDecimal unchangedHomeValue1y;
+
+    @Column(name = "forecast_3y", precision = 38, scale = 2)
+    private BigDecimal forecast3y;
+
+    @Column(name = "forecast_3y_low", precision = 38, scale = 2)
+    private BigDecimal forecast3yLow;
+
+    @Column(name = "forecast_3y_high", precision = 38, scale = 2)
+    private BigDecimal forecast3yHigh;
+
+    @Column(name = "forecast_7y", precision = 38, scale = 2)
+    private BigDecimal forecast7y;
+
+    @Column(name = "forecast_7y_low", precision = 38, scale = 2)
+    private BigDecimal forecast7yLow;
+
+    @Column(name = "forecast_7y_high", precision = 38, scale = 2)
+    private BigDecimal forecast7yHigh;
+
+    @Column(name = "market_outlook_1y_pct")
+    private Double marketOutlook1yPct;
+
     @Column(name = "prediction_date")
     private LocalDate predictionDate;
 
-    @Column(name = "model_version", length = 10)
+    /** Last sale date in the training data. */
+    @Column(name = "data_through")
+    private LocalDate dataThrough;
+
+    @Column(name = "model_version", length = 32)
     private String modelVersion;
+
+    /** JSON array of strings. */
+    @Column(name = "notes", columnDefinition = "text")
+    private String notes;
 }
