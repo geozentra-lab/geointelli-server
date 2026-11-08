@@ -7,6 +7,13 @@ import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.service.ExtraFeatureService;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 import com.geointelli.ai.property.service.service.PropertyService;
+import com.geointelli.ai.property.service.service.ValuationService;
+import com.geointelli.ai.property.service.dto.ComparableResponse;
+import com.geointelli.ai.property.service.dto.ValuationResponse;
+import com.geointelli.ai.property.service.dto.ValuationResponse.*;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +48,9 @@ public class PropertyControllerTest {
 
     @MockBean
     ExtraFeatureService extraFeatureService;
+
+    @MockBean
+    ValuationService valuationService;
 
     PropertyDTO propertyDTO;
 
@@ -248,6 +258,104 @@ public class PropertyControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error").value("Bad Request"));
             verifyNoInteractions(propertyService);
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Valuation")
+    class GetValuationTest {
+
+        private ValuationResponse supported() {
+            ComparableResponse comparables = new ComparableResponse();
+            comparables.setStatus("COMPARABLES_FOUND");
+            return new ValuationResponse("supported", List.of(),
+                    new Estimate(new BigDecimal("822855.47"), new Range(new BigDecimal("676666.91"), new BigDecimal("1000626.92")),
+                            new Range(new BigDecimal("612063.54"), new BigDecimal("1106243.20")), "high"),
+                    new Forecasts(new Projection(new BigDecimal("844881.25"), null, null), null, null),
+                    new Explanation(new BigDecimal("755227"), "summary",
+                            List.of(new Factor("living_area", "Living area", new BigDecimal("12.345"), new BigDecimal("90123.40"),
+                                    "Its living area raises the value by about 12%.")), "note"),
+                    new Evidence(new LastSale(true, new BigDecimal("610000.00"), LocalDate.of(2019, 5, 2)),
+                            new SupportingComparables("label", "COMPARABLES_FOUND", comparables)),
+                    new Method("gbm_hedonic", "2026.10", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 9, 30),
+                            LocalDateTime.of(2026, 10, 2, 3, 0)),
+                    new Reproducibility("run-20261001", "abcdef0123456789"), List.of("Stored model note."));
+        }
+
+        @Test
+        @DisplayName("When the valuation is supported, then 200 returns the stored estimate, explanation, evidence and method")
+        void whenSupported_thenReturn200() throws Exception {
+            when(valuationService.getValuation(95340L)).thenReturn(supported());
+
+            mockMvc.perform(get("/api/properties/id/{id}/valuation", 95340L))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("supported"))
+                    .andExpect(jsonPath("$.estimate.value").value(822855.47))
+                    .andExpect(jsonPath("$.estimate.range80.low").value(676666.91))
+                    .andExpect(jsonPath("$.estimate.range90.high").value(1106243.20))
+                    .andExpect(jsonPath("$.estimate.confidence").value("high"))
+                    .andExpect(jsonPath("$.forecasts.oneYear.value").value(844881.25))
+                    .andExpect(jsonPath("$.explanation.factors[0].code").value("living_area"))
+                    .andExpect(jsonPath("$.explanation.factors[0].pct").value(12.345))
+                    .andExpect(jsonPath("$.explanation.factors[0].text").value("Its living area raises the value by about 12%."))
+                    .andExpect(jsonPath("$.evidence.lastSale.date").value("2019-05-02"))
+                    .andExpect(jsonPath("$.evidence.comparables.status").value("COMPARABLES_FOUND"))
+                    .andExpect(jsonPath("$.method.predictionDate").value("2026-10-01"))
+                    .andExpect(jsonPath("$.reproducibility.runId").value("run-20261001"))
+                    .andExpect(jsonPath("$.notes[0]").value("Stored model note."));
+            verify(valuationService).getValuation(95340L);
+        }
+
+        @Test
+        @DisplayName("When the valuation is unsupported, then 200 returns status and reasons and omits the empty sections")
+        void whenUnsupported_thenReturn200WithoutEmptySections() throws Exception {
+            when(valuationService.getValuation(7L)).thenReturn(new ValuationResponse("unsupported",
+                    List.of(new Reason("not_modelled", "This property type is not covered by the model yet.")),
+                    null, null, null, null, null, null, null));
+
+            mockMvc.perform(get("/api/properties/id/{id}/valuation", 7L))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("unsupported"))
+                    .andExpect(jsonPath("$.reasons[0].code").value("not_modelled"))
+                    .andExpect(jsonPath("$.reasons[0].message").value("This property type is not covered by the model yet."))
+                    .andExpect(jsonPath("$.estimate").doesNotExist())
+                    .andExpect(jsonPath("$.forecasts").doesNotExist())
+                    .andExpect(jsonPath("$.explanation").doesNotExist())
+                    .andExpect(jsonPath("$.evidence").doesNotExist())
+                    .andExpect(jsonPath("$.method").doesNotExist())
+                    .andExpect(jsonPath("$.reproducibility").doesNotExist())
+                    .andExpect(jsonPath("$.notes").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("When the property does not exist, then 404")
+        void whenPropertyMissing_thenReturn404() throws Exception {
+            when(valuationService.getValuation(1L)).thenThrow(new PropertyNotFoundException("Property not found: 1"));
+
+            mockMvc.perform(get("/api/properties/id/{id}/valuation", 1L))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error").value("Not Found"))
+                    .andExpect(jsonPath("$.message").value("Property not found: 1"));
+        }
+
+        @Test
+        @DisplayName("When the ID is not positive, then 400")
+        void whenIdNotPositive_thenReturn400() throws Exception {
+            when(valuationService.getValuation(0L)).thenThrow(new IllegalArgumentException("propertyId must be positive"));
+
+            mockMvc.perform(get("/api/properties/id/{id}/valuation", 0L))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("Bad Request"))
+                    .andExpect(jsonPath("$.message").value("propertyId must be positive"));
+        }
+
+        @Test
+        @DisplayName("When the ID is not numeric, then 400 without calling the service")
+        void whenIdNotNumeric_thenReturn400() throws Exception {
+            mockMvc.perform(get("/api/properties/id/{id}/valuation", "abc"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("id: invalid value"));
+            verifyNoInteractions(valuationService);
         }
     }
 }

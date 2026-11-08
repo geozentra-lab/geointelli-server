@@ -30,7 +30,7 @@ public class PropertyValuePredictionServiceImpl implements PropertyValuePredicti
         PropertyValuePrediction prediction = propertyValuePredictionRepository.findByPropertyId(propertyId)
                 .orElseThrow(() -> new PropertyValuePredictionNotFoundException("prediction value not found for property with id : " + propertyId));
         PropertyValuePredictionDTO predictionDto = propertyValuePredictionMapper.toDTO(prediction);
-        predictionDto.setGrowthPercentage(calculateGrowthPercentage(predictionDto.getLastSalePrice(), predictionDto.getPredictedPrice()));
+        predictionDto.setGrowthPercentage(calculateGrowthPercentage(prediction));
         return predictionDto;
     }
 
@@ -46,18 +46,20 @@ public class PropertyValuePredictionServiceImpl implements PropertyValuePredicti
         }
         return predictions.stream().map(p -> {
             PropertyValuePredictionDTO dto = propertyValuePredictionMapper.toDTO(p);
-            dto.setGrowthPercentage(calculateGrowthPercentage(dto.getLastSalePrice(), dto.getPredictedPrice()));
+            dto.setGrowthPercentage(calculateGrowthPercentage(p));
             return dto;
         }).toList();
     }
 
-    private BigDecimal calculateGrowthPercentage(BigDecimal lastPrice, BigDecimal predictedPrice){
-        if(lastPrice == null || lastPrice.compareTo(BigDecimal.ZERO) == 0)
-            return BigDecimal.ZERO;
-
-        return predictedPrice
-                .subtract(lastPrice)
-                .divide(lastPrice, 6, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100)); 
+    /** One-year projected value change, not historical appreciation; unavailable inputs remain null. */
+    private BigDecimal calculateGrowthPercentage(PropertyValuePrediction prediction) {
+        if (!"supported".equals(prediction.getValuationStatus())
+                && !"limited".equals(prediction.getValuationStatus())) return null;
+        BigDecimal currentValue = prediction.getPredictedPrice();
+        BigDecimal futureValue = prediction.getForecast1y();
+        if (currentValue == null || currentValue.signum() <= 0
+                || futureValue == null || futureValue.signum() <= 0) return null;
+        return futureValue.subtract(currentValue).multiply(BigDecimal.valueOf(100))
+            .divide(currentValue, 4, RoundingMode.HALF_UP);
     }
 }

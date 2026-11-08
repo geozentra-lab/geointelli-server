@@ -43,7 +43,7 @@ public class PropertyComparisonDTO {
     public record LastSale(LocalDate date, BigDecimal price) {
     }
 
-    /** Model valuation as produced by the prediction service, in USD; nothing is recomputed here. */
+    /** Model valuation in USD. growthPercentage is projected one-year value change (%), not growth since sale. */
     public record Valuation(BigDecimal predictedPrice, BigDecimal low, BigDecimal high,
             BigDecimal growthPercentage, Integer confidenceScore, LocalDate predictionDate) {
     }
