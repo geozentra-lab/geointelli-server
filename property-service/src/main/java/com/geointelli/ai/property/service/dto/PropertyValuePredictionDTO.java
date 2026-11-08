@@ -44,4 +44,13 @@ public class PropertyValuePredictionDTO {
     private String modelVersion;
     /** JSON array of display notes. */
     private String notes;
+
+    /** supported / limited / unsupported, with JSON reason codes. */
+    private String valuationStatus;
+    private String statusReasons;
+    private String valuationMethod;
+    /** JSON of baseline value and top factors (see PropertyValuePrediction#valuationFactors). */
+    private String valuationFactors;
+    private String runId;
+    private String inputHash;
 }

@@ -108,3 +108,7 @@ alerts:
     exchange: ${ALERTS_EXCHANGE:geozentra.alerts}
     queue: ${ALERTS_QUEUE:geozentra.notifications.alerts}
     routing-key: ${ALERTS_ROUTING_KEY:alerts.v1}
+
+# Web client origins allowed by CorsConfig (comma separated), e.g. the EC2 frontend URL.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
