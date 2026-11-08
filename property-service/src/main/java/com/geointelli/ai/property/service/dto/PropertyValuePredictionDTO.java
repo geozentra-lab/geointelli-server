@@ -3,6 +3,7 @@ package com.geointelli.ai.property.service.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
@@ -16,7 +17,12 @@ public class PropertyValuePredictionDTO {
     private BigDecimal predictedPriceHigh;
     private BigDecimal predictedPriceLow90;
     private BigDecimal predictedPriceHigh90;
-    /** Change from the last sale price to predictedPrice, in percent (computed by the service). */
+    /** Projected one-year value change: (forecast1y - predictedPrice) / predictedPrice * 100.
+     * Null for unsupported valuations or unavailable/nonpositive values; negative change is valid.
+     * This is not appreciation since the last sale. The horizon starts at predictionDate.
+     */
+    @Schema(description = "Projected 1-year value change (%), relative to "
+        + "predictedPrice at predictionDate. Null when unsupported/unavailable; can be negative. Not historical growth.")
     private BigDecimal growthPercentage;
 
     private String confidence;
