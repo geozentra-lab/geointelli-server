@@ -20,6 +20,9 @@ import jakarta.validation.Valid;
 import com.geointelli.ai.property.service.service.PropertySearchService;
 import com.geointelli.ai.property.service.dto.PropertyExtraFeaturesDTO;
 import com.geointelli.ai.property.service.service.ExtraFeatureService;
+import com.geointelli.ai.property.service.service.ValuationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
 
 @RestController
@@ -29,6 +32,28 @@ public class PropertyController {
     private final PropertyService propertyService;
     private final PropertySearchService propertySearchService;
     private final ExtraFeatureService extraFeatureService;
+    private final ValuationService valuationService;
+
+    /**
+     * Reads the monthly model estimate, display explanations and separate supporting comparables.
+     *
+     * @param id positive internal property ID
+     * @return 200 with stored output or unsupported/not_modelled; 400 for an invalid ID; 404 for a missing property
+     */
+    @GetMapping("/id/{id}/valuation")
+    @Operation(summary = "Read an explainable ZentraValue estimate", description = "Reads stored monthly model output; "
+        + "no value, range or factor is recalculated. All monetary amounts are USD. Limited results include reason "
+        + "messages as caveats. Unsupported results expose only status, reasons and available method metadata. "
+        + "A property without a prediction returns unsupported/not_modelled with HTTP 200. "
+        + "Factors overlap and must not be summed. Comparables are separately selected supporting evidence, "
+        + "not transactions used to calculate this estimate. Forecast ranges are illustrative; 3/7-year values "
+        + "are trend scenarios. runId/inputHash reference retained Python scoring snapshots.")
+    @ApiResponse(responseCode = "200", description = "Supported, limited or unsupported valuation")
+    @ApiResponse(responseCode = "400", description = "Invalid property ID")
+    @ApiResponse(responseCode = "404", description = "Property does not exist")
+    public ResponseEntity<ValuationResponse> getValuation(@PathVariable Long id) {
+        return ResponseEntity.ok(valuationService.getValuation(id));
+    }
 
     @GetMapping("/search")
     public ResponseEntity<PropertySearchResponse> search(@Valid @ModelAttribute PropertySearchRequest request) {

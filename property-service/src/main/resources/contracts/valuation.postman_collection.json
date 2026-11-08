@@ -1,0 +1,83 @@
+{
+  "info": {
+    "name": "SCRUM-58 Explainable valuations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Read-only monthly model outputs. IDs below were manually checked against local geozentra; choose equivalent records if your database differs. No pre-request or automated test scripts. Amounts are USD. Supporting comparables are separate from model explanation; factor USD amounts must never be summed."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Supported valuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/301400/valuation",
+        "description": "200: supported; estimate 671182.72, 80% bounds 551940.35 and 816186.46; first factor sale_history, 13%."
+      }
+    },
+    {
+      "name": "Limited valuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/1/valuation",
+        "description": "200: limited; no_sale_history message, estimate and explanation remain visible."
+      }
+    },
+    {
+      "name": "Unsupported valuation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/95254/valuation",
+        "description": "200: unsupported; only status, reasons and method. No estimate, forecasts, factors, evidence or run references."
+      }
+    },
+    {
+      "name": "Unmodelled property",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/5769/valuation",
+        "description": "200: unsupported with not_modelled. Property exists but has no prediction."
+      }
+    },
+    {
+      "name": "Missing property",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/584317/valuation",
+        "description": "404: property does not exist in the database used for manual verification."
+      }
+    },
+    {
+      "name": "Invalid property ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/properties/id/0/valuation",
+        "description": "400: propertyId must be positive."
+      }
+    }
+  ]
+}
