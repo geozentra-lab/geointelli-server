@@ -17,7 +17,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8090/realms/geozentra
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/geozentra}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/geozentra}/protocol/openid-connect/certs}
 
   flyway:
     enabled: false
