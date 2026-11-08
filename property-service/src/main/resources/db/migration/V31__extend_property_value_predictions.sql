@@ -1,6 +1,7 @@
 -- Columns written by geointelli-models (src/pipeline/score_all.py --write): v17 current value with
--- 80%/90% ranges and confidence label, v18 1/3/7-year forecasts, run metadata. Idempotent; the
--- scorer applies the same statements (sql/property_value_predictions_schema.sql) before loading.
+-- 80%/90% ranges, confidence and valuation status, explanation factors, input-snapshot reference,
+-- v18 1/3/7-year forecasts and run metadata. Idempotent; the scorer applies the same statements
+-- (sql/property_value_predictions_schema.sql) before loading, so keep the two in sync.
 ALTER TABLE property_value_predictions ALTER COLUMN model_version SET DATA TYPE VARCHAR(32);
 ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS predicted_price_low_90 NUMERIC(38,2);
 ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS predicted_price_high_90 NUMERIC(38,2);
@@ -19,3 +20,9 @@ ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS forecast_7y_high
 ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS market_outlook_1y_pct DOUBLE PRECISION;
 ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS data_through DATE;
 ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS valuation_status VARCHAR(12);
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS status_reasons TEXT;
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS valuation_method VARCHAR(64);
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS valuation_factors TEXT;
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS run_id VARCHAR(32);
+ALTER TABLE property_value_predictions ADD COLUMN IF NOT EXISTS input_hash VARCHAR(16);

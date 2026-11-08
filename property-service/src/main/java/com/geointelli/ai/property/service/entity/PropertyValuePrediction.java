@@ -105,4 +105,31 @@ public class PropertyValuePrediction extends AuditableEntity {
     /** JSON array of strings. */
     @Column(name = "notes", columnDefinition = "text")
     private String notes;
+
+    /** supported / limited / unsupported; the value must not be shown when unsupported. */
+    @Column(name = "valuation_status", length = 12)
+    private String valuationStatus;
+
+    /** JSON array of reason codes, e.g. ["low_confidence","no_sale_history"]. */
+    @Column(name = "status_reasons", columnDefinition = "text")
+    private String statusReasons;
+
+    @Column(name = "valuation_method", length = 64)
+    private String valuationMethod;
+
+    /**
+     * JSON: {"baseline": typical property value today, "factors": [{"f": code, "pct": effect %, "usd": effect $}]},
+     * largest factors first, then "other". Codes: living_area, rooms, lot_and_land, age_and_condition,
+     * county_assessment, location, nearby_sales, sale_history, property_type, market_timing.
+     */
+    @Column(name = "valuation_factors", columnDefinition = "text")
+    private String valuationFactors;
+
+    /** Scoring run; its input snapshot and artifact hashes are kept by geointelli-models. */
+    @Column(name = "run_id", length = 32)
+    private String runId;
+
+    /** Hash of this property's model inputs in that run. */
+    @Column(name = "input_hash", length = 16)
+    private String inputHash;
 }

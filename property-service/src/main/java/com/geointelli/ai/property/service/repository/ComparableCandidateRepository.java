@@ -27,6 +27,9 @@ public interface ComparableCandidateRepository extends Repository<Property, Long
     /**
      * Prefers shared-parent and community matches, then nearby sales.
      * Each property contributes only its latest eligible recorded transaction.
+     * {@code nearby} is an index-backed box around the subject that is always larger than the radius
+     * (its width in degrees grows with latitude). NEARBY candidates outside it can never pass the
+     * exact ST_DWithin check, so they skip the per-row parcel lookup; results are unchanged.
      */
     @Query(value = """
         WITH subject AS MATERIALIZED (
@@ -69,6 +72,12 @@ public interface ComparableCandidateRepository extends Repository<Property, Long
                     AND subject.building_heated_area * (1 + :areaTolerance / 100.0)))
               AND (subject.bedroom_count IS NULL
                 OR ABS(p.bedroom_count - subject.bedroom_count) <= :bedroomTolerance)
+        ), nearby AS MATERIALIZED (
+            SELECT DISTINCT pa.property_id AS id
+            FROM subject
+            JOIN parcels pa ON pa.geom && ST_Expand(subject.anchor,
+                :radiusMeters / (110000.0 * GREATEST(COS(RADIANS(ABS(ST_Y(subject.anchor)))), 0.01)))
+            WHERE subject.anchor IS NOT NULL AND pa.property_id IS NOT NULL
         ), located AS MATERIALIZED (
             SELECT e.*, ST_PointOnSurface(pa.geom) AS candidate_point
             FROM eligible e
@@ -80,6 +89,9 @@ public interface ComparableCandidateRepository extends Repository<Property, Long
                 ORDER BY CASE WHEN pa.property_id = e.id THEN 0 ELSE 1 END, pa.fid
                 LIMIT 1
             ) pa ON true
+            WHERE e.priority < 4
+               OR e.id IN (SELECT id FROM nearby)
+               OR e.parent_property_id IN (SELECT id FROM nearby)
         )
         SELECT e.id AS "propertyId", e.folio AS "folio", e.county_id AS "countyId",
             a.address AS "address", a.city AS "city", a.zip AS "zip",
