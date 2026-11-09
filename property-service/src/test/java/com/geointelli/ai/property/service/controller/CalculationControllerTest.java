@@ -2,6 +2,7 @@ package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.*;
 import com.geointelli.ai.property.service.service.AffordabilityCalculationService;
+import com.geointelli.ai.property.service.service.InvestmentAnalysisService;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -35,6 +36,9 @@ public class CalculationControllerTest {
 
     @MockBean
     AffordabilityCalculationService affordabilityCalculationService;
+
+    @MockBean
+    InvestmentAnalysisService investmentAnalysisService;
 
     @Nested
     @DisplayName("Test Calculate Mortgage Endpoint")
@@ -260,5 +264,108 @@ public class CalculationControllerTest {
                     .andExpect(jsonPath("$.error").value("Bad Request"));
             verifyNoInteractions(affordabilityCalculationService);
         }
+    }
+
+    @Nested
+    @DisplayName("Test Analyze Investment Endpoint")
+    class AnalyzeInvestmentTest {
+
+            private static final String URL = "/api/calculations/investment";
+
+            @Test
+            @DisplayName("When the request is complete, then return 200 with current returns and the labelled projection")
+            void whenRequestIsComplete_thenReturn200() throws Exception {
+                // Arrange
+                InvestmentAnalysisResponse response = new InvestmentAnalysisResponse(
+                        new InvestmentOperatingResult(new BigDecimal("2500.00"), new BigDecimal("30000.00"), null, null,
+                                null, null, null, null, null, null, null, null, null, null,
+                                new BigDecimal("1347.50"), new BigDecimal("16170.00"), List.of()),
+                        new InvestmentFinancingResult(new BigDecimal("240000.00"), new BigDecimal("1438.92"), null,
+                                new BigDecimal("-91.42"), null, new BigDecimal("5.39"), null, null, List.of()),
+                        new BigDecimal("10.00"),
+                        new InvestmentProjectionResult(5, new BigDecimal("3"), null, null, null, null, null,
+                                new BigDecimal("124451.76"), null, List.of("Rent stays constant."), List.of()),
+                        List.of());
+                when(investmentAnalysisService.analyze(any())).thenReturn(response);
+
+                // Act & Assert
+                mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("""
+                            {"operating": {"monthlyRent": 2500, "vacancyRatePercent": 5},
+                             "financing": {"purchasePrice": 300000, "downPayment": 60000, "annualInterestRate": 6, "loanTermYears": 30},
+                             "projection": {"horizonYears": 5, "annualAppreciationRatePercent": 3}}"""))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.operating.annualNetOperatingIncome").value(16170.00))
+                        .andExpect(jsonPath("$.financing.monthlyCashFlow").value(-91.42))
+                        .andExpect(jsonPath("$.grossYieldPercent").value(10.00))
+                        .andExpect(jsonPath("$.projection.totalEquity").value(124451.76))
+                        .andExpect(jsonPath("$.projection.assumptions[0]").value("Rent stays constant."));
+                verify(investmentAnalysisService).analyze(any());
+            }
+
+            @Test
+            @DisplayName("When only the rent is sent, then the request is accepted")
+            void whenOnlyRentSent_thenReturn200() throws Exception {
+                // Arrange
+                when(investmentAnalysisService.analyze(any())).thenReturn(new InvestmentAnalysisResponse(
+                        null, null, null, null, List.of("No projection requested: equity and appreciation not projected.")));
+
+                // Act & Assert
+                mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"operating\": {\"monthlyRent\": 2500}}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.projection").doesNotExist())
+                        .andExpect(jsonPath("$.notes[0]").value("No projection requested: equity and appreciation not projected."));
+            }
+
+            @Test
+            @DisplayName("When the service rejects an input, then return 400")
+            void whenServiceRejectsInput_thenReturn400() throws Exception {
+                // Arrange
+                when(investmentAnalysisService.analyze(any()))
+                        .thenThrow(new IllegalArgumentException("downPayment must not exceed purchasePrice"));
+
+                // Act & Assert
+                mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("""
+                            {"operating": {"monthlyRent": 2500},
+                             "financing": {"purchasePrice": 100000, "downPayment": 200000, "annualInterestRate": 6, "loanTermYears": 30}}"""))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.message").value("downPayment must not exceed purchasePrice"));
+            }
+
+            @ParameterizedTest
+            @DisplayName("When the body is invalid, then return 400 without calling the service")
+            @ValueSource(strings = {
+                    // operating section missing
+                    "{}",
+                    // rent missing
+                    """
+                            {"operating": {"vacancyRatePercent": 5}}""",
+                    // vacancy above 100
+                    """
+                            {"operating": {"monthlyRent": 2500, "vacancyRatePercent": 150}}""",
+                    // horizon missing / 0 / 31
+                    """
+                            {"operating": {"monthlyRent": 2500}, "projection": {}}""",
+                    """
+                            {"operating": {"monthlyRent": 2500}, "projection": {"horizonYears": 0}}""",
+                    """
+                            {"operating": {"monthlyRent": 2500}, "projection": {"horizonYears": 31}}""",
+                    // appreciation rate out of range
+                    """
+                            {"operating": {"monthlyRent": 2500}, "projection": {"horizonYears": 5, "annualAppreciationRatePercent": 51}}""",
+                    // purchase price 0 (zero denominator)
+                    """
+                            {"operating": {"monthlyRent": 2500}, "financing": {"purchasePrice": 0}}""",
+                    // wrong type / malformed JSON
+                    """
+                            {"operating": {"monthlyRent": "abc"}}""",
+                    "{ not json"
+            })
+            void whenBodyIsInvalid_thenReturn400(String body) throws Exception {
+                mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.error").value("Bad Request"));
+                verifyNoInteractions(investmentAnalysisService);
+            }
     }
 }

@@ -56,4 +56,40 @@ public final class MortgageMath {
         return maxLoanAmount;
 
     }
+
+    /**
+     * Remaining loan balance after a number of monthly payments, using the same amortization as
+     * {@link #monthlyPayment}. Returns 0 once the loan is fully repaid.
+     *
+     * @param loanAmount        amount borrowed
+     * @param annualRatePercent annual interest rate in percent (0 allowed)
+     * @param loanTermYears     loan term in years
+     * @param monthsPaid        number of monthly payments already made, 0 or greater
+     * @return the balance still owed, never negative
+     * @throws IllegalArgumentException if monthsPaid is negative
+     */
+    public static BigDecimal remainingBalance(BigDecimal loanAmount, BigDecimal annualRatePercent,
+                                              int loanTermYears, int monthsPaid) {
+        if (monthsPaid < 0) {
+            throw new IllegalArgumentException("monthsPaid must be 0 or greater");
+        }
+        int numberOfPayments = loanTermYears * 12;
+        if (monthsPaid >= numberOfPayments) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal monthlyPayment = monthlyPayment(loanAmount, annualRatePercent, loanTermYears);
+        BigDecimal balance;
+        if (annualRatePercent.compareTo(BigDecimal.ZERO) == 0) {
+            // Without interest, each payment repays the same share of the loan
+            balance = loanAmount.subtract(monthlyPayment.multiply(BigDecimal.valueOf(monthsPaid)), MC);
+        } else {
+            // Balance after k payments: P * (1+r)^k - M * ((1+r)^k - 1) / r
+            BigDecimal monthlyInterestRate = annualRatePercent.divide(HUNDRED, MC).divide(TWELVE, MC);
+            BigDecimal onePlusRPowerK = BigDecimal.ONE.add(monthlyInterestRate).pow(monthsPaid, MC);
+            balance = loanAmount.multiply(onePlusRPowerK)
+                    .subtract(monthlyPayment.multiply(onePlusRPowerK.subtract(BigDecimal.ONE))
+                            .divide(monthlyInterestRate, MC), MC);
+        }
+        return balance.max(BigDecimal.ZERO);
+    }
 }
