@@ -1,0 +1,1042 @@
+{
+  "info": {
+    "name": "SCRUM-108 Realtor dashboard: clients and leads card",
+    "description": "GET /api/dashboards/realtor/clients-leads. Run folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientId) and two users: A, the realtor whose data is created in folder 2, and B, an outsider with no CRM data. propertyId must be an existing property id. Test rows cannot be deleted through the API (leads are permanent and clients with leads return 409), so re-running folder 2 adds more rows; use fresh users to re-run the exact count assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0 Tokens",
+      "item": [
+        {
+          "name": "0.1 Token for user A (Keycloak password grant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userA}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordA}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "0.2 Token for user B (Keycloak password grant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userB}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordB}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 Empty card",
+      "item": [
+        {
+          "name": "1.1 Card is empty for user A",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('all five stages present and total = sum', () => { ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage).to.have.property(s)); const sum = Object.values(b.leads.byStage).reduce((a, c) => a + c, 0); pm.expect(b.leads.total).to.eql(sum); pm.expect(b.leads.open).to.eql(b.leads.byStage.NEW + b.leads.byStage.CONTACTED + b.leads.byStage.QUALIFIED); });",
+                  "pm.test('recent lists are bounded by limit and newest first', () => { [b.clients.recent, b.leads.recent].forEach(list => { pm.expect(list.length).to.be.at.most(b.limit); for (let i = 1; i < list.length; i++) pm.expect(list[i - 1].createdAt >= list[i].createdAt, list[i - 1].createdAt + ' >= ' + list[i].createdAt).to.be.true; }); });",
+                  "pm.test('items have the documented fields', () => { b.clients.recent.forEach(c => ['id', 'name', 'email', 'phone', 'createdAt'].forEach(k => pm.expect(c).to.have.property(k))); b.leads.recent.forEach(l => ['id', 'clientId', 'clientName', 'propertyId', 'title', 'source', 'stage', 'createdAt'].forEach(k => pm.expect(l).to.have.property(k))); });",
+                  "pm.test('zeros and empty lists', () => { pm.expect(b.limit).to.eql(5); pm.expect(b.clients.total).to.eql(0); pm.expect(b.clients.recent).to.eql([]); pm.expect(b.leads.total).to.eql(0); pm.expect(b.leads.open).to.eql(0); pm.expect(b.leads.recent).to.eql([]); ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage[s]).to.eql(0)); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 Create test data (user A, existing CRM endpoints)",
+      "item": [
+        {
+          "name": "2.1 Create client Amina Benali (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Amina Benali\",\n  \"email\": \"amina.benali@example.test\",\n  \"phone\": \"+1 305 555 0101\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('clientId1', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Create client Youssef Idrissi (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clients"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Youssef Idrissi\",\n  \"email\": \"youssef.idrissi@example.test\",\n  \"phone\": \"+1 305 555 0102\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('clientId2', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Create lead Looking for a 3-bed in Miami (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idemKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": {{clientId1}},\n  \"title\": \"Looking for a 3-bed in Miami\",\n  \"source\": \"WEBSITE\",\n  \"propertyId\": {{propertyId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('idemKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('stage starts NEW', () => pm.expect(pm.response.json().stage).to.eql('NEW'));",
+                  "pm.collectionVariables.set('leadId1', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Create lead Wants a valuation of her condo (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idemKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": {{clientId1}},\n  \"title\": \"Wants a valuation of her condo\",\n  \"source\": \"PHONE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('idemKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('stage starts NEW', () => pm.expect(pm.response.json().stage).to.eql('NEW'));",
+                  "pm.collectionVariables.set('leadId2', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Create lead Investor asking about duplexes (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idemKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": {{clientId2}},\n  \"title\": \"Investor asking about duplexes\",\n  \"source\": \"REFERRAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('idemKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('stage starts NEW', () => pm.expect(pm.response.json().stage).to.eql('NEW'));",
+                  "pm.collectionVariables.set('leadId3', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Move lead {{leadId1}} to CONTACTED (user A)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads/{{leadId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads",
+                "{{leadId1}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"CONTACTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stage is CONTACTED', () => pm.expect(pm.response.json().stage).to.eql('CONTACTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Move lead {{leadId2}} to LOST (user A)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads/{{leadId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads",
+                "{{leadId2}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"LOST\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stage is LOST', () => pm.expect(pm.response.json().stage).to.eql('LOST'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 Card with data",
+      "item": [
+        {
+          "name": "3.1 Card for user A (default limit)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('all five stages present and total = sum', () => { ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage).to.have.property(s)); const sum = Object.values(b.leads.byStage).reduce((a, c) => a + c, 0); pm.expect(b.leads.total).to.eql(sum); pm.expect(b.leads.open).to.eql(b.leads.byStage.NEW + b.leads.byStage.CONTACTED + b.leads.byStage.QUALIFIED); });",
+                  "pm.test('recent lists are bounded by limit and newest first', () => { [b.clients.recent, b.leads.recent].forEach(list => { pm.expect(list.length).to.be.at.most(b.limit); for (let i = 1; i < list.length; i++) pm.expect(list[i - 1].createdAt >= list[i].createdAt, list[i - 1].createdAt + ' >= ' + list[i].createdAt).to.be.true; }); });",
+                  "pm.test('items have the documented fields', () => { b.clients.recent.forEach(c => ['id', 'name', 'email', 'phone', 'createdAt'].forEach(k => pm.expect(c).to.have.property(k))); b.leads.recent.forEach(l => ['id', 'clientId', 'clientName', 'propertyId', 'title', 'source', 'stage', 'createdAt'].forEach(k => pm.expect(l).to.have.property(k))); });",
+                  "const id = k => Number(pm.collectionVariables.get(k));",
+                  "pm.test('counts: 2 clients, 3 leads, 2 open', () => { pm.expect(b.limit).to.eql(5); pm.expect(b.clients.total).to.eql(2); pm.expect(b.leads.total).to.eql(3); pm.expect(b.leads.open).to.eql(2); });",
+                  "pm.test('byStage: NEW 1, CONTACTED 1, LOST 1, others 0', () => { const s = b.leads.byStage; pm.expect(s.NEW).to.eql(1); pm.expect(s.CONTACTED).to.eql(1); pm.expect(s.QUALIFIED).to.eql(0); pm.expect(s.CONVERTED).to.eql(0); pm.expect(s.LOST).to.eql(1); });",
+                  "pm.test('recent clients: Youssef then Amina', () => { pm.expect(b.clients.recent.map(c => c.id)).to.eql([id('clientId2'), id('clientId1')]); pm.expect(b.clients.recent[0].name).to.eql('Youssef Idrissi'); pm.expect(b.clients.recent[0].email).to.eql('youssef.idrissi@example.test'); });",
+                  "pm.test('recent leads: 3, 2, 1 with current stage and client name', () => { pm.expect(b.leads.recent.map(l => l.id)).to.eql([id('leadId3'), id('leadId2'), id('leadId1')]); const byId = Object.fromEntries(b.leads.recent.map(l => [l.id, l])); pm.expect(byId[id('leadId1')].stage).to.eql('CONTACTED'); pm.expect(byId[id('leadId1')].clientName).to.eql('Amina Benali'); pm.expect(byId[id('leadId1')].propertyId).to.eql(Number(pm.collectionVariables.get('propertyId'))); pm.expect(byId[id('leadId2')].stage).to.eql('LOST'); pm.expect(byId[id('leadId2')].propertyId).to.be.null; pm.expect(byId[id('leadId3')].stage).to.eql('NEW'); pm.expect(byId[id('leadId3')].clientName).to.eql('Youssef Idrissi'); pm.expect(byId[id('leadId3')].source).to.eql('REFERRAL'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 Limits",
+      "item": [
+        {
+          "name": "4.1 limit=1 gives one item per list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads?limit=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('all five stages present and total = sum', () => { ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage).to.have.property(s)); const sum = Object.values(b.leads.byStage).reduce((a, c) => a + c, 0); pm.expect(b.leads.total).to.eql(sum); pm.expect(b.leads.open).to.eql(b.leads.byStage.NEW + b.leads.byStage.CONTACTED + b.leads.byStage.QUALIFIED); });",
+                  "pm.test('recent lists are bounded by limit and newest first', () => { [b.clients.recent, b.leads.recent].forEach(list => { pm.expect(list.length).to.be.at.most(b.limit); for (let i = 1; i < list.length; i++) pm.expect(list[i - 1].createdAt >= list[i].createdAt, list[i - 1].createdAt + ' >= ' + list[i].createdAt).to.be.true; }); });",
+                  "pm.test('items have the documented fields', () => { b.clients.recent.forEach(c => ['id', 'name', 'email', 'phone', 'createdAt'].forEach(k => pm.expect(c).to.have.property(k))); b.leads.recent.forEach(l => ['id', 'clientId', 'clientName', 'propertyId', 'title', 'source', 'stage', 'createdAt'].forEach(k => pm.expect(l).to.have.property(k))); });",
+                  "pm.test('one per list, totals unchanged', () => { pm.expect(b.limit).to.eql(1); pm.expect(b.clients.recent.length).to.eql(1); pm.expect(b.leads.recent.length).to.eql(1); pm.expect(b.clients.total).to.eql(2); pm.expect(b.leads.total).to.eql(3); pm.expect(b.leads.recent[0].id).to.eql(Number(pm.collectionVariables.get('leadId3'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 limit=20 (maximum) gives everything",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('all five stages present and total = sum', () => { ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage).to.have.property(s)); const sum = Object.values(b.leads.byStage).reduce((a, c) => a + c, 0); pm.expect(b.leads.total).to.eql(sum); pm.expect(b.leads.open).to.eql(b.leads.byStage.NEW + b.leads.byStage.CONTACTED + b.leads.byStage.QUALIFIED); });",
+                  "pm.test('recent lists are bounded by limit and newest first', () => { [b.clients.recent, b.leads.recent].forEach(list => { pm.expect(list.length).to.be.at.most(b.limit); for (let i = 1; i < list.length; i++) pm.expect(list[i - 1].createdAt >= list[i].createdAt, list[i - 1].createdAt + ' >= ' + list[i].createdAt).to.be.true; }); });",
+                  "pm.test('items have the documented fields', () => { b.clients.recent.forEach(c => ['id', 'name', 'email', 'phone', 'createdAt'].forEach(k => pm.expect(c).to.have.property(k))); b.leads.recent.forEach(l => ['id', 'clientId', 'clientName', 'propertyId', 'title', 'source', 'stage', 'createdAt'].forEach(k => pm.expect(l).to.have.property(k))); });",
+                  "pm.test('limit 20, all rows', () => { pm.expect(b.limit).to.eql(20); pm.expect(b.clients.recent.length).to.eql(2); pm.expect(b.leads.recent.length).to.eql(3); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 limit=0 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads?limit=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('limit must be between 1 and 20, got 0'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 limit=21 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads?limit=21",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "21"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('limit must be between 1 and 20, got 21'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 limit=abc is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads?limit=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('limit: invalid value'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 Ownership",
+      "item": [
+        {
+          "name": "5.1 User B sees an empty card, not A's data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('all five stages present and total = sum', () => { ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'LOST'].forEach(s => pm.expect(b.leads.byStage).to.have.property(s)); const sum = Object.values(b.leads.byStage).reduce((a, c) => a + c, 0); pm.expect(b.leads.total).to.eql(sum); pm.expect(b.leads.open).to.eql(b.leads.byStage.NEW + b.leads.byStage.CONTACTED + b.leads.byStage.QUALIFIED); });",
+                  "pm.test('recent lists are bounded by limit and newest first', () => { [b.clients.recent, b.leads.recent].forEach(list => { pm.expect(list.length).to.be.at.most(b.limit); for (let i = 1; i < list.length; i++) pm.expect(list[i - 1].createdAt >= list[i].createdAt, list[i - 1].createdAt + ' >= ' + list[i].createdAt).to.be.true; }); });",
+                  "pm.test('items have the documented fields', () => { b.clients.recent.forEach(c => ['id', 'name', 'email', 'phone', 'createdAt'].forEach(k => pm.expect(c).to.have.property(k))); b.leads.recent.forEach(l => ['id', 'clientId', 'clientName', 'propertyId', 'title', 'source', 'stage', 'createdAt'].forEach(k => pm.expect(l).to.have.property(k))); });",
+                  "pm.test('B has nothing', () => { pm.expect(b.clients.total).to.eql(0); pm.expect(b.leads.total).to.eql(0); pm.expect(b.clients.recent).to.eql([]); pm.expect(b.leads.recent).to.eql([]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 User B cannot read A's lead directly (SCRUM-78 rule, 404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/leads/{{leadId1}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "leads",
+                "{{leadId1}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 Missing identity",
+      "item": [
+        {
+          "name": "6.1 No token gives 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('A bearer token is required to identify the current user'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Invalid token gives 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-real-token"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/clients-leads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "clients-leads"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8091"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "userA",
+      "value": "dash_user_a"
+    },
+    {
+      "key": "passwordA",
+      "value": "Test1234!"
+    },
+    {
+      "key": "userB",
+      "value": "dash_user_b"
+    },
+    {
+      "key": "passwordB",
+      "value": "Test1234!"
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "propertyId",
+      "value": "4"
+    },
+    {
+      "key": "clientId1",
+      "value": ""
+    },
+    {
+      "key": "clientId2",
+      "value": ""
+    },
+    {
+      "key": "leadId1",
+      "value": ""
+    },
+    {
+      "key": "leadId2",
+      "value": ""
+    },
+    {
+      "key": "leadId3",
+      "value": ""
+    },
+    {
+      "key": "idemKey",
+      "value": ""
+    }
+  ]
+}
