@@ -1,7 +1,9 @@
 package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
+import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
+import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class InvestorDashboardController {
 
     private final InvestorOccupancyExposureService investorOccupancyExposureService;
+    private final InvestorValueEquityDebtService investorValueEquityDebtService;
 
     /**
      * Occupancy and exposure card: occupancy counts, rental occupancy, state and county exposure and their coverage.
@@ -42,5 +45,24 @@ public class InvestorDashboardController {
     public ResponseEntity<InvestorOccupancyExposureCardDTO> occupancyExposure(
             @RequestParam(required = false) Long portfolioId) {
         return ResponseEntity.ok(investorOccupancyExposureService.getCard(portfolioId));
+    }
+
+
+    /**
+     * Value, equity and debt card: market value, reported debt and equity with their coverage and dates.
+     *
+     * @param portfolioId optional portfolio of the current user; all portfolios when omitted
+     * @return 200 with the card (EMPTY without holdings); 400 if portfolioId is invalid; 401 without a bearer token;
+     *         404 if the portfolio is missing or belongs to another user
+     */
+    @GetMapping("/value-equity-debt")
+    @Operation(summary = "Value, equity and debt card of my investor dashboard", description = "Adds up the portfolio "
+            + "value summaries (SCRUM-74) of all my portfolios, or of portfolioId. Amounts apply the ownership share; "
+            + "equity = value - debt only for holdings where both are known. total is null when a holding is not "
+            + "covered (knownTotal is then the partial sum); coverage percentages show how many holdings are known. "
+            + "Without holdings: status EMPTY, zero totals, null percentages.")
+    public ResponseEntity<InvestorValueEquityDebtCardDTO> valueEquityDebt(
+            @RequestParam(required = false) Long portfolioId) {
+        return ResponseEntity.ok(investorValueEquityDebtService.getCard(portfolioId));
     }
 }
