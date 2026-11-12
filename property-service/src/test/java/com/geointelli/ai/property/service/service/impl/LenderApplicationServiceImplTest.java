@@ -78,6 +78,7 @@ class LenderApplicationServiceImplTest {
             jdbc.execute("CREATE TABLE users(id BIGINT PRIMARY KEY)");
             jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V24__add_lender_applications.sql"));
+            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V34__add_lender_application_loan_type.sql"));
         }
     }
 
@@ -94,7 +95,7 @@ class LenderApplicationServiceImplTest {
     }
 
     private LenderApplicationCreateRequest request(String amount) {
-        return new LenderApplicationCreateRequest(" Applicant ", " PERSON@example.com ", 100L, new BigDecimal(amount), "usd", " Notes ");
+        return new LenderApplicationCreateRequest(" Applicant ", " PERSON@example.com ", 100L, new BigDecimal(amount), "usd", " Notes ", null);
     }
     private LenderApplicationDTO create() { return applications.create(7L, org, request("300000")); }
     private LenderApplicationUpdateRequest stage(LenderApplicationStage stage) {
@@ -111,7 +112,7 @@ class LenderApplicationServiceImplTest {
     }
     private LenderApplicationImportRequest.Row row(String id, LenderApplicationStage stage) {
         return new LenderApplicationImportRequest.Row(id, "Applicant", null, null, new BigDecimal("300000"), "USD",
-            stage, null, null, null, null, null);
+            stage, null, null, null, null, null, null);
     }
     private LenderApplicationImportResult batch(LenderApplicationImportRequest.Row... rows) {
         return imports.importApplications(7L, org, new LenderApplicationImportRequest(" partner ", List.of(rows)));
@@ -204,13 +205,13 @@ class LenderApplicationServiceImplTest {
     @Test
     void validationHandlesMissingEmailCurrencyAndProperty() {
         assertThrows(IllegalArgumentException.class, () -> applications.create(7L, org,
-            new LenderApplicationCreateRequest(null, null, null, BigDecimal.ONE, "USD", null)));
+            new LenderApplicationCreateRequest(null, null, null, BigDecimal.ONE, "USD", null, null)));
         assertThrows(IllegalArgumentException.class, () -> applications.create(7L, org,
-            new LenderApplicationCreateRequest("A", "broken email", null, BigDecimal.ONE, "USD", null)));
+            new LenderApplicationCreateRequest("A", "broken email", null, BigDecimal.ONE, "USD", null, null)));
         assertThrows(IllegalArgumentException.class, () -> applications.create(7L, org,
-            new LenderApplicationCreateRequest("A", null, null, BigDecimal.ONE, "EUR", null)));
+            new LenderApplicationCreateRequest("A", null, null, BigDecimal.ONE, "EUR", null, null)));
         assertThrows(IllegalArgumentException.class, () -> applications.create(7L, org,
-            new LenderApplicationCreateRequest("A", null, 999L, BigDecimal.ONE, "USD", null)));
+            new LenderApplicationCreateRequest("A", null, 999L, BigDecimal.ONE, "USD", null, null)));
     }
 
     @Test
@@ -319,7 +320,7 @@ class LenderApplicationServiceImplTest {
         Instant fundedAt = Instant.parse("2020-01-02T00:00:00.987654321Z");
         var row = new LenderApplicationImportRequest.Row("F", "Applicant", null, 100L,
             new BigDecimal("300000"), "USD", LenderApplicationStage.FUNDED, new BigDecimal("250000"),
-            new BigDecimal("240000"), approvedAt, fundedAt, null);
+            new BigDecimal("240000"), approvedAt, fundedAt, null, null);
         var first = batch(row);
         var value = applications.get(7L, org, first.rows().get(0).applicationId());
         assertEquals(Instant.parse("2020-01-01T00:00:00.123456Z"), value.approvedAt());
@@ -333,7 +334,7 @@ class LenderApplicationServiceImplTest {
     void invalidImportDatesAndBoundsNeverCreateRows() {
         var row = new LenderApplicationImportRequest.Row("bad", "Applicant", null, null, BigDecimal.TEN, "USD",
             LenderApplicationStage.FUNDED, BigDecimal.TEN, BigDecimal.ONE,
-            Instant.parse("2020-01-02T00:00:00Z"), Instant.parse("2020-01-01T00:00:00Z"), null);
+            Instant.parse("2020-01-02T00:00:00Z"), Instant.parse("2020-01-01T00:00:00Z"), null, null);
         assertEquals(1, batch(row).rejected());
         assertThrows(IllegalArgumentException.class, () -> imports.importApplications(7L, org,
             new LenderApplicationImportRequest("PARTNER", List.of())));

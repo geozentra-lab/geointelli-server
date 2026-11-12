@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.util.List;
+
+import com.geointelli.ai.property.service.entity.LenderLoanType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -52,7 +54,7 @@ class LenderApplicationControllerTest {
 
     private LenderApplicationDTO application() {
         return new LenderApplicationDTO(5L, 1L, 7L, "Applicant", null, null, new BigDecimal("100000.00"),
-            "USD", LenderApplicationStage.DRAFT, null, null, null, null, null, null, null, null, null);
+                "USD", LenderApplicationStage.DRAFT, LenderLoanType.UNKNOWN, null, null, null, null, null, null, null, null, null);
     }
 
     @Test
