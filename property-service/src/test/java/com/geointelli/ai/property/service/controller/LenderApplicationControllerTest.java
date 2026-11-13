@@ -6,7 +6,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+
+import com.geointelli.ai.property.service.service.LenderCollateralAnalysisService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -36,6 +39,7 @@ class LenderApplicationControllerTest {
     private final LenderApplicationImportService imports = mock(LenderApplicationImportService.class);
     private final LenderOrganizationService organizations = mock(LenderOrganizationService.class);
     private final CurrentUserService currentUser = mock(CurrentUserService.class);
+    private final LenderCollateralAnalysisService collateralAnalysis = mock(LenderCollateralAnalysisService.class);
     private MockMvc mvc;
 
     @BeforeEach
@@ -43,7 +47,7 @@ class LenderApplicationControllerTest {
         User user = new User();
         user.setId(7L);
         when(currentUser.getCurrentUserEntity()).thenReturn(user);
-        mvc = MockMvcBuilders.standaloneSetup(new LenderApplicationController(applications, imports, currentUser),
+        mvc = MockMvcBuilders.standaloneSetup(new LenderApplicationController(applications, imports, collateralAnalysis, currentUser),
                 new LenderOrganizationController(organizations, currentUser))
             .setControllerAdvice(new LenderExceptionHandler(), new GlobalExceptionHandler())
             .setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper().registerModule(new JavaTimeModule())))
@@ -165,6 +169,65 @@ class LenderApplicationControllerTest {
         mvc.perform(post("/api/lender/applications?organizationId=1").contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(
                 "The lender record conflicts with an existing record or a reference changed; refresh and retry"));
+    }
+
+    @Test
+    void collateralAnalysisReturnsLoanCollateralLtvAndDisclaimer() throws Exception {
+        var collateral = new LenderCollateralAnalysisDTO.Collateral("supported", new BigDecimal("400000.00"), null, null,
+                "high", LocalDate.of(2026, 11, 1), "v3", List.of());
+        var ltv = new LenderCollateralAnalysisDTO.Ltv(LenderCollateralAnalysisDTO.LTV_AVAILABLE, new BigDecimal("75.00"), List.of());
+        when(collateralAnalysis.analyze(7L, 42L, 15L)).thenReturn(new LenderCollateralAnalysisDTO(15L, 42L, 100L, "USD",
+                new BigDecimal("300000.00"), LenderCollateralAnalysisDTO.BASIS_APPROVED, collateral, ltv,
+                LenderCollateralAnalysisDTO.DISCLAIMER));
+
+        mvc.perform(get("/api/lender/applications/15/collateral-analysis?organizationId=42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applicationId").value(15))
+                .andExpect(jsonPath("$.loanAmountBasis").value("APPROVED"))
+                .andExpect(jsonPath("$.collateral.valuationDate").value("2026-11-01"))
+                .andExpect(jsonPath("$.collateral.confidence").value("high"))
+                .andExpect(jsonPath("$.ltv.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.ltv.percent").value(75.00))
+                .andExpect(jsonPath("$.disclaimer").value(LenderCollateralAnalysisDTO.DISCLAIMER));
+    }
+
+    @Test
+    void collateralAnalysisUnavailableLtvKeepsNullPercent() throws Exception {
+        var ltv = new LenderCollateralAnalysisDTO.Ltv(LenderCollateralAnalysisDTO.LTV_UNAVAILABLE, null,
+                List.of(LenderCollateralAnalysisDTO.NO_COLLATERAL_PROPERTY));
+        when(collateralAnalysis.analyze(7L, 42L, 15L)).thenReturn(new LenderCollateralAnalysisDTO(15L, 42L, null, "USD",
+                new BigDecimal("300000.00"), LenderCollateralAnalysisDTO.BASIS_APPROVED, null, ltv,
+                LenderCollateralAnalysisDTO.DISCLAIMER));
+
+        mvc.perform(get("/api/lender/applications/15/collateral-analysis?organizationId=42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ltv.status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.ltv.percent").doesNotExist())
+                .andExpect(jsonPath("$.ltv.reasons[0]").value("NO_COLLATERAL_PROPERTY"));
+    }
+
+    @Test
+    void collateralAnalysisErrors() throws Exception {
+        mvc.perform(get("/api/lender/applications/15/collateral-analysis")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/lender/applications/abc/collateral-analysis?organizationId=42"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(collateralAnalysis);
+
+        when(collateralAnalysis.analyze(7L, 42L, 0L)).thenThrow(new IllegalArgumentException("id must be positive"));
+        mvc.perform(get("/api/lender/applications/0/collateral-analysis?organizationId=42"))
+                .andExpect(status().isBadRequest());
+        when(collateralAnalysis.analyze(7L, 42L, 16L))
+                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Application not found"));
+        mvc.perform(get("/api/lender/applications/16/collateral-analysis?organizationId=42"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void collateralAnalysisWithoutTokenReturns401() throws Exception {
+        when(currentUser.getCurrentUserEntity()).thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Bearer token required"));
+        mvc.perform(get("/api/lender/applications/15/collateral-analysis?organizationId=42"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(collateralAnalysis);
     }
 }
 
