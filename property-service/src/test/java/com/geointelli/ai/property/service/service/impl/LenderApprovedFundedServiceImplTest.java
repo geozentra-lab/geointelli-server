@@ -73,7 +73,7 @@ class LenderApprovedFundedServiceImplTest {
             jdbc.execute("CREATE TABLE users(id BIGINT PRIMARY KEY)");
             jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V24__add_lender_applications.sql"));
-            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V34__add_lender_application_loan_type.sql"));
+            ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V36__add_lender_application_loan_type.sql"));
         }
     }
 
