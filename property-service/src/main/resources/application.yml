@@ -116,3 +116,12 @@ alerts:
 # Web client origins allowed by CorsConfig (comma separated), e.g. the EC2 frontend URL.
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+
+valuation:
+  refresh:
+    # Enable only after V33, initial Python history seeding and worker deployment.
+    # After cutover, legacy ORM prediction imports are rejected; Python owns publication.
+    enabled: ${VALUATION_REFRESH_ENABLED:false}
+    # FULL_MARKET coalesces each bulk source transaction into one full-market request.
+    # It requires a Python worker started with --allow-full-market.
+    scope: ${VALUATION_REFRESH_SCOPE:PROPERTY}
