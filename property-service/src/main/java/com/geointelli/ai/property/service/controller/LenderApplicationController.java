@@ -1,6 +1,9 @@
 package com.geointelli.ai.property.service.controller;
 
 import java.net.URI;
+
+import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO;
+import com.geointelli.ai.property.service.service.LenderCollateralAnalysisService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -38,6 +41,7 @@ import lombok.RequiredArgsConstructor;
 public class LenderApplicationController {
     private final LenderApplicationService applications;
     private final LenderApplicationImportService imports;
+    private final LenderCollateralAnalysisService collateralAnalysis;
     private final CurrentUserService currentUser;
 
     @PostMapping("/applications")
@@ -64,6 +68,18 @@ public class LenderApplicationController {
     @Operation(summary = "Read application details in my organization")
     public LenderApplicationDTO get(@RequestParam Long organizationId, @PathVariable Long id) {
         return applications.get(actor(), organizationId, id);
+    }
+
+    @GetMapping("/applications/{id}/collateral-analysis")
+    @Operation(summary = "Collateral value and LTV of an application", description = "Read-only. Loan amount is "
+        + "fundedAmount, else approvedAmount, else requestedAmount (loanAmountBasis). Collateral is the stored model "
+        + "valuation of the linked property (SCRUM-58), unchanged, with its prediction date and confidence. "
+        + "LTV = loanAmount / value x 100, two decimals: AVAILABLE for a supported valuation, LIMITED for a limited one "
+        + "(with the model reasons), UNAVAILABLE with a null percent and a reason (NO_COLLATERAL_PROPERTY, "
+        + "COLLATERAL_PROPERTY_NOT_FOUND, VALUATION_UNAVAILABLE, INVALID_VALUATION) otherwise. "
+        + "Informational only; not a credit decision or approval.")
+    public LenderCollateralAnalysisDTO collateralAnalysis(@RequestParam Long organizationId, @PathVariable Long id) {
+        return collateralAnalysis.analyze(actor(), organizationId, id);
     }
 
     @PatchMapping("/applications/{id}")
