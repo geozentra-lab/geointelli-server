@@ -1,0 +1,1713 @@
+{
+  "info": {
+    "name": "SCRUM-110 Realtor dashboard: tasks and pipeline card",
+    "description": "GET /api/dashboards/realtor/tasks-pipeline. Run folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc) and two users: A, the realtor whose data is created in folder 2, and B, an outsider with no CRM data. clientId must be a contact owned by A (needed to create deals) and propertyId an existing property. Folder 1 and the exact counts in folders 3-5 assume A has no tasks and no deals before the run; folder 8 deletes the tasks but deals cannot be deleted through the API, so re-runs need a fresh user for the pipeline assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0 Tokens",
+      "item": [
+        {
+          "name": "0.1 Token for user A (Keycloak password grant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userA}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordA}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "0.2 Token for user B (Keycloak password grant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userB}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordB}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 Empty card",
+      "item": [
+        {
+          "name": "1.1 Card is empty for user A",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('defaults: limit 5, days 7', () => { pm.expect(b.limit).to.eql(5); pm.expect(b.tasks.window.days).to.eql(7); });",
+                  "pm.test('zeros and empty lists', () => { const t = b.tasks.summary; ['total', 'open', 'inProgress', 'completed', 'cancelled', 'overdue'].forEach(k => pm.expect(t[k]).to.eql(0)); pm.expect(b.tasks.dueSoonCount).to.eql(0); pm.expect(b.tasks.overdue).to.eql([]); pm.expect(b.tasks.dueSoon).to.eql([]); pm.expect(b.pipeline.total).to.eql(0); pm.expect(b.pipeline.open).to.eql(0); ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(b.pipeline.byStage[k]).to.eql(0)); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 Create test data (user A, existing SCRUM-79 endpoints)",
+      "item": [
+        {
+          "name": "2.1 Create task: Call back Amina about the offer (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Call back Amina about the offer\",\n  \"dueAt\": \"{{dueAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('dueAt', new Date(Date.now() + (-2) * 86400000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts OPEN', () => pm.expect(pm.response.json().status).to.eql('OPEN'));",
+                  "pm.collectionVariables.set('taskOverdue', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Create task: Schedule a viewing (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Schedule a viewing\",\n  \"dueAt\": \"{{dueAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('dueAt', new Date(Date.now() + (3) * 86400000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts OPEN', () => pm.expect(pm.response.json().status).to.eql('OPEN'));",
+                  "pm.collectionVariables.set('taskSoon', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Create task: Prepare the quarterly market report (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Prepare the quarterly market report\",\n  \"dueAt\": \"{{dueAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('dueAt', new Date(Date.now() + (30) * 86400000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts OPEN', () => pm.expect(pm.response.json().status).to.eql('OPEN'));",
+                  "pm.collectionVariables.set('taskLater', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Create task: Update the listing photos (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Update the listing photos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts OPEN', () => pm.expect(pm.response.json().status).to.eql('OPEN'));",
+                  "pm.collectionVariables.set('taskNoDue', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Create task: Send the welcome email (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Send the welcome email\",\n  \"dueAt\": \"{{dueAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('dueAt', new Date(Date.now() + (1) * 86400000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts OPEN', () => pm.expect(pm.response.json().status).to.eql('OPEN'));",
+                  "pm.collectionVariables.set('taskDone', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Set status of {{taskDone}} to COMPLETED (user A)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskDone}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskDone}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status is COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Create deal: Amina, 3-bed in Miami (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Amina, 3-bed in Miami\",\n  \"clientId\": {{clientId}},\n  \"propertyId\": {{propertyId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts PROSPECT', () => pm.expect(pm.response.json().stage).to.eql('PROSPECT'));",
+                  "pm.collectionVariables.set('deal1', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.8 Create deal: Amina, condo downtown (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Amina, condo downtown\",\n  \"clientId\": {{clientId}},\n  \"propertyId\": {{propertyId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts PROSPECT', () => pm.expect(pm.response.json().stage).to.eql('PROSPECT'));",
+                  "pm.collectionVariables.set('deal2', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.9 Create deal: Amina, duplex investment (user A)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Amina, duplex investment\",\n  \"clientId\": {{clientId}},\n  \"propertyId\": {{propertyId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('starts PROSPECT', () => pm.expect(pm.response.json().stage).to.eql('PROSPECT'));",
+                  "pm.collectionVariables.set('deal3', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.10 Set stage of {{deal2}} to VIEWING (user A)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/{{deal2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                "{{deal2}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"VIEWING\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stage is VIEWING', () => pm.expect(pm.response.json().stage).to.eql('VIEWING'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.11 Set stage of {{deal3}} to CANCELLED (user A)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/{{deal3}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                "{{deal3}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage\": \"CANCELLED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('stage is CANCELLED', () => pm.expect(pm.response.json().stage).to.eql('CANCELLED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 Card with data",
+      "item": [
+        {
+          "name": "3.1 Card for user A (default limit and days)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('defaults applied', () => { pm.expect(b.limit).to.eql(5); pm.expect(b.tasks.window.days).to.eql(7); });",
+                  "const id = k => Number(pm.collectionVariables.get(k));",
+                  "pm.test('summary: total 5, open 4, completed 1, overdue 1', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(5); pm.expect(t.open).to.eql(4); pm.expect(t.inProgress).to.eql(0); pm.expect(t.completed).to.eql(1); pm.expect(t.cancelled).to.eql(0); pm.expect(t.overdue).to.eql(1); });",
+                  "pm.test('overdue list has only the 2-days-ago task', () => pm.expect(b.tasks.overdue.map(t => t.id)).to.eql([id('taskOverdue')]));",
+                  "pm.test('dueSoon (7 days) has only the 3-days task', () => { pm.expect(b.tasks.dueSoonCount).to.eql(1); pm.expect(b.tasks.dueSoon.map(t => t.id)).to.eql([id('taskSoon')]); });",
+                  "pm.test('30-day, no-date and completed tasks are listed nowhere', () => { const all = [...b.tasks.overdue, ...b.tasks.dueSoon].map(t => t.id); ['taskLater', 'taskNoDue', 'taskDone'].forEach(k => pm.expect(all).to.not.include(id(k))); });",
+                  "pm.test('pipeline: total 3, open 2, PROSPECT 1 / VIEWING 1 / CANCELLED 1', () => { const s = b.pipeline.byStage; pm.expect(b.pipeline.total).to.eql(3); pm.expect(b.pipeline.open).to.eql(2); pm.expect(s.PROSPECT).to.eql(1); pm.expect(s.VIEWING).to.eql(1); pm.expect(s.OFFER).to.eql(0); pm.expect(s.UNDER_CONTRACT).to.eql(0); pm.expect(s.CLOSED).to.eql(0); pm.expect(s.CANCELLED).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 Date range",
+      "item": [
+        {
+          "name": "4.1 days=30 brings the 30-day task into dueSoon",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "const id = k => Number(pm.collectionVariables.get(k));",
+                  "pm.test('window 30 days; dueSoon = 3-days then 30-days task', () => { pm.expect(b.tasks.window.days).to.eql(30); pm.expect(b.tasks.dueSoonCount).to.eql(2); pm.expect(b.tasks.dueSoon.map(t => t.id)).to.eql([id('taskSoon'), id('taskLater')]); pm.expect(b.tasks.overdue.map(t => t.id)).to.eql([id('taskOverdue')]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 days=90 (maximum) accepted",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=90",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "90"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('window 90 days', () => { pm.expect(b.tasks.window.days).to.eql(90); pm.expect(b.tasks.dueSoonCount).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 days=1 (minimum) excludes the 3-days task",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('window 1 day, nothing due soon', () => { pm.expect(b.tasks.window.days).to.eql(1); pm.expect(b.tasks.dueSoonCount).to.eql(0); pm.expect(b.tasks.dueSoon).to.eql([]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 days=0 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"days must be between 1 and 90, got 0\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 days=91 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=91",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "91"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"days must be between 1 and 90, got 91\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.6 days=abc is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?days=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"days: invalid value\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 Limits",
+      "item": [
+        {
+          "name": "5.1 limit=1 with days=30 caps each list at one item",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?limit=1&days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1"
+                },
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "const id = k => Number(pm.collectionVariables.get(k));",
+                  "pm.test('one per list, counts unchanged', () => { pm.expect(b.limit).to.eql(1); pm.expect(b.tasks.overdue.length).to.eql(1); pm.expect(b.tasks.dueSoon.length).to.eql(1); pm.expect(b.tasks.dueSoon[0].id).to.eql(id('taskSoon')); pm.expect(b.tasks.dueSoonCount).to.eql(2); pm.expect(b.tasks.summary.total).to.eql(5); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 limit=20 (maximum) accepted",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('limit 20', () => pm.expect(b.limit).to.eql(20));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 limit=0 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?limit=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"limit must be between 1 and 20, got 0\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 limit=21 is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline?limit=21",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "21"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"limit must be between 1 and 20, got 21\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 Ownership",
+      "item": [
+        {
+          "name": "6.1 User B sees an empty card, not A's data",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('zeros and empty lists', () => { const t = b.tasks.summary; ['total', 'open', 'inProgress', 'completed', 'cancelled', 'overdue'].forEach(k => pm.expect(t[k]).to.eql(0)); pm.expect(b.tasks.dueSoonCount).to.eql(0); pm.expect(b.tasks.overdue).to.eql([]); pm.expect(b.tasks.dueSoon).to.eql([]); pm.expect(b.pipeline.total).to.eql(0); pm.expect(b.pipeline.open).to.eql(0); ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(b.pipeline.byStage[k]).to.eql(0)); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 User B cannot read A's task directly (SCRUM-79 rule, 404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskOverdue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskOverdue}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7 Missing identity",
+      "item": [
+        {
+          "name": "7.1 No token gives 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql(\"A bearer token is required to identify the current user\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Invalid token gives 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-real-token"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 Cleanup (tasks only; deals cannot be deleted)",
+      "item": [
+        {
+          "name": "8.1 Delete task {{taskOverdue}} (user A)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskOverdue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskOverdue}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 Delete task {{taskSoon}} (user A)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskSoon}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskSoon}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 Delete task {{taskLater}} (user A)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskLater}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskLater}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.4 Delete task {{taskNoDue}} (user A)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskNoDue}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskNoDue}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.5 Delete task {{taskDone}} (user A)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskDone}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskDone}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.6 Card for user A: task zeros, deals remain",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/realtor/tasks-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "realtor",
+                "tasks-pipeline"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.be.a('string'); });",
+                  "pm.test('window is from now to now + days (UTC instants)', () => { const w = b.tasks.window; pm.expect(w.from).to.match(/Z$/); pm.expect(w.to).to.match(/Z$/); pm.expect(new Date(w.to) - new Date(w.from)).to.eql(w.days * 86400000); });",
+                  "pm.test('all six stages present; total = sum; open = 4 open stages', () => { const s = b.pipeline.byStage; ['PROSPECT', 'VIEWING', 'OFFER', 'UNDER_CONTRACT', 'CLOSED', 'CANCELLED'].forEach(k => pm.expect(s).to.have.property(k)); pm.expect(b.pipeline.total).to.eql(Object.values(s).reduce((a, c) => a + c, 0)); pm.expect(b.pipeline.open).to.eql(s.PROSPECT + s.VIEWING + s.OFFER + s.UNDER_CONTRACT); });",
+                  "pm.test('task summary is consistent', () => { const t = b.tasks.summary; pm.expect(t.total).to.eql(t.open + t.inProgress + t.completed + t.cancelled); pm.expect(b.tasks.dueSoonCount).to.be.at.least(b.tasks.dueSoon.length); pm.expect(t.overdue).to.be.at.least(b.tasks.overdue.length); });",
+                  "pm.test('lists: bounded, active only, ascending dueAt, no overlap, correct side of the window', () => { const w = b.tasks.window; const ids = new Set(); [b.tasks.overdue, b.tasks.dueSoon].forEach((list, i) => { pm.expect(list.length).to.be.at.most(b.limit); list.forEach(t => { ['id', 'title', 'status', 'dueAt', 'clientId', 'leadId', 'propertyId', 'transactionId'].forEach(k => pm.expect(t).to.have.property(k)); pm.expect(['OPEN', 'IN_PROGRESS']).to.include(t.status); pm.expect(ids.has(t.id), 'task in both lists').to.be.false; ids.add(t.id); if (i === 0) pm.expect(t.dueAt < w.from, t.dueAt + ' before ' + w.from).to.be.true; else pm.expect(t.dueAt >= w.from && t.dueAt <= w.to, t.dueAt + ' inside window').to.be.true; }); for (let j = 1; j < list.length; j++) pm.expect(list[j - 1].dueAt <= list[j].dueAt).to.be.true; }); });",
+                  "pm.test('tasks back to zero, pipeline unchanged', () => { pm.expect(b.tasks.summary.total).to.eql(0); pm.expect(b.tasks.overdue).to.eql([]); pm.expect(b.tasks.dueSoon).to.eql([]); pm.expect(b.pipeline.total).to.eql(3); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8091"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientIdKc",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "userA",
+      "value": "dash_user_a"
+    },
+    {
+      "key": "passwordA",
+      "value": "Test1234!"
+    },
+    {
+      "key": "userB",
+      "value": "dash_user_b"
+    },
+    {
+      "key": "passwordB",
+      "value": "Test1234!"
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "clientId",
+      "value": "1"
+    },
+    {
+      "key": "propertyId",
+      "value": "4"
+    },
+    {
+      "key": "dueAt",
+      "value": ""
+    },
+    {
+      "key": "taskOverdue",
+      "value": ""
+    },
+    {
+      "key": "taskSoon",
+      "value": ""
+    },
+    {
+      "key": "taskLater",
+      "value": ""
+    },
+    {
+      "key": "taskNoDue",
+      "value": ""
+    },
+    {
+      "key": "taskDone",
+      "value": ""
+    },
+    {
+      "key": "deal1",
+      "value": ""
+    },
+    {
+      "key": "deal2",
+      "value": ""
+    },
+    {
+      "key": "deal3",
+      "value": ""
+    }
+  ]
+}
