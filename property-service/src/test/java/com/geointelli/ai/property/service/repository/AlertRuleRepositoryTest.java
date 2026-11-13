@@ -26,11 +26,14 @@ import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.mapper.AlertRuleMapper;
 import jakarta.persistence.EntityManager;
 
-/** Executes real owner-scoped reads, locking, pause mapping and cascade deletion in an isolated database. */
+/**
+ * Executes real owner-scoped reads, locking, pause mapping and cascade deletion
+ * in an isolated database.
+ */
 @DataJpaTest(showSql = false, properties = {
-    "spring.datasource.url=jdbc:h2:mem:alert-rule-repository;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-    "spring.jpa.hibernate.ddl-auto=none",
-    "spring.flyway.enabled=false"
+        "spring.datasource.url=jdbc:h2:mem:alert-rule-repository;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.jpa.hibernate.ddl-auto=none",
+        "spring.flyway.enabled=false"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
@@ -54,6 +57,8 @@ class AlertRuleRepositoryTest {
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V18__add_saved_searches.sql"));
             ScriptUtils.executeSqlScript(connection, new ClassPathResource("db/migration/V19__add_alert_rules.sql"));
         }
+        jdbc.execute("ALTER TABLE alert_rules ADD COLUMN minimum_change_percent NUMERIC(12,4) NOT NULL DEFAULT 0");
+        jdbc.execute("ALTER TABLE alert_rules ADD COLUMN change_direction VARCHAR(12) NOT NULL DEFAULT 'ANY'");
     }
 
     @BeforeEach

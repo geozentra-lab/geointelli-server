@@ -1,0 +1,149 @@
+{
+  "info": {
+    "description": "Apply property V35 and notification V4 before deploying. Deploy notification consumer before enabling producer delivery. Pause publishing while upgrading producer instances; resume after all instances are updated. Enable ALERTS_ENABLED and ALERTS_PUBLISHER_ENABLED; run RabbitMQ and both services. The first evaluation is silent. Consecutive frozen published USD estimates are compared, not sale prices. Thresholds are inclusive and are checked before rounding; supported and limited values are eligible, unsupported/missing values rebaseline. A saved-search rule baselines newly entering properties silently. Pause/resume and criteria/filter changes reset valuation baselines and cancel pending outdated valuation events. No historical values are recalculated. Use a test database for synthetic model publications.",
+    "name": "SCRUM-151 Valuation change alerts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "bearer": [
+      {
+        "key": "token",
+        "type": "string",
+        "value": "{{access_token}}"
+      }
+    ],
+    "type": "bearer"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "notificationUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "propertyId",
+      "value": "301400"
+    },
+    {
+      "key": "alertId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "request": {
+        "body": {
+          "raw": "{ \"name\": \"Notify me about valuation drops\", \"eventType\": \"VALUATION_CHANGED\", \"propertyId\": {{propertyId}}, \"minimumChangePercent\": 5, \"changeDirection\": \"DECREASE\", \"cadence\": \"DAILY\", \"paused\": false }",
+          "mode": "raw"
+        },
+        "method": "POST",
+        "url": "{{baseUrl}}/api/alerts",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "name": "Create property valuation-drop rule",
+      "event": [
+        {
+          "script": {
+            "exec": [
+              "pm.test(\"Created\", () =\u003e pm.response.to.have.status(201));",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"alertId\", pm.response.json().id);"
+            ],
+            "type": "text/javascript"
+          },
+          "listen": "test"
+        }
+      ]
+    },
+    {
+      "name": "Schedule baseline or evaluation",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/evaluate",
+        "description": "202. Poll monitoring until BASELINED/COMPLETED. Requires enabled monitoring and an unpaused owned rule. Paused/disabled/unsupported listing source returns 409. No body."
+      }
+    },
+    {
+      "name": "Monitoring status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}/monitoring",
+        "description": "First scan BASELINED with no event. After a qualifying new Python publication, schedule again: COMPLETED and pending/sent count increases. Unchanged estimate, wrong direction or sub-threshold changes produce no event."
+      }
+    },
+    {
+      "name": "Current frozen valuation history",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/properties/id/{{propertyId}}/valuations?page=0\u0026size=20"
+      }
+    },
+    {
+      "name": "Change threshold (silent rebaseline)",
+      "request": {
+        "body": {
+          "raw": "{ \"minimumChangePercent\": 10, \"changeDirection\": \"ANY\" }",
+          "mode": "raw"
+        },
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pause rule",
+      "request": {
+        "body": {
+          "raw": "{ \"paused\": true }",
+          "mode": "raw"
+        },
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/alerts/{{alertId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Notification inbox",
+      "request": {
+        "method": "GET",
+        "url": "{{notificationUrl}}/api/notifications?page=0\u0026size=20",
+        "description": "Use the same recipient access_token. A delivered event creates one VALUATION_CHANGED notification with frozen old/new estimates. Duplicate RabbitMQ delivery must not create another."
+      }
+    },
+    {
+      "name": "Enable valuation notifications",
+      "request": {
+        "body": {
+          "raw": "{ \"inAppEnabled\": true, \"emailEnabled\": false, \"enabledEventTypes\": [\"NEW_MATCH\", \"CONTACT_REQUEST\", \"VALUATION_CHANGED\"], \"emailCadence\": \"DAILY\" }",
+          "mode": "raw"
+        },
+        "method": "PUT",
+        "url": "{{notificationUrl}}/api/notifications/preferences",
+        "description": "Full replacement of preferences. Email additionally requires verified email in JWT and configured SES. Disabling VALUATION_CHANGED suppresses its notifications independently of NEW_MATCH.",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    }
+  ]
+}

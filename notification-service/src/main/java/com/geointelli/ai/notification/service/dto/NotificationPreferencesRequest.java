@@ -11,6 +11,6 @@ import com.geointelli.ai.notification.service.entity.EmailCadence;
  * verified JWT.
  */
 public record NotificationPreferencesRequest(@NotNull Boolean inAppEnabled, @NotNull Boolean emailEnabled,
-                @NotNull @Size(max = 2) Set<@NotNull @Pattern(regexp = "NEW_MATCH|CONTACT_REQUEST") String> enabledEventTypes,
-                @NotNull EmailCadence emailCadence) {
+        @NotNull @Size(max = 3) Set<@NotNull @Pattern(regexp = "NEW_MATCH|CONTACT_REQUEST|VALUATION_CHANGED") String> enabledEventTypes,
+        @NotNull EmailCadence emailCadence) {
 }

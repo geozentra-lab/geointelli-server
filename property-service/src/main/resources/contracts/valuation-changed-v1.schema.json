@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GeoZentra VALUATION_CHANGED event v1",
+  "description": "Frozen published USD estimates. changeAmount=new.value-old.value; changePercent=changeAmount/old.value*100 rounded HALF_UP to four decimals. Threshold qualification uses the unrounded ratio. A version is emitted once per rule. Replay the same eventId and body. Unsupported/missing estimates never produce events. observationStartedAt <= observationFinishedAt <= occurredAt, all at microsecond precision. Deploy the consumer and its V4 migration before producer publication; pause publishing during a mixed-version producer rollout.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "source",
+    "eventVersion",
+    "eventType",
+    "userId",
+    "alertRuleId",
+    "propertyId",
+    "sourceChangeId",
+    "occurredAt",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "source": { "const": "property-service" },
+    "eventVersion": { "const": 1 },
+    "eventType": { "const": "VALUATION_CHANGED" },
+    "userId": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "alertRuleId": { "type": "integer", "minimum": 1 },
+    "propertyId": { "type": "integer", "minimum": 1 },
+    "savedSearchId": { "type": ["integer", "null"], "minimum": 1 },
+    "sourceChangeId": {
+      "type": "string",
+      "pattern": "^valuation:[1-9][0-9]*:history:[1-9][0-9]*$",
+      "maxLength": 160
+    },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "required": [
+        "ruleName",
+        "currency",
+        "oldValuation",
+        "newValuation",
+        "changeAmount",
+        "changePercent",
+        "minimumChangePercent",
+        "configuredDirection",
+        "direction",
+        "observationStartedAt",
+        "observationFinishedAt"
+      ],
+      "properties": {
+        "ruleName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "currency": { "const": "USD" },
+        "oldValuation": { "$ref": "#/$defs/snapshot" },
+        "newValuation": {
+          "allOf": [
+            { "$ref": "#/$defs/snapshot" },
+            {
+              "required": ["runId"],
+              "properties": {
+                "runId": { "type": "string", "minLength": 1, "maxLength": 32 }
+              }
+            }
+          ]
+        },
+        "changeAmount": { "type": "number", "not": { "const": 0 } },
+        "changePercent": { "type": "number" },
+        "minimumChangePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "configuredDirection": { "enum": ["ANY", "INCREASE", "DECREASE"] },
+        "direction": { "enum": ["INCREASE", "DECREASE"] },
+        "observationStartedAt": { "type": "string", "format": "date-time" },
+        "observationFinishedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "snapshot": {
+      "type": "object",
+      "required": ["historyId", "status", "value", "loadedAt"],
+      "properties": {
+        "historyId": { "type": "integer", "minimum": 1 },
+        "runId": { "type": ["string", "null"], "maxLength": 32 },
+        "modelVersion": { "type": ["string", "null"], "maxLength": 32 },
+        "predictionDate": { "type": ["string", "null"], "format": "date" },
+        "status": { "enum": ["supported", "limited"] },
+        "value": { "type": "number", "exclusiveMinimum": 0 },
+        "loadedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
