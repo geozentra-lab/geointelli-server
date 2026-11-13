@@ -91,6 +91,10 @@ contact-requests:
   confirm-timeout-seconds: ${CONTACT_REQUEST_CONFIRM_TIMEOUT_SECONDS:10}
   retry-base-seconds: ${CONTACT_REQUEST_RETRY_BASE_SECONDS:30}
 
+# Admin data-quality report: how long the rule counts (full-table scans) are reused; 0 counts on each request.
+data-quality:
+  summary-cache-seconds: ${DATA_QUALITY_SUMMARY_CACHE_SECONDS:600}
+
 alerts:
   enabled: ${ALERTS_ENABLED:false}
   poll-delay-millis: ${ALERTS_POLL_DELAY_MILLIS:30000}

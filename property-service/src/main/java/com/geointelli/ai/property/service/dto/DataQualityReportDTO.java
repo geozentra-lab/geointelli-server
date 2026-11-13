@@ -11,7 +11,7 @@ import java.util.List;
 /** Data-quality scan result: the summary of every rule, plus one page of issues when a rule is requested (SCRUM-189). */
 @Data
 public class DataQualityReportDTO {
-    @Schema(description = "When the scan ran (UTC); issues are computed on each request")
+    @Schema(description = "When the rule counts were calculated (UTC); counts are reused for a few minutes")
     private Instant generatedAt;
     @Schema(description = "Every rule with its number of issues, always returned")
     private List<DataQualityRuleSummaryDTO> summary;
@@ -21,6 +21,8 @@ public class DataQualityReportDTO {
     @Schema(description = "One page of issues of the requested rule; absent when no rule is requested")
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private PageResponse<DataQualityIssueDTO> issues;
-    @Schema(description = "How the scan works", example = "Issues are computed on each request; nothing is changed or deleted.")
+    @Schema(description = "How fresh the counts and the issue page are", example = "Rule counts were calculated at "
+            + "generatedAt and are reused for up to 10 minutes; the issue page is read on each request. "
+            + "Nothing is changed or deleted.")
     private String note;
 }

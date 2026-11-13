@@ -13,8 +13,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -23,7 +31,26 @@ public class DataQualityServiceImplTest {
 
     DataQualityRepository dataQualityRepository = mock(DataQualityRepository.class);
 
-    DataQualityServiceImpl dataQualityService = new DataQualityServiceImpl(dataQualityRepository);
+    // 0 seconds: counts are recalculated on each request, so each test sees its own stubs.
+    DataQualityServiceImpl dataQualityService =
+            new DataQualityServiceImpl(dataQualityRepository, 0, Clock.systemUTC());
+
+    /** Clock moved by the tests to expire reused counts. */
+    private static final class MutableClock extends Clock {
+        private Instant now;
+
+        MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
+    }
 
     private static DataQualityIssueRow row(long entityId, long propertyId, String detail,
                                            String sourceCounty, String sourceState, Long sourcePropertyId) {
@@ -65,7 +92,8 @@ public class DataQualityServiceImplTest {
             assertNull(report.getRule());
             assertNull(report.getIssues());
             assertNotNull(report.getGeneratedAt());
-            assertEquals(DataQualityServiceImpl.NOTE, report.getNote());
+            assertEquals("Rule counts are calculated on each request; the issue page is read on each request. "
+                    + "Nothing is changed or deleted.", report.getNote());
             verify(dataQualityRepository, never()).findMissingAddress(anyInt(), anyLong());
             verify(dataQualityRepository, never()).findSaleDuplicate(anyInt(), anyLong());
         }
@@ -76,8 +104,8 @@ public class DataQualityServiceImplTest {
             // Arrange
             when(dataQualityRepository.countSaleDuplicate()).thenReturn(45L);
             when(dataQualityRepository.findSaleDuplicate(20, 20L)).thenReturn(List.of(
-                    row(9012L, 345L, "Duplicate of sale 8800", "Miami-Dade", "FL", 123456L),
-                    row(9013L, 346L, "Duplicate of sale 8801", null, null, null)));
+                    row(9012L, 345L, "Same deed 09608/1730, date and price as sale 8800", "Miami-Dade", "FL", 123456L),
+                    row(9013L, 346L, "Same deed 24611/3579, date and price as sale 8801", null, null, null)));
 
             // Act
             DataQualityReportDTO report = dataQualityService.getReport(DataQualityRule.SALE_DUPLICATE, 1, 20);
@@ -92,7 +120,7 @@ public class DataQualityServiceImplTest {
             assertEquals(9012L, issue.getEntityId());
             assertEquals(345L, issue.getPropertyId());
             assertEquals("F345", issue.getFolio());
-            assertEquals("Duplicate of sale 8800", issue.getDetail());
+            assertEquals("Same deed 09608/1730, date and price as sale 8800", issue.getDetail());
             assertEquals("Miami-Dade", issue.getSourceCounty());
             assertEquals("FL", issue.getSourceState());
             assertEquals(123456L, issue.getSourcePropertyId());
@@ -168,6 +196,97 @@ public class DataQualityServiceImplTest {
             assertThrows(IllegalArgumentException.class,
                     () -> dataQualityService.getReport(null, 0, DataQualityServiceImpl.MAX_PAGE_SIZE + 1));
             verifyNoInteractions(dataQualityRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("Count Reuse Tests")
+    class CountReuse {
+
+        final Instant start = Instant.parse("2026-11-13T10:00:00Z");
+        final MutableClock clock = new MutableClock(start);
+        final DataQualityServiceImpl cachingService = new DataQualityServiceImpl(dataQualityRepository, 600, clock);
+
+        @Test
+        @DisplayName("When requested again within the reuse time, then reuse the counts and read the issue page again")
+        void whenWithinReuseTime_thenReuseCountsAndReadIssuePageAgain() {
+            // Arrange
+            when(dataQualityRepository.countSaleDuplicate()).thenReturn(3L, 99L);
+            cachingService.getReport(DataQualityRule.SALE_DUPLICATE, 0, 20);
+            clock.advance(Duration.ofSeconds(599));
+
+            // Act
+            DataQualityReportDTO report = cachingService.getReport(DataQualityRule.SALE_DUPLICATE, 0, 20);
+
+            // Assert
+            verify(dataQualityRepository, times(1)).countSaleDuplicate();
+            verify(dataQualityRepository, times(1)).countMissingAddress();
+            verify(dataQualityRepository, times(2)).findSaleDuplicate(20, 0L);
+            assertEquals(3L, report.getIssues().totalElements());
+            assertEquals(start, report.getGeneratedAt());
+            assertEquals("Rule counts were calculated at generatedAt and are reused for up to 10 minutes; "
+                    + "the issue page is read on each request. Nothing is changed or deleted.", report.getNote());
+        }
+
+        @Test
+        @DisplayName("When the reuse time has passed, then count every rule again")
+        void whenReuseTimePassed_thenCountEveryRuleAgain() {
+            // Arrange
+            when(dataQualityRepository.countMissingAddress()).thenReturn(4L, 5L);
+            cachingService.getReport(null, 0, 20);
+            clock.advance(Duration.ofSeconds(600));
+
+            // Act
+            DataQualityReportDTO report = cachingService.getReport(null, 0, 20);
+
+            // Assert
+            verify(dataQualityRepository, times(2)).countMissingAddress();
+            verify(dataQualityRepository, times(2)).countAssessmentDuplicate();
+            assertEquals(5L, report.getSummary().get(0).getIssueCount());
+            assertEquals(start.plusSeconds(600), report.getGeneratedAt());
+        }
+
+        @Test
+        @DisplayName("When a second request arrives while counting, then it waits and reuses the same counts")
+        void whenRequestArrivesWhileCounting_thenCountOnce() throws Exception {
+            // Arrange
+            CountDownLatch counting = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            when(dataQualityRepository.countMissingAddress()).thenAnswer(invocation -> {
+                counting.countDown();
+                assertTrue(release.await(5, TimeUnit.SECONDS));
+                return 4L;
+            });
+            List<DataQualityReportDTO> reports = new CopyOnWriteArrayList<>();
+            Thread first = new Thread(() -> reports.add(cachingService.getReport(null, 0, 20)));
+            Thread second = new Thread(() -> reports.add(cachingService.getReport(null, 0, 20)));
+
+            // Act
+            first.start();
+            assertTrue(counting.await(5, TimeUnit.SECONDS));
+            second.start();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (second.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) {
+                Thread.onSpinWait();
+            }
+            assertEquals(Thread.State.BLOCKED, second.getState());
+            release.countDown();
+            first.join(5000);
+            second.join(5000);
+
+            // Assert
+            verify(dataQualityRepository, times(1)).countMissingAddress();
+            assertEquals(2, reports.size());
+            assertTrue(reports.stream().allMatch(report -> report.getSummary().get(0).getIssueCount() == 4L));
+        }
+
+        @Test
+        @DisplayName("When the reuse time is negative, then throw IllegalArgumentException")
+        void whenReuseTimeNegative_thenThrowIllegalArgumentException() {
+            // Act & Assert
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                    () -> new DataQualityServiceImpl(dataQualityRepository, -1, clock));
+            assertEquals("data-quality.summary-cache-seconds must be 0 or greater", exception.getMessage());
         }
     }
 }

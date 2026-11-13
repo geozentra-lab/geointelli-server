@@ -21,14 +21,22 @@ public interface DataQualityRepository extends Repository<Property, Long> {
             WHERE NOT EXISTS (SELECT 1 FROM addresses a WHERE a.property_id = p.id)
             """;
 
-    /** Property without a parcel, neither its own nor its parent property's (condo units use the parent parcel). */
+    /**
+     * Property without a usable parcel geometry, neither its own nor its parent property's (condo units use the
+     * parent parcel). A geometry is usable under the same test as the comparables search: present, not empty,
+     * valid and in SRID 4326.
+     */
     String MISSING_PARCEL = """
             SELECT p.id AS entity_id, p.id AS property_id,
-                'No parcel for the property or its parent property' AS detail
+                'No parcel geometry for the property or its parent property' AS detail
             FROM properties p
-            WHERE NOT EXISTS (SELECT 1 FROM parcels pa WHERE pa.property_id = p.id)
+            WHERE NOT EXISTS (SELECT 1 FROM parcels pa WHERE pa.property_id = p.id
+                    AND pa.geom IS NOT NULL AND NOT ST_IsEmpty(pa.geom)
+                    AND ST_SRID(pa.geom) = 4326 AND ST_IsValid(pa.geom))
               AND (p.parent_property_id IS NULL
-                   OR NOT EXISTS (SELECT 1 FROM parcels pa WHERE pa.property_id = p.parent_property_id))
+                   OR NOT EXISTS (SELECT 1 FROM parcels pa WHERE pa.property_id = p.parent_property_id
+                       AND pa.geom IS NOT NULL AND NOT ST_IsEmpty(pa.geom)
+                       AND ST_SRID(pa.geom) = 4326 AND ST_IsValid(pa.geom)))
             """;
 
     /** Latest assessment year older than the current year minus 2. */
@@ -41,18 +49,21 @@ public interface DataQualityRepository extends Repository<Property, Long> {
             HAVING MAX(a.year) < EXTRACT(YEAR FROM CURRENT_DATE) - 2
             """;
 
-    /** Property and parcel lot sizes differ by more than 10% of the larger one. */
+    /**
+     * Property and parcel lot sizes differ by more than 10% of the larger one. Lot sizes under 100 square feet
+     * are placeholders (parcels store 1 for an unknown size), not measurements, so they are not compared.
+     */
     String LOT_SIZE_CONFLICT = """
             SELECT p.id AS entity_id, p.id AS property_id,
                 'Property lot size ' || p.lot_size || ' vs parcel lot size ' || pa.lot_size AS detail
             FROM properties p
             JOIN LATERAL (
                 SELECT pa.lot_size FROM parcels pa
-                WHERE pa.property_id = p.id AND pa.lot_size > 0
+                WHERE pa.property_id = p.id AND pa.lot_size >= 100
                 ORDER BY pa.fid
                 LIMIT 1
             ) pa ON true
-            WHERE p.lot_size > 0
+            WHERE p.lot_size >= 100
               AND ABS(p.lot_size - pa.lot_size) > 0.10 * GREATEST(p.lot_size, pa.lot_size)
             """;
 
@@ -66,14 +77,30 @@ public interface DataQualityRepository extends Repository<Property, Long> {
               AND s.sale_price <= 0
             """;
 
-    /** Sale with the same property, date and price as an older sale row; the oldest row is the original. */
+    /**
+     * Sale row recording the same deed (official record book and page), date and price for the same property as
+     * an older row; the oldest row is the original. Different deeds on one day (for example several nominal
+     * transfers) are separate sales, and book/page values that are empty or only zeros do not identify a deed.
+     * Only property-days with more than one sale are compared, which keeps the scan small.
+     */
     String SALE_DUPLICATE = """
-            SELECT d.id AS entity_id, d.property_id AS property_id, 'Duplicate of sale ' || d.first_id AS detail
+            SELECT d.id AS entity_id, d.property_id AS property_id,
+                'Same deed ' || d.book || '/' || d.page || ', date and price as sale ' || d.first_id AS detail
             FROM (
-                SELECT s.id, s.property_id,
-                    MIN(s.id) OVER (PARTITION BY s.property_id, s.sale_date, s.sale_price) AS first_id
-                FROM sales s
-                WHERE s.property_id IS NOT NULL AND s.sale_date IS NOT NULL AND s.sale_price IS NOT NULL
+                SELECT s.id, s.property_id, BTRIM(s.official_record_book) AS book,
+                    BTRIM(s.official_record_page) AS page,
+                    MIN(s.id) OVER (PARTITION BY s.property_id, s.sale_date, s.sale_price,
+                                    BTRIM(s.official_record_book), BTRIM(s.official_record_page)) AS first_id
+                FROM (
+                    SELECT property_id, sale_date FROM sales
+                    WHERE property_id IS NOT NULL AND sale_date IS NOT NULL
+                    GROUP BY property_id, sale_date
+                    HAVING COUNT(*) > 1
+                ) same_day
+                JOIN sales s ON s.property_id = same_day.property_id AND s.sale_date = same_day.sale_date
+                WHERE s.sale_price IS NOT NULL
+                  AND BTRIM(s.official_record_book, ' 0') <> ''
+                  AND BTRIM(s.official_record_page, ' 0') <> ''
             ) d
             WHERE d.id <> d.first_id
             """;
@@ -98,10 +125,13 @@ public interface DataQualityRepository extends Repository<Property, Long> {
             FROM (
             """;
 
-    /** Closes {@link #FIND_PREFIX}: stable order by entity ID, bounded by limit and offset. */
+    /**
+     * Closes {@link #FIND_PREFIX}: stable order by entity ID, bounded by limit and offset. The property join is
+     * a left join so a page lists exactly the rows the count query counts.
+     */
     String FIND_SUFFIX = """
             ) i
-            JOIN properties p ON p.id = i.property_id
+            LEFT JOIN properties p ON p.id = i.property_id
             LEFT JOIN LATERAL (
                 SELECT pim.source_county, pim.source_state, pim.source_property_id
                 FROM property_import_mapping pim

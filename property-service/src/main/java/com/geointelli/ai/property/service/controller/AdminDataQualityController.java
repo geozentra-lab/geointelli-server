@@ -13,8 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Admin data-quality issues (SCRUM-92 / SCRUM-189). Issues are detected on each request by read-only rules;
- * review and resolution are added by SCRUM-190.
+ * Admin data-quality issues (SCRUM-92 / SCRUM-189). Issues are detected by read-only rules: rule counts are
+ * reused for a few minutes, issue pages are read on each request. Review and resolution are added by SCRUM-190.
  */
 @RestController
 @RequestMapping("/api/admin/data-quality")
@@ -37,8 +37,9 @@ public class AdminDataQualityController {
     @Operation(summary = "Data-quality issues", description = "Always returns every rule with its category, source, "
             + "description and issue count. With rule, also returns one page of that rule's issues ordered by entity "
             + "ID, each with a reproducible reference RULE:entityType:entityId, the property folio and its provenance "
-            + "from property_import_mapping. Issues are computed on each request; no issue returns zero counts and "
-            + "an empty page.")
+            + "from property_import_mapping. Rule counts are reused for a few minutes (10 by default; "
+            + "generatedAt shows when they were calculated); the issue page is read on each request, so it can "
+            + "differ slightly from a reused count. No issue returns zero counts and an empty page.")
     public ResponseEntity<DataQualityReportDTO> getIssues(@RequestParam(required = false) DataQualityRule rule,
                                                           @RequestParam(defaultValue = "0") int page,
                                                           @RequestParam(defaultValue = "20") int size) {
