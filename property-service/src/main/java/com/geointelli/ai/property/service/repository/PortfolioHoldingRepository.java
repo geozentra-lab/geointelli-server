@@ -22,6 +22,13 @@ public interface PortfolioHoldingRepository extends JpaRepository<PortfolioHoldi
     boolean existsByPortfolio_IdAndProperty_Id(Long portfolioId, Long propertyId);
     long countByPortfolio_Id(Long portfolioId);
 
+    /**
+     * The most recently created or modified holdings in any portfolio owned by the user, bounded by the page size
+     * (dashboard activity card). Ownership goes through the portfolio; the portfolio is loaded for its name.
+     */
+    @EntityGraph(attributePaths = "portfolio")
+    List<PortfolioHolding> findByPortfolio_User_IdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+
     @Query("SELECT h.portfolio.id AS portfolioId, COUNT(h) AS holdingCount FROM PortfolioHolding h "
         + "WHERE h.portfolio.id IN :ids GROUP BY h.portfolio.id")
     List<PortfolioHoldingCount> countForPortfolios(@Param("ids") List<Long> ids);
