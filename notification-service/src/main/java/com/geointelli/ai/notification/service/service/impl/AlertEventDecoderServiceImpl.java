@@ -1,6 +1,8 @@
 package com.geointelli.ai.notification.service.service.impl;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
@@ -15,6 +17,7 @@ import com.geointelli.ai.notification.service.dto.AlertEventEnvelopeDTO;
 import com.geointelli.ai.notification.service.dto.DecodedAlertEventDTO;
 import com.geointelli.ai.notification.service.dto.NewMatchPayloadDTO;
 import com.geointelli.ai.notification.service.dto.ContactRequestPayloadDTO;
+import com.geointelli.ai.notification.service.dto.ValuationChangePayloadDTO;
 import com.geointelli.ai.notification.service.exception.InvalidAlertEventException;
 import com.geointelli.ai.notification.service.service.AlertEventDecoderService;
 import tools.jackson.databind.JsonNode;
@@ -23,7 +26,8 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Supports NEW_MATCH and CONTACT_REQUEST v1 events; future types/versions are
+ * Supports NEW_MATCH, CONTACT_REQUEST and VALUATION_CHANGED v1 events; future
+ * types/versions are
  * retained in the DLQ for recovery.
  */
 @Service
@@ -53,8 +57,12 @@ public class AlertEventDecoderServiceImpl implements AlertEventDecoderService {
             throw invalid("INVALID_ENVELOPE");
         if (!"property-service".equals(event.source()) || event.eventVersion() != 1)
             throw invalid("UNSUPPORTED_SOURCE_OR_VERSION");
-        if ("CONTACT_REQUEST".equals(event.eventType())) return decodeContact(event);
-        // Alert rules remain mandatory for NEW_MATCH; contact requests are not alert rules.
+        if ("CONTACT_REQUEST".equals(event.eventType()))
+            return decodeContact(event);
+        if ("VALUATION_CHANGED".equals(event.eventType()))
+            return decodeValuation(event);
+        // Alert rules remain mandatory for NEW_MATCH; contact requests are not alert
+        // rules.
         if ("NEW_MATCH".equals(event.eventType()) && event.alertRuleId() == null)
             throw invalid("INVALID_ENVELOPE");
         if (!"NEW_MATCH".equals(event.eventType()))
@@ -87,13 +95,17 @@ public class AlertEventDecoderServiceImpl implements AlertEventDecoderService {
 
     private DecodedAlertEventDTO decodeContact(AlertEventEnvelopeDTO event) {
         if (event.alertRuleId() != null || event.savedSearchId() != null || event.propertyId() == null
-                || !event.payload().isObject()) throw invalid("INVALID_CONTACT_TARGET");
+                || !event.payload().isObject())
+            throw invalid("INVALID_CONTACT_TARGET");
         ContactRequestPayloadDTO payload;
-        try { payload = json.treeToValue(event.payload(), ContactRequestPayloadDTO.class); }
-        catch (RuntimeException invalidPayload) { throw invalid("INVALID_CONTACT_PAYLOAD"); }
+        try {
+            payload = json.treeToValue(event.payload(), ContactRequestPayloadDTO.class);
+        } catch (RuntimeException invalidPayload) {
+            throw invalid("INVALID_CONTACT_PAYLOAD");
+        }
         if (payload == null || !validator.validate(payload).isEmpty()
                 || ((payload.contactEmail() == null || payload.contactEmail().isBlank())
-                    && (payload.contactPhone() == null || payload.contactPhone().isBlank())))
+                        && (payload.contactPhone() == null || payload.contactPhone().isBlank())))
             throw invalid("INVALID_CONTACT_PAYLOAD");
         if (!event.propertyId().equals(payload.propertyId())
                 || !event.eventId().equals("property-contact-" + payload.contactRequestId())
@@ -101,9 +113,49 @@ public class AlertEventDecoderServiceImpl implements AlertEventDecoderService {
             throw invalid("INCONSISTENT_CONTACT_PAYLOAD");
         try {
             String fingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                .digest(json.writeValueAsString(sorted(json.valueToTree(event))).getBytes(StandardCharsets.UTF_8)));
+                    .digest(json.writeValueAsString(sorted(json.valueToTree(event))).getBytes(StandardCharsets.UTF_8)));
             return new DecodedAlertEventDTO(event, null, fingerprint, payload);
-        } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
+    }
+
+    private DecodedAlertEventDTO decodeValuation(AlertEventEnvelopeDTO event) {
+        if (event.alertRuleId() == null || event.propertyId() == null || !event.payload().isObject())
+            throw invalid("INVALID_VALUATION_TARGET");
+        ValuationChangePayloadDTO payload;
+        try {
+            payload = json.treeToValue(event.payload(), ValuationChangePayloadDTO.class);
+        } catch (RuntimeException error) {
+            throw invalid("INVALID_VALUATION_PAYLOAD");
+        }
+        if (payload == null || !validator.validate(payload).isEmpty())
+            throw invalid("INVALID_VALUATION_PAYLOAD");
+        BigDecimal amount = payload.newValuation().value().subtract(payload.oldValuation().value());
+        BigDecimal percent = amount.multiply(BigDecimal.valueOf(100)).divide(payload.oldValuation().value(), 4,
+                RoundingMode.HALF_UP);
+        String direction = amount.signum() > 0 ? "INCREASE" : "DECREASE";
+        if (amount.signum() == 0 || payload.newValuation().historyId() <= payload.oldValuation().historyId()
+                || payload.newValuation().runId() == null || payload.newValuation().runId().isBlank()
+                || amount.compareTo(payload.changeAmount()) != 0 || percent.compareTo(payload.changePercent()) != 0
+                || !direction.equals(payload.direction())
+                || (!"ANY".equals(payload.configuredDirection()) && !direction.equals(payload.configuredDirection()))
+                || amount.abs().multiply(BigDecimal.valueOf(100)).compareTo(
+                        payload.oldValuation().value().multiply(payload.minimumChangePercent())) < 0
+                || payload.observationStartedAt().isAfter(payload.observationFinishedAt())
+                || payload.observationFinishedAt().isAfter(event.occurredAt())
+                || payload.oldValuation().loadedAt().isAfter(event.occurredAt())
+                || payload.newValuation().loadedAt().isAfter(event.occurredAt())
+                || !event.sourceChangeId()
+                        .equals("valuation:" + event.propertyId() + ":history:" + payload.newValuation().historyId()))
+            throw invalid("INCONSISTENT_VALUATION_PAYLOAD");
+        try {
+            String fingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(json.writeValueAsString(sorted(json.valueToTree(event))).getBytes(StandardCharsets.UTF_8)));
+            return new DecodedAlertEventDTO(event, null, fingerprint, null, payload);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
     }
 
     /**

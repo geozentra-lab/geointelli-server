@@ -6,6 +6,8 @@ import static org.mockito.Mockito.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
+import com.geointelli.ai.property.service.entity.ValuationChangeDirection;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +37,10 @@ import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 
-/** Tests ownership, stable target/trigger identity and effective pause semantics without external systems. */
+/**
+ * Tests ownership, stable target/trigger identity and effective pause semantics
+ * without external systems.
+ */
 class AlertRuleServiceImplTest {
     private static final ValidatorFactory FACTORY = Validation.buildDefaultValidatorFactory();
     private final AlertRuleRepository rules = mock(AlertRuleRepository.class);
@@ -43,13 +48,15 @@ class AlertRuleServiceImplTest {
     private final PropertyRepository properties = mock(PropertyRepository.class);
     private final CurrentUserService currentUser = mock(CurrentUserService.class);
     private final AlertRuleServiceImpl service = new AlertRuleServiceImpl(rules, searches, properties,
-        currentUser, new AlertRuleMapper(), FACTORY.getValidator(), mock(AlertEvaluationScheduleService.class));
+            currentUser, new AlertRuleMapper(), FACTORY.getValidator(), mock(AlertEvaluationScheduleService.class));
     private SavedSearch search;
     private AlertRule rule;
     private User user;
 
     @AfterAll
-    static void cleanup() { FACTORY.close(); }
+    static void cleanup() {
+        FACTORY.close();
+    }
 
     @BeforeEach
     void setup() {
@@ -75,7 +82,8 @@ class AlertRuleServiceImplTest {
         when(rules.findOwnedForUpdate(20L, 7L)).thenReturn(Optional.of(rule));
         when(rules.saveAndFlush(any())).thenAnswer(call -> {
             AlertRule saved = call.getArgument(0);
-            if (saved.getId() == null) saved.setId(21L);
+            if (saved.getId() == null)
+                saved.setId(21L);
             return saved;
         });
     }
@@ -173,7 +181,7 @@ class AlertRuleServiceImplTest {
         AlertRuleRequest request = searchRequest();
         request.setSavedSearchId(99L);
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
-            () -> service.create(request)).getStatusCode());
+                () -> service.create(request)).getStatusCode());
         verify(rules, never()).saveAndFlush(any());
     }
 
@@ -182,7 +190,7 @@ class AlertRuleServiceImplTest {
         AlertRuleRequest request = propertyRequest();
         request.setPropertyId(999L);
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
-            () -> service.create(request)).getStatusCode());
+                () -> service.create(request)).getStatusCode());
         verify(rules, never()).saveAndFlush(any());
     }
 
@@ -190,10 +198,11 @@ class AlertRuleServiceImplTest {
     void duplicateSearchAndPropertyEventsReturn409() {
         when(rules.existsByUser_IdAndSavedSearch_IdAndEventType(7L, 10L, AlertEventType.NEW_MATCH)).thenReturn(true);
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
-            () -> service.create(searchRequest())).getStatusCode());
-        when(rules.existsByUser_IdAndProperty_IdAndEventType(7L, 100L, AlertEventType.LISTING_PRICE_CHANGED)).thenReturn(true);
+                () -> service.create(searchRequest())).getStatusCode());
+        when(rules.existsByUser_IdAndProperty_IdAndEventType(7L, 100L, AlertEventType.LISTING_PRICE_CHANGED))
+                .thenReturn(true);
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
-            () -> service.create(propertyRequest())).getStatusCode());
+                () -> service.create(propertyRequest())).getStatusCode());
         verify(rules, never()).saveAndFlush(any());
     }
 
@@ -282,7 +291,7 @@ class AlertRuleServiceImplTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"name", "eventType", "cadence", "paused"})
+    @ValueSource(strings = { "name", "eventType", "cadence", "paused", "minimumChangePercent", "changeDirection" })
     void explicitNullCannotClearRequiredFields(String field) throws Exception {
         AlertRuleRequest patch = new ObjectMapper().readValue("{\"" + field + "\":null}", AlertRuleRequest.class);
         assertThrows(IllegalArgumentException.class, () -> service.update(20L, patch));
@@ -335,6 +344,37 @@ class AlertRuleServiceImplTest {
     void requiresBearerIdentity() {
         when(currentUser.getCurrentUserEntity()).thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class,
-            () -> service.list(0, 20)).getStatusCode());
+                () -> service.list(0, 20)).getStatusCode());
+    }
+
+    @Test
+    void valuationRuleAcceptsExplicitDirectionAndThreshold() {
+        AlertRuleRequest request = new AlertRuleRequest();
+        request.setName("Value drop");
+        request.setPropertyId(100L);
+        request.setEventType(AlertEventType.VALUATION_CHANGED);
+        request.setMinimumChangePercent(new BigDecimal("5.5"));
+        request.setChangeDirection(ValuationChangeDirection.DECREASE);
+        AlertRuleDTO value = service.create(request);
+        assertEquals(ValuationChangeDirection.DECREASE, value.changeDirection());
+        assertEquals(new BigDecimal("5.5"), value.minimumChangePercent());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "-1", "100001", "0.00001" })
+    void invalidThresholdCannotBeStored(String value) {
+        rule.setEventType(AlertEventType.VALUATION_CHANGED);
+        AlertRuleRequest request = new AlertRuleRequest();
+        request.setMinimumChangePercent(new BigDecimal(value));
+        assertThrows(IllegalArgumentException.class, () -> service.update(20L, request));
+        verify(rules, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void valuationCriteriaCannotBeAppliedToNewMatchRules() {
+        AlertRuleRequest request = new AlertRuleRequest();
+        request.setMinimumChangePercent(BigDecimal.ONE);
+        assertThrows(IllegalArgumentException.class, () -> service.update(20L, request));
+        verify(rules, never()).saveAndFlush(any());
     }
 }

@@ -52,7 +52,9 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
         }
         var preference = preferences.lockForRecipient(event.userId());
         boolean contact = decoded.contactPayload() != null;
-        if ((contact ? !preference.isContactRequestEnabled() : !preference.isNewMatchEnabled())
+        boolean valuation = decoded.valuationPayload() != null;
+        if ((contact ? !preference.isContactRequestEnabled()
+                : valuation ? !preference.isValuationChangedEnabled() : !preference.isNewMatchEnabled())
                 || (!preference.isInAppEnabled() && !preference.isEmailEnabled()))
             return true;
         Notification notification = new Notification();
@@ -70,7 +72,18 @@ public class AlertEventConsumptionServiceImpl implements AlertEventConsumptionSe
         if (contact) {
             notification.setTitle("New property contact request");
             notification.setMessage("A user requested contact about property " + event.propertyId()
-                + ". Open GeoZentra to view the request and contact details.");
+                    + ". Open GeoZentra to view the request and contact details.");
+        } else if (valuation) {
+            var payload = decoded.valuationPayload();
+            notification.setTitle("Property valuation changed");
+            notification.setMessage("The estimated value of property " + event.propertyId() + " "
+                    + ("INCREASE".equals(payload.direction()) ? "increased" : "decreased")
+                    + " from USD " + payload.oldValuation().value().toPlainString() + " to USD "
+                    + payload.newValuation().value().toPlainString() + " ("
+                    + payload.changePercent().abs().stripTrailingZeros().toPlainString() + "%). "
+                    + "This is a model estimate, not a sale price."
+                    + ("limited".equals(payload.newValuation().status()) ? " The new estimate has limited support."
+                            : ""));
         } else {
             long count = decoded.payload().newMatchCount();
             notification.setTitle("New matching properties");

@@ -49,19 +49,27 @@ import com.geointelli.ai.property.service.repository.AlertOutboxRepository;
 import com.geointelli.ai.property.service.repository.AlertRuleRepository;
 import com.geointelli.ai.property.service.service.AlertSearchDefinitionService;
 import com.geointelli.ai.property.service.service.PropertySearchService;
+import com.geointelli.ai.property.service.service.ValuationAlertEvaluationService;
 
-/** Opt-in contract verification using only disposable PostgreSQL and RabbitMQ instances. */
-@EnabledIfSystemProperty(named="alert.precision.integration", matches="true")
+/**
+ * Opt-in contract verification using only disposable PostgreSQL and RabbitMQ
+ * instances.
+ */
+@EnabledIfSystemProperty(named = "alert.precision.integration", matches = "true")
 class AlertTimestampDeliveryTest {
-    @Test void persistedCompletionSurvivesReloadAndRabbitPublication() throws Exception {
+    @Test
+    void persistedCompletionSurvivesReloadAndRabbitPublication() throws Exception {
         String url = "jdbc:postgresql://127.0.0.1:55442/precision_producer?currentSchema=precision_contract";
-        DriverManagerDataSource source = new DriverManagerDataSource(url,"precision_test","");
+        DriverManagerDataSource source = new DriverManagerDataSource(url, "precision_test", "");
         JdbcTemplate jdbc = new JdbcTemplate(source);
         jdbc.execute("DROP SCHEMA IF EXISTS precision_contract CASCADE");
         jdbc.execute("CREATE SCHEMA precision_contract");
         jdbc.execute("CREATE TABLE saved_searches(id BIGINT PRIMARY KEY,paused BOOLEAN DEFAULT FALSE)");
-        jdbc.execute("CREATE TABLE alert_rules(id BIGINT PRIMARY KEY,saved_search_id BIGINT,paused BOOLEAN DEFAULT FALSE)");
-        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V20__add_alert_monitoring_and_outbox.sql")).execute(source);
+        jdbc.execute(
+                "CREATE TABLE alert_rules(id BIGINT PRIMARY KEY,saved_search_id BIGINT,paused BOOLEAN DEFAULT FALSE)");
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V20__add_alert_monitoring_and_outbox.sql"))
+                .execute(source);
+        jdbc.execute("ALTER TABLE alert_outbox ADD COLUMN source_change_id VARCHAR(200)");
         jdbc.update("INSERT INTO saved_searches(id) VALUES(4)");
         jdbc.update("INSERT INTO alert_rules(id,saved_search_id) VALUES(1,4)");
         Instant precise = Instant.parse("2026-10-30T01:38:04.720653200Z");
@@ -69,24 +77,32 @@ class AlertTimestampDeliveryTest {
         ObjectMapper json = new ObjectMapper().findAndRegisterModules();
         Configuration configuration = new Configuration().addAnnotatedClass(AlertOutboxEvent.class);
         configuration.setPhysicalNamingStrategy(new CamelCaseToUnderscoresNamingStrategy());
-        configuration.setProperty("hibernate.connection.url",url);
-        configuration.setProperty("hibernate.connection.username","precision_test");
-        configuration.setProperty("hibernate.hbm2ddl.auto","validate");
+        configuration.setProperty("hibernate.connection.url", url);
+        configuration.setProperty("hibernate.connection.username", "precision_test");
+        configuration.setProperty("hibernate.hbm2ddl.auto", "validate");
         try (SessionFactory factory = configuration.buildSessionFactory()) {
-            // Reproduce the original bug through the same Hibernate mapping and PostgreSQL column.
+            // Reproduce the original bug through the same Hibernate mapping and PostgreSQL
+            // column.
             AlertOutboxEvent original = new AlertOutboxEvent();
-            original.setRuleId(1L); original.setGeneration(0); original.setRecipientKeycloakId("precision-test-user");
-            original.setEventType(AlertEventType.NEW_MATCH); original.setOccurredAt(precise); original.setNextAttemptAt(precise);
-            original.setPayload(json.valueToTree(new NewMatchPayloadDTO("Original precision","a".repeat(64),
-                1,1,List.of(90L),false,precise.minusSeconds(1),precise)));
+            original.setRuleId(1L);
+            original.setGeneration(0);
+            original.setRecipientKeycloakId("precision-test-user");
+            original.setEventType(AlertEventType.NEW_MATCH);
+            original.setOccurredAt(precise);
+            original.setNextAttemptAt(precise);
+            original.setPayload(json.valueToTree(new NewMatchPayloadDTO("Original precision", "a".repeat(64),
+                    1, 1, List.of(90L), false, precise.minusSeconds(1), precise)));
             try (var session = factory.openSession()) {
-                var transaction = session.beginTransaction(); session.persist(original); transaction.commit();
+                var transaction = session.beginTransaction();
+                session.persist(original);
+                transaction.commit();
             }
             try (var session = factory.openSession()) {
-                AlertOutboxEvent old = session.find(AlertOutboxEvent.class,original.getId());
-                assertEquals(expected,old.getOccurredAt());
-                assertEquals(precise,json.treeToValue(old.getPayload(),NewMatchPayloadDTO.class).observationFinishedAt());
-                assertTrue(precise.isAfter(old.getOccurredAt()),"Unnormalized JSON reproduces the real rejection");
+                AlertOutboxEvent old = session.find(AlertOutboxEvent.class, original.getId());
+                assertEquals(expected, old.getOccurredAt());
+                assertEquals(precise,
+                        json.treeToValue(old.getPayload(), NewMatchPayloadDTO.class).observationFinishedAt());
+                assertTrue(precise.isAfter(old.getOccurredAt()), "Unnormalized JSON reproduces the real rejection");
             }
             AlertRuleRepository rules = mock(AlertRuleRepository.class);
             AlertEvaluationStateRepository states = mock(AlertEvaluationStateRepository.class);
@@ -94,74 +110,97 @@ class AlertTimestampDeliveryTest {
             AlertOutboxRepository outbox = mock(AlertOutboxRepository.class);
             AlertSearchDefinitionService definitions = mock(AlertSearchDefinitionService.class);
             PropertySearchService search = mock(PropertySearchService.class);
-            User user = new User(); user.setId(9L);
-            SavedSearch saved = new SavedSearch(); saved.setId(4L);
-            AlertRule rule = new AlertRule(); rule.setId(1L); rule.setUser(user); rule.setSavedSearch(saved);
-            rule.setEventType(AlertEventType.NEW_MATCH); rule.setName("Precision verification");
-            AlertEvaluationState state = new AlertEvaluationState(); state.setRuleId(1L);
-            state.setGeneration(1); state.setBaselineGeneration(1L); state.setBaselineHash("a".repeat(64));
+            User user = new User();
+            user.setId(9L);
+            SavedSearch saved = new SavedSearch();
+            saved.setId(4L);
+            AlertRule rule = new AlertRule();
+            rule.setId(1L);
+            rule.setUser(user);
+            rule.setSavedSearch(saved);
+            rule.setEventType(AlertEventType.NEW_MATCH);
+            rule.setName("Precision verification");
+            AlertEvaluationState state = new AlertEvaluationState();
+            state.setRuleId(1L);
+            state.setGeneration(1);
+            state.setBaselineGeneration(1L);
+            state.setBaselineHash("a".repeat(64));
             SavedSearchFilters filters = new SavedSearchFilters();
             when(monitoring.lockNextDueRule(expected)).thenReturn(1L);
             when(rules.findById(1L)).thenReturn(Optional.of(rule));
             when(states.findById(1L)).thenReturn(Optional.of(state));
-            when(definitions.resolve(rule)).thenReturn(new AlertSearchDefinitionDTO(filters,"a".repeat(64),"stamp"));
-            when(search.findMatchingIds(eq(filters),anyLong(),anyInt())).thenReturn(List.of(90L));
-            when(monitoring.countNew(1,2,1)).thenReturn(1L);
-            when(monitoring.previewNew(1,2,1)).thenReturn(List.of(90L));
+            when(definitions.resolve(rule)).thenReturn(new AlertSearchDefinitionDTO(filters, "a".repeat(64), "stamp"));
+            when(search.findMatchingIds(eq(filters), anyLong(), anyInt())).thenReturn(List.of(90L));
+            when(monitoring.countNew(1, 2, 1)).thenReturn(1L);
+            when(monitoring.previewNew(1, 2, 1)).thenReturn(List.of(90L));
             when(monitoring.recipient(9)).thenReturn("precision-test-user");
             when(outbox.save(any())).thenAnswer(invocation -> {
                 AlertOutboxEvent event = invocation.getArgument(0);
                 try (var session = factory.openSession()) {
-                    var transaction = session.beginTransaction(); session.persist(event); transaction.commit();
+                    var transaction = session.beginTransaction();
+                    session.persist(event);
+                    transaction.commit();
                 }
                 return event;
             });
             AlertMonitoringProperties settings = new AlertMonitoringProperties();
-            settings.setEnabled(true); settings.getPublisher().setEnabled(true);
+            settings.setEnabled(true);
+            settings.getPublisher().setEnabled(true);
             settings.getPublisher().setExchange("precision.alerts");
             settings.getPublisher().setQueue("precision.notifications");
-            Clock clock = Clock.fixed(precise,ZoneOffset.UTC);
-            new AlertEvaluationServiceImpl(rules,states,monitoring,outbox,definitions,search,settings,json,clock).processNextBatch();
-            long id = jdbc.queryForObject("SELECT id FROM alert_outbox WHERE generation=2",Long.class);
+            Clock clock = Clock.fixed(precise, ZoneOffset.UTC);
+            new AlertEvaluationServiceImpl(rules, states, monitoring, outbox, definitions, search, settings, json,
+                    clock, mock(ValuationAlertEvaluationService.class)).processNextBatch();
+            long id = jdbc.queryForObject("SELECT id FROM alert_outbox WHERE generation=2", Long.class);
             AlertOutboxEvent reloaded;
-            try (var session = factory.openSession()) { reloaded = session.find(AlertOutboxEvent.class,id); }
-            NewMatchPayloadDTO payload = json.treeToValue(reloaded.getPayload(),NewMatchPayloadDTO.class);
-            assertEquals(expected,reloaded.getOccurredAt());
-            assertEquals(expected,payload.observationFinishedAt());
+            try (var session = factory.openSession()) {
+                reloaded = session.find(AlertOutboxEvent.class, id);
+            }
+            NewMatchPayloadDTO payload = json.treeToValue(reloaded.getPayload(), NewMatchPayloadDTO.class);
+            assertEquals(expected, reloaded.getOccurredAt());
+            assertEquals(expected, payload.observationFinishedAt());
             assertFalse(payload.observationStartedAt().isAfter(payload.observationFinishedAt()));
-            assertEquals(expected,jdbc.queryForObject("SELECT occurred_at FROM alert_outbox WHERE generation=2",Timestamp.class).toInstant());
+            assertEquals(expected,
+                    jdbc.queryForObject("SELECT occurred_at FROM alert_outbox WHERE generation=2", Timestamp.class)
+                            .toInstant());
             CachingConnectionFactory connection = new CachingConnectionFactory("127.0.0.1",
-                Integer.getInteger("alert.precision.rabbit.port",5679));
-            connection.setPublisherConfirmType(ConfirmType.CORRELATED); connection.setPublisherReturns(true);
+                    Integer.getInteger("alert.precision.rabbit.port", 5679));
+            connection.setPublisherConfirmType(ConfirmType.CORRELATED);
+            connection.setPublisherReturns(true);
             try {
                 RabbitAdmin admin = new RabbitAdmin(connection);
-                TopicExchange exchange = new TopicExchange("precision.alerts",true,false);
-                Queue queue = new Queue("precision.notifications",true);
-                admin.declareExchange(exchange); admin.declareQueue(queue);
-                admin.declareBinding(BindingBuilder.bind(queue).to(exchange).with(settings.getPublisher().getRoutingKey()));
-                RabbitTemplate rabbit = new RabbitTemplate(connection); rabbit.setMandatory(true);
+                TopicExchange exchange = new TopicExchange("precision.alerts", true, false);
+                Queue queue = new Queue("precision.notifications", true);
+                admin.declareExchange(exchange);
+                admin.declareQueue(queue);
+                admin.declareBinding(
+                        BindingBuilder.bind(queue).to(exchange).with(settings.getPublisher().getRoutingKey()));
+                RabbitTemplate rabbit = new RabbitTemplate(connection);
+                rabbit.setMandatory(true);
                 when(monitoring.lockNextOutbox(precise)).thenReturn(id);
                 when(outbox.findById(id)).thenReturn(Optional.of(reloaded));
                 // Publishing reloads a detached event, as a later outbox worker would.
                 doAnswer(invocation -> invocation.getArgument(0)).when(outbox).save(any());
-                new AlertOutboxPublishingServiceImpl(monitoring,outbox,rules,
-                    new RabbitAlertEventPublisherImpl(rabbit,json,settings),settings,clock).processNext();
-                assertEquals("SENT",reloaded.getStatus());
-                Message published = rabbit.receive("precision.notifications",5000);
+                new AlertOutboxPublishingServiceImpl(monitoring, outbox, rules,
+                        new RabbitAlertEventPublisherImpl(rabbit, json, settings), settings, clock).processNext();
+                assertEquals("SENT", reloaded.getStatus());
+                Message published = rabbit.receive("precision.notifications", 5000);
                 assertNotNull(published);
                 var envelope = json.readTree(published.getBody());
-                assertEquals(expected,Instant.parse(envelope.get("occurredAt").asText()));
-                assertEquals(expected,Instant.parse(envelope.get("payload").get("observationFinishedAt").asText()));
-                assertEquals("property-alert-"+id,envelope.get("eventId").asText());
-                Files.write(Path.of("target/alert-precision-event.json"),published.getBody());
+                assertEquals(expected, Instant.parse(envelope.get("occurredAt").asText()));
+                assertEquals(expected, Instant.parse(envelope.get("payload").get("observationFinishedAt").asText()));
+                assertEquals("property-alert-" + id, envelope.get("eventId").asText());
+                Files.write(Path.of("target/alert-precision-event.json"), published.getBody());
                 // Put two identical real broker deliveries back for the consumer verification.
                 for (int delivery = 0; delivery < 2; delivery++) {
-                    CorrelationData confirm = new CorrelationData("duplicate-"+delivery);
-                    rabbit.send("precision.alerts",settings.getPublisher().getRoutingKey(),published,confirm);
-                    assertTrue(confirm.getFuture().get(10,TimeUnit.SECONDS).isAck());
+                    CorrelationData confirm = new CorrelationData("duplicate-" + delivery);
+                    rabbit.send("precision.alerts", settings.getPublisher().getRoutingKey(), published, confirm);
+                    assertTrue(confirm.getFuture().get(10, TimeUnit.SECONDS).isAck());
                     assertNull(confirm.getReturned());
                 }
-            } finally { connection.destroy(); }
+            } finally {
+                connection.destroy();
+            }
         }
     }
 }

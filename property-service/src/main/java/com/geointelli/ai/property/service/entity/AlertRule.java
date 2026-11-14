@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.entity;
 
+import java.math.BigDecimal;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -18,8 +20,10 @@ import lombok.Setter;
 /** One user-owned event rule for exactly one property or saved search. */
 @Entity
 @Table(name = "alert_rules", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_alert_rules_user_property_event", columnNames = {"user_id", "property_id", "event_type"}),
-    @UniqueConstraint(name = "uq_alert_rules_user_search_event", columnNames = {"user_id", "saved_search_id", "event_type"})})
+        @UniqueConstraint(name = "uq_alert_rules_user_property_event", columnNames = { "user_id", "property_id",
+                "event_type" }),
+        @UniqueConstraint(name = "uq_alert_rules_user_search_event", columnNames = { "user_id", "saved_search_id",
+                "event_type" }) })
 @Getter
 @Setter
 public class AlertRule extends AuditableEntity {
@@ -52,4 +56,11 @@ public class AlertRule extends AuditableEntity {
 
     @Column(nullable = false)
     private boolean paused;
+
+    @Column(nullable = false, precision = 12, scale = 4)
+    private BigDecimal minimumChangePercent = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 12)
+    private ValuationChangeDirection changeDirection = ValuationChangeDirection.ANY;
 }

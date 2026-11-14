@@ -36,6 +36,7 @@ public class NotificationJsonConfig {
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
                 .disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
+                .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
                 .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
                 .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
     }

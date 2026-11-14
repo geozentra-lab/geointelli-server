@@ -29,7 +29,7 @@ public class EmailQueueRepository {
                 "SELECT n.id,n.message,CASE WHEN n.event_type='CONTACT_REQUEST' THEN n.title ELSE n.payload->>'ruleName' END AS rule_name FROM notification_email_queue q JOIN notifications n ON n.id=q.notification_id "
                         + "JOIN notification_preferences p ON p.recipient_keycloak_id=q.recipient_keycloak_id "
                         + "WHERE q.recipient_keycloak_id=? AND q.status='PENDING' "
-                        + "AND ((n.event_type='NEW_MATCH' AND p.new_match_enabled) OR (n.event_type='CONTACT_REQUEST' AND p.contact_request_enabled)) ORDER BY q.created_at,q.notification_id LIMIT ? FOR UPDATE OF q SKIP LOCKED",
+                        + "AND ((n.event_type='NEW_MATCH' AND p.new_match_enabled) OR (n.event_type='CONTACT_REQUEST' AND p.contact_request_enabled) OR (n.event_type='VALUATION_CHANGED' AND p.valuation_changed_enabled)) ORDER BY q.created_at,q.notification_id LIMIT ? FOR UPDATE OF q SKIP LOCKED",
                 (row, index) -> new Item(row.getLong("id"), row.getString("rule_name"), row.getString("message")),
                 recipient, limit);
     }
@@ -49,8 +49,8 @@ public class EmailQueueRepository {
 
     public void suppressPendingType(String recipient, String eventType) {
         jdbc.update("UPDATE notification_email_queue q SET status='SUPPRESSED' FROM notifications n "
-            + "WHERE n.id=q.notification_id AND q.recipient_keycloak_id=? AND q.status='PENDING' AND n.event_type=?",
-            recipient, eventType);
+                + "WHERE n.id=q.notification_id AND q.recipient_keycloak_id=? AND q.status='PENDING' AND n.event_type=?",
+                recipient, eventType);
     }
 
     public record Item(long id, String ruleName, String message) {
