@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -7,6 +8,7 @@ import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,13 +36,27 @@ import lombok.RequiredArgsConstructor;
  * Five bounded, owner-scoped queries (one per record type) are merged in memory and cut to the
  * requested limit. Reading {@code limit} rows per table ordered by {@code updated_at} is sufficient:
  * a row's {@code updated_at} is never earlier than its {@code created_at}, so every row that could
- * contribute one of the newest {@code limit} items is among them.
+ * contribute one of the newest {@code limit} items is among them. Equal times are ordered by the higher
+ * id, in the queries and in the merge, so the same data always gives the same card.
  */
 @Service
 @RequiredArgsConstructor
 // Not read-only: resolving the current user may insert their row on a first login (same as the other cards).
 @Transactional
 public class UserDashboardActivityServiceImpl implements UserDashboardActivityService {
+
+    /**
+     * A row counts as modified only when {@code updated_at} is more than this after {@code created_at}. On insert
+     * {@code @CreationTimestamp} and {@code @UpdateTimestamp} read the clock separately, so the two columns of an
+     * unmodified row can differ by microseconds (milliseconds on the first insert after start-up).
+     */
+    static final Duration CREATION_TOLERANCE = Duration.ofSeconds(1);
+
+    /** Newest first; equal times by the higher id (as in the queries), then by type. */
+    private static final Comparator<ActivityItem> NEWEST_FIRST = Comparator
+        .comparing(ActivityItem::occurredAt, Comparator.reverseOrder())
+        .thenComparing(ActivityItem::entityId, Comparator.reverseOrder())
+        .thenComparing(ActivityItem::type);
 
     private final CurrentUserService currentUserService;
     private final FavoriteRepository favoriteRepository;
@@ -55,7 +71,9 @@ public class UserDashboardActivityServiceImpl implements UserDashboardActivitySe
             throw new IllegalArgumentException("limit must be between 1 and " + MAX_LIMIT + ", got " + limit);
         }
         Long userId = currentUserService.getCurrentUserEntity().getId();
-        Pageable newest = PageRequest.of(0, limit);
+        // The id sort is appended after the ORDER BY of each method name, so it only decides which rows are read
+        // when several share the timestamp at the limit.
+        Pageable newest = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "id"));
 
         List<ActivityItem> items = new ArrayList<>();
         for (Favorite f : favoriteRepository.findByUserIdOrderByCreatedAtDesc(userId, newest)) {
@@ -84,7 +102,7 @@ public class UserDashboardActivityServiceImpl implements UserDashboardActivitySe
         }
 
         List<ActivityItem> recent = items.stream()
-            .sorted(Comparator.comparing(ActivityItem::occurredAt).reversed())
+            .sorted(NEWEST_FIRST)
             .limit(limit)
             .toList();
 
@@ -99,14 +117,16 @@ public class UserDashboardActivityServiceImpl implements UserDashboardActivitySe
     }
 
     /**
-     * Adds the "created" item of a record and, when the record was modified after its creation, the
-     * "updated" item too. Both use the timestamps stored on the row; nothing is synthesized.
+     * Adds the "created" item of a record and, when the record was modified after its creation (later than
+     * {@link #CREATION_TOLERANCE}), the "updated" item too. Both use the timestamps stored on the row; nothing is
+     * synthesized.
      */
     private static void addCreatedAndUpdated(List<ActivityItem> items, AuditableEntity record,
                                              ActivityType createdType, ActivityType updatedType,
                                              Long entityId, String label, Long propertyId, Long portfolioId) {
         items.add(new ActivityItem(createdType, record.getCreatedAt(), entityId, label, propertyId, portfolioId));
-        if (record.getUpdatedAt() != null && record.getUpdatedAt().isAfter(record.getCreatedAt())) {
+        if (record.getUpdatedAt() != null
+                && record.getUpdatedAt().isAfter(record.getCreatedAt().plus(CREATION_TOLERANCE))) {
             items.add(new ActivityItem(updatedType, record.getUpdatedAt(), entityId, label, propertyId, portfolioId));
         }
     }

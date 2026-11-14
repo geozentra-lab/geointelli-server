@@ -203,7 +203,8 @@ is also the demonstration that deletions leave no trace.
 `UserDashboardActivityController.activity` (`limit` query parameter, no logic) →
 `UserDashboardActivityService.getActivityCard` (`UserDashboardActivityServiceImpl`,
 `@Transactional`) → `CurrentUserService.getCurrentUserEntity()` for the owner id, then five
-owner-scoped, bounded queries with `PageRequest.of(0, limit)`:
+owner-scoped, bounded queries with `PageRequest.of(0, limit, Sort.by(DESC, "id"))` (Spring Data
+appends the page's sort after the method's `ORDER BY`, so `id` only breaks ties):
 
 | Repository | Method |
 |---|---|
@@ -213,8 +214,12 @@ owner-scoped, bounded queries with `PageRequest.of(0, limit)`:
 | `PortfolioRepository` | `findByUser_IdOrderByUpdatedAtDesc` |
 | `PortfolioHoldingRepository` | `findByPortfolio_User_IdOrderByUpdatedAtDesc` (entity graph on the portfolio, for its name) |
 
-Each row becomes a "created" item and, when `updated_at` is after `created_at`, an "updated" item.
-The items are merged in memory, sorted by `occurredAt` descending and cut to `limit`. Reading
+Each row becomes a "created" item and, when `updated_at` is more than 1 second after `created_at`,
+an "updated" item. (On insert `@CreationTimestamp` and `@UpdateTimestamp` read the clock separately, so
+the two columns of an unmodified row can differ by microseconds, or milliseconds on the first insert
+after start-up.)
+The items are merged in memory, sorted by `occurredAt` descending (equal times: higher `entityId`
+first, then by `type`, so the same data always gives the same card) and cut to `limit`. Reading
 `limit` rows per table ordered by `updated_at` is sufficient: a row's `updated_at` is never earlier
 than its `created_at`, so any row able to contribute one of the newest `limit` items is among them.
 At most `5 × limit` rows are read; property ids come from the foreign keys already loaded, so no
