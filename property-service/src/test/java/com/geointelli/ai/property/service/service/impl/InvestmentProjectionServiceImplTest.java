@@ -104,19 +104,49 @@ public class InvestmentProjectionServiceImplTest {
         }
 
         @Test
-        @DisplayName("When the horizon is longer than the loan, then the loan is fully repaid")
-        void whenHorizonLongerThanLoan_thenBalanceIsZero() {
-            // Arrange
+        @DisplayName("When the horizon is longer than the loan, then the loan is repaid and has no debt service after")
+        void whenHorizonLongerThanLoan_thenRepaidAndNoDebtServiceAfterwards() {
+            // Arrange: 10-year loan of 240 000 at 6%: 2 664.49/month; NOI 16 170, so cash flow -15 803.88/year
             InvestmentFinancingRequest shortLoan = new InvestmentFinancingRequest(
                     BigDecimal.valueOf(300000), BigDecimal.valueOf(60000), BigDecimal.valueOf(6), 10, null);
+            InvestmentFinancingResult shortLoanResult = new InvestmentFinancingResult(
+                    new BigDecimal("240000.00"), new BigDecimal("2664.49"), new BigDecimal("31973.88"),
+                    new BigDecimal("-1316.99"), new BigDecimal("-15803.88"), new BigDecimal("5.39"),
+                    new BigDecimal("60000.00"), new BigDecimal("-26.34"), List.of());
 
             // Act
             InvestmentProjectionResult result = investmentProjectionService.project(
-                    new InvestmentProjectionRequest(15, null), shortLoan, FINANCING_RESULT);
+                    new InvestmentProjectionRequest(15, null), shortLoan, shortLoanResult);
+
+            // Assert: 15 years of NOI minus 10 years of debt service = 242 550 - 319 738.80
+            assertEquals(new BigDecimal("0.00"), result.remainingLoanBalance());
+            assertEquals(new BigDecimal("240000.00"), result.equityFromLoanPaydown());
+            assertEquals(new BigDecimal("-77188.80"), result.cumulativeCashFlow());
+            assertTrue(result.assumptions().contains("Every scheduled loan payment is made; the loan is repaid after "
+                    + "10 years (120 months), so the last 5 years have no debt service."), result.assumptions().toString());
+        }
+
+        @Test
+        @DisplayName("When the purchase is paid in cash, then no loan payment is assumed")
+        void whenPurchaseIsAllCash_thenNoLoanPaymentAssumed() {
+            // Arrange
+            InvestmentFinancingRequest cash = new InvestmentFinancingRequest(
+                    BigDecimal.valueOf(300000), BigDecimal.valueOf(300000), BigDecimal.valueOf(6), 30, null);
+            InvestmentFinancingResult cashResult = new InvestmentFinancingResult(
+                    new BigDecimal("0.00"), new BigDecimal("0.00"), new BigDecimal("0.00"),
+                    new BigDecimal("1347.50"), new BigDecimal("16170.00"), new BigDecimal("5.39"),
+                    new BigDecimal("300000.00"), new BigDecimal("5.39"), List.of());
+
+            // Act
+            InvestmentProjectionResult result = investmentProjectionService.project(
+                    new InvestmentProjectionRequest(5, BigDecimal.valueOf(3)), cash, cashResult);
 
             // Assert
             assertEquals(new BigDecimal("0.00"), result.remainingLoanBalance());
-            assertEquals(new BigDecimal("240000.00"), result.equityFromLoanPaydown());
+            assertEquals(new BigDecimal("347782.22"), result.totalEquity());
+            assertEquals(new BigDecimal("80850.00"), result.cumulativeCashFlow());
+            assertTrue(result.assumptions().stream().noneMatch(assumption -> assumption.contains("loan payment")),
+                    result.assumptions().toString());
         }
 
         @Test

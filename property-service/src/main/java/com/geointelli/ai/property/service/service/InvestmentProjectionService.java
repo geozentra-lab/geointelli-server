@@ -12,9 +12,10 @@ import com.geointelli.ai.property.service.dto.InvestmentProjectionResult;
 public interface InvestmentProjectionService {
     /**
      * Calculates the loan balance, the equity (down payment + principal repaid + appreciation) and the cumulative
-     * cash flow after {@code horizonYears}. The property value is projected only with an appreciation rate
-     * supplied by the user. A value whose inputs are missing is null with a note; every hypothesis is listed
-     * in the assumptions.
+     * cash flow after {@code horizonYears}; debt service counts only while the loan runs, so a horizon longer than
+     * the loan term has the whole NOI as cash flow in its last years. The property value is projected only with an
+     * appreciation rate supplied by the user. A value whose inputs are missing is null with a note; every
+     * hypothesis is listed in the assumptions.
      *
      * @param request         horizon (1 to 30 years) and optional annual appreciation rate (%)
      * @param financing       financing inputs as supplied (may be null): purchase price, down payment, rate, term

@@ -51,15 +51,25 @@ public class InvestmentProjectionServiceImpl implements InvestmentProjectionServ
         // Equity from the loan principal repaid, with the same amortization as the debt service
         BigDecimal remainingLoanBalance = null;
         BigDecimal equityFromLoanPaydown = null;
+        // Years at the end of the horizon after the loan is repaid: no debt service is paid in them
+        int yearsAfterLoan = 0;
         BigDecimal loanAmount = financingResult == null ? null : financingResult.loanAmount();
         if (loanAmount == null) {
             notes.add("Financing inputs missing (purchase price, down payment, rate or term): "
                     + "loan balance and principal repaid unavailable.");
         } else {
+            int loanTermYears = financing.loanTermYears();
             remainingLoanBalance = toMoney(MortgageMath.remainingBalance(loanAmount, financing.annualInterestRate(),
-                    financing.loanTermYears(), years * 12));
+                    loanTermYears, years * 12));
             equityFromLoanPaydown = loanAmount.subtract(remainingLoanBalance);
-            assumptions.add("Every scheduled loan payment is made for " + (years * 12) + " months.");
+            if (loanAmount.signum() > 0 && loanTermYears < years) {
+                yearsAfterLoan = years - loanTermYears;
+                assumptions.add("Every scheduled loan payment is made; the loan is repaid after " + loanTermYears
+                        + " years (" + (loanTermYears * 12) + " months), so the last " + yearsAfterLoan
+                        + " years have no debt service.");
+            } else if (loanAmount.signum() > 0) {
+                assumptions.add("Every scheduled loan payment is made for " + (years * 12) + " months.");
+            }
         }
         // Appreciation: only from a rate supplied by the user, never a market assumption
         BigDecimal projectedPropertyValue = null;
@@ -88,13 +98,17 @@ public class InvestmentProjectionServiceImpl implements InvestmentProjectionServ
             notes.add("Total equity unavailable: down payment or loan details missing.");
         }
 
-        // Cumulative financed cash flow, held constant
+        // Cumulative financed cash flow, held constant; once the loan is repaid the cash flow is the whole NOI
         BigDecimal cumulativeCashFlow = null;
         BigDecimal annualCashFlow = financingResult == null ? null : financingResult.annualCashFlow();
         if (annualCashFlow == null) {
             notes.add("Annual cash flow unavailable: cumulative cash flow not projected.");
         } else {
             cumulativeCashFlow = annualCashFlow.multiply(BigDecimal.valueOf(years));
+            if (yearsAfterLoan > 0 && financingResult.annualDebtService() != null) {
+                cumulativeCashFlow = cumulativeCashFlow.add(
+                        financingResult.annualDebtService().multiply(BigDecimal.valueOf(yearsAfterLoan)));
+            }
         }
 
         return new InvestmentProjectionResult(

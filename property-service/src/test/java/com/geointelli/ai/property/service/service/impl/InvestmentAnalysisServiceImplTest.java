@@ -89,6 +89,21 @@ public class InvestmentAnalysisServiceImplTest {
         }
 
         @Test
+        @DisplayName("When the loan ends before the horizon, then the cash flow has no debt service after the repayment")
+        void whenLoanEndsBeforeHorizon_thenNoDebtServiceAfterRepayment() {
+            // Act: 10-year loan, 15-year horizon
+            InvestmentAnalysisResponse response = investmentAnalysisService.analyze(new InvestmentAnalysisRequest(
+                    operating(), new InvestmentFinancingRequest(BigDecimal.valueOf(300000), BigDecimal.valueOf(60000),
+                            BigDecimal.valueOf(6), 10, BigDecimal.valueOf(9000)),
+                    new InvestmentProjectionRequest(15, null)));
+
+            // Assert: 15 × NOI 16 170 - 10 × debt service 31 973.88
+            assertEquals(new BigDecimal("31973.88"), response.financing().annualDebtService());
+            assertEquals(new BigDecimal("0.00"), response.projection().remainingLoanBalance());
+            assertEquals(new BigDecimal("-77188.80"), response.projection().cumulativeCashFlow());
+        }
+
+        @Test
         @DisplayName("When the rent or the operating section is missing, then throw IllegalArgumentException")
         void whenRentMissing_thenThrowIllegalArgumentException() {
             // Act & Assert
