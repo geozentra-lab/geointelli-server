@@ -1,0 +1,41 @@
+{
+  "eventId": "property-alert-151",
+  "source": "property-service",
+  "eventVersion": 1,
+  "eventType": "VALUATION_CHANGED",
+  "userId": "valuation-user",
+  "alertRuleId": 15,
+  "savedSearchId": null,
+  "propertyId": 301400,
+  "sourceChangeId": "valuation:301400:history:11",
+  "occurredAt": "2026-11-13T10:00:00.720653Z",
+  "payload": {
+    "ruleName": "Valuation drop",
+    "currency": "USD",
+    "oldValuation": {
+      "historyId": 10,
+      "runId": "old-run",
+      "modelVersion": "v17+v18",
+      "predictionDate": "2026-11-12",
+      "status": "supported",
+      "value": 100000,
+      "loadedAt": "2026-11-12T10:00:00Z"
+    },
+    "newValuation": {
+      "historyId": 11,
+      "runId": "new-run",
+      "modelVersion": "v17+v18",
+      "predictionDate": "2026-11-13",
+      "status": "limited",
+      "value": 90000,
+      "loadedAt": "2026-11-13T09:00:00Z"
+    },
+    "changeAmount": -10000,
+    "changePercent": -10.0,
+    "minimumChangePercent": 5,
+    "configuredDirection": "DECREASE",
+    "direction": "DECREASE",
+    "observationStartedAt": "2026-11-13T10:00:00.720653Z",
+    "observationFinishedAt": "2026-11-13T10:00:00.720653Z"
+  }
+}

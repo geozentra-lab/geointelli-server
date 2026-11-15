@@ -29,14 +29,14 @@ public class NotificationPreferenceController {
     }
 
     @GetMapping
-    @Operation(summary = "Get my notification preferences", description = "Defaults: in-app=true, email=false, enabledEventTypes=[NEW_MATCH, CONTACT_REQUEST], emailCadence=DAILY. "
+    @Operation(summary = "Get my notification preferences", description = "Defaults: in-app=true, email=false, enabledEventTypes=[NEW_MATCH, CONTACT_REQUEST, VALUATION_CHANGED], emailCadence=DAILY. "
             + "EmailDeliveryEnabled reports whether the server's SES worker is enabled; it is not a delivery receipt.")
     public NotificationPreferencesDTO get() {
         return preferences.get();
     }
 
     @PutMapping
-    @Operation(summary = "Replace my notification preferences", description = "All four request fields are required. Supported events: NEW_MATCH and CONTACT_REQUEST; [] opts out of both.  "
+    @Operation(summary = "Replace my notification preferences", description = "All four request fields are required. Supported events: NEW_MATCH, CONTACT_REQUEST and VALUATION_CHANGED; [] opts out of all.  "
             + "Email opt-in requires email_verified=true and an email claim in the signed JWT; no client-supplied recipient is accepted. "
             + "IMMEDIATE sends one notification per email; DAILY and WEEKLY produce bounded digests at UTC midnight or Monday UTC midnight. "
             + "No historical notifications are backfilled. Previously visible inbox items remain visible. Opt-outs suppress unsent queued emails; "

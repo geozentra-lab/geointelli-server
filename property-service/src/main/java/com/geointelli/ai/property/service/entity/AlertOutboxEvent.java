@@ -14,7 +14,10 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-/** A committed change awaiting at-least-once delivery; its ID remains stable on every retry. */
+/**
+ * A committed change awaiting at-least-once delivery; its ID remains stable on
+ * every retry.
+ */
 @Entity
 @Table(name = "alert_outbox")
 @Getter
@@ -38,4 +41,5 @@ public class AlertOutboxEvent {
     private Instant nextAttemptAt;
     private String lastErrorCode;
     private Instant sentAt;
+    private String sourceChangeId;
 }

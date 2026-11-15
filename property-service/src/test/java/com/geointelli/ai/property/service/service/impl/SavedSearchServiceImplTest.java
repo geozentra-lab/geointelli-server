@@ -34,19 +34,25 @@ import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 
-/** Verifies canonical definitions, owner isolation, partial changes and replay through the existing search service. */
+/**
+ * Verifies canonical definitions, owner isolation, partial changes and replay
+ * through the existing search service.
+ */
 class SavedSearchServiceImplTest {
     private static final ValidatorFactory FACTORY = Validation.buildDefaultValidatorFactory();
     private final SavedSearchRepository searches = mock(SavedSearchRepository.class);
     private final CurrentUserService currentUser = mock(CurrentUserService.class);
     private final PropertySearchService propertySearch = mock(PropertySearchService.class);
     private final ObjectMapper json = new ObjectMapper();
+    private final AlertEvaluationScheduleService evaluation = mock(AlertEvaluationScheduleService.class);
     private final SavedSearchServiceImpl service = new SavedSearchServiceImpl(searches, currentUser, propertySearch,
-        new PropertySearchValidationServiceImpl(FACTORY.getValidator()), json, FACTORY.getValidator(), mock(AlertEvaluationScheduleService.class));
+            new PropertySearchValidationServiceImpl(FACTORY.getValidator()), json, FACTORY.getValidator(), evaluation);
     private SavedSearch saved;
 
     @AfterAll
-    static void cleanup() { FACTORY.close(); }
+    static void cleanup() {
+        FACTORY.close();
+    }
 
     @BeforeEach
     void setup() throws Exception {
@@ -57,12 +63,14 @@ class SavedSearchServiceImplTest {
         saved.setId(10L);
         saved.setUser(user);
         saved.setName("Original");
-        saved.setFilters(json.readTree("{\"countyId\":31,\"minBedrooms\":3,\"sortBy\":\"bedrooms\",\"direction\":\"desc\"}"));
+        saved.setFilters(
+                json.readTree("{\"countyId\":31,\"minBedrooms\":3,\"sortBy\":\"bedrooms\",\"direction\":\"desc\"}"));
         when(searches.findByIdAndUser_Id(10L, 7L)).thenReturn(Optional.of(saved));
         when(searches.findOwnedForUpdate(10L, 7L)).thenReturn(Optional.of(saved));
         when(searches.saveAndFlush(any())).thenAnswer(call -> {
             SavedSearch value = call.getArgument(0);
-            if (value.getId() == null) value.setId(11L);
+            if (value.getId() == null)
+                value.setId(11L);
             return value;
         });
     }
@@ -76,6 +84,23 @@ class SavedSearchServiceImplTest {
         filters.setCity("  MIAMI  ");
         request.setFilters(filters);
         return request;
+    }
+
+    @Test
+    void renameDoesNotDiscardValuationObservations() {
+        SavedSearchRequest request = new SavedSearchRequest();
+        request.setName("Renamed");
+        service.update(10L, request);
+        verify(evaluation).rescheduleSearch(10L);
+        verify(evaluation, never()).resetValuationSearch(anyLong());
+    }
+
+    @Test
+    void pauseChangesResetValuationBaselineForAQuietResume() {
+        SavedSearchRequest request = new SavedSearchRequest();
+        request.setPaused(true);
+        service.update(10L, request);
+        verify(evaluation).resetValuationSearch(10L);
     }
 
     @Test
@@ -163,7 +188,7 @@ class SavedSearchServiceImplTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"name", "filters", "cadence", "paused"})
+    @ValueSource(strings = { "name", "filters", "cadence", "paused" })
     void explicitNullCannotClearRequiredDefinitionFields(String name) throws Exception {
         SavedSearchRequest patch = json.readValue("{\"" + name + "\":null}", SavedSearchRequest.class);
         assertThrows(IllegalArgumentException.class, () -> service.update(10L, patch));
@@ -202,7 +227,7 @@ class SavedSearchServiceImplTest {
         saved.setFiltersVersion(99);
         assertEquals(99, service.get(10L).filtersVersion());
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
-            () -> service.results(10L, 0, 20)).getStatusCode());
+                () -> service.results(10L, 0, 20)).getStatusCode());
         verifyNoInteractions(propertySearch);
     }
 
@@ -216,7 +241,7 @@ class SavedSearchServiceImplTest {
     void invalidStoredPayloadReturns409() throws Exception {
         saved.setFilters(json.readTree("{\"unknownFilter\":true}"));
         assertEquals(HttpStatus.CONFLICT, assertThrows(ResponseStatusException.class,
-            () -> service.results(10L, 0, 20)).getStatusCode());
+                () -> service.results(10L, 0, 20)).getStatusCode());
         verifyNoInteractions(propertySearch);
     }
 
@@ -254,7 +279,8 @@ class SavedSearchServiceImplTest {
     @Test
     void requiresAnAuthenticatedIdentity() {
         when(currentUser.getCurrentUserEntity()).thenThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class, () -> service.get(10L)).getStatusCode());
+        assertEquals(HttpStatus.UNAUTHORIZED,
+                assertThrows(ResponseStatusException.class, () -> service.get(10L)).getStatusCode());
     }
 
     @Test

@@ -7,7 +7,10 @@ import com.geointelli.ai.property.service.config.AlertMonitoringProperties;
 import com.geointelli.ai.property.service.repository.AlertMonitoringRepository;
 import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
 
-/** Participates in the caller's transaction; feature-off installations do not access the new tables. */
+/**
+ * Participates in the caller's transaction; feature-off installations do not
+ * access the new tables.
+ */
 @Service
 public class AlertEvaluationScheduleServiceImpl implements AlertEvaluationScheduleService {
     private final AlertMonitoringRepository repository;
@@ -16,16 +19,34 @@ public class AlertEvaluationScheduleServiceImpl implements AlertEvaluationSchedu
 
     public AlertEvaluationScheduleServiceImpl(AlertMonitoringRepository repository, AlertMonitoringProperties settings,
             @Qualifier("alertClock") Clock clock) {
-        this.repository = repository; this.settings = settings; this.clock = clock;
+        this.repository = repository;
+        this.settings = settings;
+        this.clock = clock;
     }
 
     @Override
     public void rescheduleRule(Long ruleId) {
-        if (settings.isEnabled()) repository.rescheduleRule(ruleId, clock.instant());
+        if (settings.isEnabled())
+            repository.rescheduleRule(ruleId, clock.instant());
     }
 
     @Override
     public void rescheduleSearch(Long savedSearchId) {
-        if (settings.isEnabled()) repository.rescheduleSearch(savedSearchId, clock.instant());
+        if (settings.isEnabled())
+            repository.rescheduleSearch(savedSearchId, clock.instant());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void resetValuationBaseline(Long ruleId) {
+        if (settings.isEnabled())
+            repository.resetValuationBaseline(ruleId);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void resetValuationSearch(Long savedSearchId) {
+        if (settings.isEnabled())
+            repository.resetValuationSearch(savedSearchId);
     }
 }
