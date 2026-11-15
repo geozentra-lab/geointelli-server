@@ -24,6 +24,7 @@ public class NotificationPreference {
     private boolean emailEnabled;
     private boolean newMatchEnabled = true;
     private boolean contactRequestEnabled = true;
+    private boolean valuationChangedEnabled = true;
     @Enumerated(EnumType.STRING)
     private EmailCadence emailCadence = EmailCadence.DAILY;
     private String emailAddress;

@@ -31,7 +31,9 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import jakarta.validation.groups.Default;
 
-/** Validates target identity and ownership before persisting rule configuration. */
+/**
+ * Validates target identity and ownership before persisting rule configuration.
+ */
 @Service
 @Transactional
 public class AlertRuleServiceImpl implements AlertRuleService {
@@ -69,11 +71,14 @@ public class AlertRuleServiceImpl implements AlertRuleService {
         rule.setUser(owner);
         rule.setName(request.getName().trim());
         rule.setEventType(request.getEventType());
+        applyValuationCriteria(rule, request);
         if (request.getSavedSearchId() != null) {
-            // Uses the same target-row lock as saved-search deletion so validation cannot race that deletion.
+            // Uses the same target-row lock as saved-search deletion so validation cannot
+            // race that deletion.
             SavedSearch search = searches.findOwnedForUpdate(request.getSavedSearchId(), owner.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved search not found"));
-            if (rules.existsByUser_IdAndSavedSearch_IdAndEventType(owner.getId(), search.getId(), request.getEventType())) {
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved search not found"));
+            if (rules.existsByUser_IdAndSavedSearch_IdAndEventType(owner.getId(), search.getId(),
+                    request.getEventType())) {
                 throw duplicate();
             }
             rule.setSavedSearch(search);
@@ -82,13 +87,16 @@ public class AlertRuleServiceImpl implements AlertRuleService {
             if (!properties.existsById(request.getPropertyId())) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Property not found");
             }
-            if (rules.existsByUser_IdAndProperty_IdAndEventType(owner.getId(), request.getPropertyId(), request.getEventType())) {
+            if (rules.existsByUser_IdAndProperty_IdAndEventType(owner.getId(), request.getPropertyId(),
+                    request.getEventType())) {
                 throw duplicate();
             }
             rule.setProperty(properties.getReferenceById(request.getPropertyId()));
         }
-        if (request.hasField("cadence")) rule.setCadence(request.getCadence());
-        if (request.hasField("paused")) rule.setPaused(request.getPaused());
+        if (request.hasField("cadence"))
+            rule.setCadence(request.getCadence());
+        if (request.hasField("paused"))
+            rule.setPaused(request.getPaused());
         rules.saveAndFlush(rule);
         evaluationSchedule.rescheduleRule(rule.getId());
         return mapper.toDTO(rule);
@@ -99,9 +107,10 @@ public class AlertRuleServiceImpl implements AlertRuleService {
         Long owner = currentUser.getCurrentUserEntity().getId();
         validatePage(page, size);
         Page<AlertRule> result = rules.findByUser_Id(owner,
-            PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
         List<AlertRuleDTO> content = new ArrayList<>();
-        for (AlertRule rule : result) content.add(mapper.toDTO(rule));
+        for (AlertRule rule : result)
+            content.add(mapper.toDTO(rule));
         return new AlertRulePageDTO(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
@@ -114,18 +123,29 @@ public class AlertRuleServiceImpl implements AlertRuleService {
     public AlertRuleDTO update(Long id, AlertRuleRequest request) {
         AlertRule rule = owned(id, true);
         validate(request, Default.class);
+        boolean pauseChanged = request.hasField("paused") && rule.isPaused() != request.getPaused();
+        boolean criteriaChanged = (request.hasField("minimumChangePercent")
+                && rule.getMinimumChangePercent().compareTo(request.getMinimumChangePercent()) != 0)
+                || (request.hasField("changeDirection") && rule.getChangeDirection() != request.getChangeDirection());
         Long propertyId = rule.getProperty() == null ? null : rule.getProperty().getId();
         Long searchId = rule.getSavedSearch() == null ? null : rule.getSavedSearch().getId();
         if ((request.hasField("propertyId") && !Objects.equals(propertyId, request.getPropertyId()))
                 || (request.hasField("savedSearchId") && !Objects.equals(searchId, request.getSavedSearchId()))
                 || (request.hasField("eventType") && rule.getEventType() != request.getEventType())) {
-            throw new IllegalArgumentException("Target and eventType cannot be changed; delete the rule and create another");
+            throw new IllegalArgumentException(
+                    "Target and eventType cannot be changed; delete the rule and create another");
         }
-        if (request.hasField("name")) rule.setName(request.getName().trim());
-        if (request.hasField("cadence")) rule.setCadence(request.getCadence());
-        if (request.hasField("paused")) rule.setPaused(request.getPaused());
+        if (request.hasField("name"))
+            rule.setName(request.getName().trim());
+        if (request.hasField("cadence"))
+            rule.setCadence(request.getCadence());
+        if (request.hasField("paused"))
+            rule.setPaused(request.getPaused());
+        applyValuationCriteria(rule, request);
         rules.saveAndFlush(rule);
         evaluationSchedule.rescheduleRule(rule.getId());
+        if (rule.getEventType() == AlertEventType.VALUATION_CHANGED && (pauseChanged || criteriaChanged))
+            evaluationSchedule.resetValuationBaseline(rule.getId());
         return mapper.toDTO(rule);
     }
 
@@ -135,22 +155,36 @@ public class AlertRuleServiceImpl implements AlertRuleService {
     }
 
     private AlertRule owned(Long id, boolean lock) {
-        if (id == null || id <= 0) throw new IllegalArgumentException("alertId must be positive");
+        if (id == null || id <= 0)
+            throw new IllegalArgumentException("alertId must be positive");
         Long owner = currentUser.getCurrentUserEntity().getId();
         return (lock ? rules.findOwnedForUpdate(id, owner) : rules.findByIdAndUser_Id(id, owner))
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Alert rule not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Alert rule not found"));
+    }
+
+    private void applyValuationCriteria(AlertRule rule, AlertRuleRequest request) {
+        if ((request.hasField("minimumChangePercent") || request.hasField("changeDirection"))
+                && rule.getEventType() != AlertEventType.VALUATION_CHANGED)
+            throw new IllegalArgumentException("Valuation filters require VALUATION_CHANGED");
+        if (request.hasField("minimumChangePercent"))
+            rule.setMinimumChangePercent(request.getMinimumChangePercent());
+        if (request.hasField("changeDirection"))
+            rule.setChangeDirection(request.getChangeDirection());
     }
 
     private void validate(AlertRuleRequest request, Class<?> group) {
-        if (request == null) throw new IllegalArgumentException("Request body is required");
+        if (request == null)
+            throw new IllegalArgumentException("Request body is required");
         for (ConstraintViolation<AlertRuleRequest> violation : validator.validate(request, group)) {
             throw new IllegalArgumentException(violation.getPropertyPath() + ": " + violation.getMessage());
         }
     }
 
     private AlertCadence defaultCadence(SavedSearchCadence cadence) {
-        if (cadence == SavedSearchCadence.DAILY) return AlertCadence.DAILY;
-        if (cadence == SavedSearchCadence.WEEKLY) return AlertCadence.WEEKLY;
+        if (cadence == SavedSearchCadence.DAILY)
+            return AlertCadence.DAILY;
+        if (cadence == SavedSearchCadence.WEEKLY)
+            return AlertCadence.WEEKLY;
         throw new ResponseStatusException(HttpStatus.CONFLICT, "Unsupported saved search cadence");
     }
 
@@ -160,7 +194,8 @@ public class AlertRuleServiceImpl implements AlertRuleService {
 
     private void validatePage(int page, int size) {
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("page must be non-negative, size must be 1-100, and offset must fit an integer");
+            throw new IllegalArgumentException(
+                    "page must be non-negative, size must be 1-100, and offset must fit an integer");
         }
     }
 }

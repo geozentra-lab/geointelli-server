@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.geointelli.ai.property.service.entity.LenderApplicationStage;
+import com.geointelli.ai.property.service.entity.LenderLoanType;
 import lombok.Getter;
 
 /** Omitted fields stay unchanged; optional email, property and notes may be explicitly cleared. */
@@ -33,6 +34,9 @@ public class LenderApplicationUpdateRequest {
     private BigDecimal fundedAmount;
     @JsonIgnore private boolean fundedAmountProvided;
     @JsonSetter public void setFundedAmount(BigDecimal value) { fundedAmount = value; fundedAmountProvided = true; }
+    private LenderLoanType loanType;
+    @JsonIgnore private boolean loanTypeProvided;
+    @JsonSetter public void setLoanType(LenderLoanType value) { loanType = value; loanTypeProvided = true; }
     private String notes;
     @JsonIgnore private boolean notesProvided;
     @JsonSetter public void setNotes(String value) { notes = value; notesProvided = true; }

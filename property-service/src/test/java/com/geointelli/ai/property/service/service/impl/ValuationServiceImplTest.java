@@ -260,6 +260,40 @@ class ValuationServiceImplTest {
         }
 
         @Test
+        @DisplayName("When comparables are not wanted, then the same figures are returned without searching comparables")
+        void whenWithoutComparables_thenSameFiguresAndNoComparableSearch() {
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(supported()));
+            when(comparableService.findComparables(eq(ID), any())).thenReturn(comparables("COMPARABLES_FOUND"));
+            ValuationResponse full = service.getValuation(ID);
+            org.mockito.Mockito.clearInvocations(comparableService);
+
+            ValuationResponse figures = service.getValuationWithoutComparables(ID);
+
+            verifyNoInteractions(comparableService);
+            assertThat(figures.status()).isEqualTo(full.status());
+            assertThat(figures.reasons()).isEqualTo(full.reasons());
+            assertThat(figures.estimate()).isEqualTo(full.estimate());
+            assertThat(figures.method()).isEqualTo(full.method());
+            assertThat(figures.evidence().lastSale()).isEqualTo(full.evidence().lastSale());
+            assertThat(figures.evidence().comparables()).isNull();
+            assertThat(full.evidence().comparables().status()).isEqualTo("COMPARABLES_FOUND");
+        }
+
+        @Test
+        @DisplayName("When comparables are not wanted, then input checks and not_modelled are the same as getValuation")
+        void whenWithoutComparables_thenSameChecks() {
+            assertThatThrownBy(() -> service.getValuationWithoutComparables(0L))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("propertyId must be positive");
+            when(propertyRepository.existsById(7L)).thenReturn(false);
+            assertThatThrownBy(() -> service.getValuationWithoutComparables(7L))
+                .isInstanceOf(PropertyNotFoundException.class);
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.empty());
+            assertThat(service.getValuationWithoutComparables(ID).reasons())
+                .extracting(Reason::code).containsExactly("not_modelled");
+            verifyNoInteractions(comparableService);
+        }
+
+        @Test
         @DisplayName("When supported, then the summary shows the baseline and estimate in whole dollars")
         void whenSupported_thenSummaryUsesWholeDollars() {
             when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(supported()));

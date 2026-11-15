@@ -1,6 +1,10 @@
 package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.*;
+import com.geointelli.ai.property.service.entity.LenderLoanType;
+import com.geointelli.ai.property.service.entity.User;
+import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.LenderApprovedFundedService;
 import com.geointelli.ai.property.service.service.LenderDashboardMortgageContextService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -10,10 +14,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,6 +39,12 @@ public class LenderDashboardControllerTest {
 
     @MockBean
     LenderDashboardMortgageContextService mortgageContextService;
+
+    @MockBean
+    LenderApprovedFundedService approvedFundedService;
+
+    @MockBean
+    CurrentUserService currentUserService;
 
     @Nested
     @DisplayName("Test Mortgage Context Card Endpoint")
@@ -132,6 +147,107 @@ public class LenderDashboardControllerTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error").value("Bad Request"));
             verifyNoInteractions(mortgageContextService);
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Approved, Funded And Loan-Mix Card Endpoint")
+    class ApprovedFundedTest {
+
+        private static final String URL = "/api/dashboards/lender/approved-funded";
+        private static final LocalDate OCT_1 = LocalDate.of(2026, 10, 1);
+        private static final LocalDate OCT_31 = LocalDate.of(2026, 10, 31);
+
+        private void givenCurrentUser() {
+            User user = new User();
+            user.setId(7L);
+            when(currentUserService.getCurrentUserEntity()).thenReturn(user);
+        }
+
+        @Test
+        @DisplayName("When the period is valid, then return 200 with approved, funded and the loan mix")
+        void whenValid_thenReturnCard() throws Exception {
+            // Arrange
+            givenCurrentUser();
+            LenderApprovedFundedCardDTO card = new LenderApprovedFundedCardDTO(42L, "USD",
+                    LenderApprovedFundedCardDTO.STATUS_OK, null, Instant.parse("2026-10-15T12:00:00Z"),
+                    new LenderApprovedFundedCardDTO.Period(OCT_1, OCT_31, "UTC"),
+                    new LenderApprovedFundedCardDTO.AmountTotal(12, new BigDecimal("3600000.00")),
+                    new LenderApprovedFundedCardDTO.AmountTotal(10, new BigDecimal("3000000.00")),
+                    List.of(new LenderApprovedFundedCardDTO.LoanMixEntry(LenderLoanType.FHA, 2, new BigDecimal("540000.00")),
+                            new LenderApprovedFundedCardDTO.LoanMixEntry(LenderLoanType.UNKNOWN, 1, new BigDecimal("250000.00"))),
+                    "note");
+            when(approvedFundedService.getCard(7L, 42L, OCT_1, OCT_31)).thenReturn(card);
+
+            // Act & Assert
+            mockMvc.perform(get(URL).param("organizationId", "42")
+                            .param("fromDate", "2026-10-01").param("toDate", "2026-10-31"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.organizationId").value(42))
+                    .andExpect(jsonPath("$.currency").value("USD"))
+                    .andExpect(jsonPath("$.period.fromDate").value("2026-10-01"))
+                    .andExpect(jsonPath("$.period.timeZone").value("UTC"))
+                    .andExpect(jsonPath("$.approved.count").value(12))
+                    .andExpect(jsonPath("$.funded.totalAmount").value(3000000.00))
+                    .andExpect(jsonPath("$.fundedLoanMix[1].loanType").value("UNKNOWN"))
+                    .andExpect(jsonPath("$.generatedAt").value("2026-10-15T12:00:00Z"));
+        }
+
+        @Test
+        @DisplayName("When no dates are given, then pass null dates to the service")
+        void whenNoDates_thenPassNull() throws Exception {
+            // Arrange
+            givenCurrentUser();
+
+            // Act & Assert
+            mockMvc.perform(get(URL).param("organizationId", "42")).andExpect(status().isOk());
+            verify(approvedFundedService).getCard(7L, 42L, null, null);
+        }
+
+        @Test
+        @DisplayName("When organizationId is missing, then return 400 without calling the service")
+        void whenOrganizationMissing_thenReturn400() throws Exception {
+            // Act & Assert
+            mockMvc.perform(get(URL)).andExpect(status().isBadRequest());
+            verifyNoInteractions(approvedFundedService);
+        }
+
+        @Test
+        @DisplayName("When a date is not yyyy-MM-dd, then return 400 without calling the service")
+        void whenBadDate_thenReturn400() throws Exception {
+            // Act & Assert
+            mockMvc.perform(get(URL).param("organizationId", "42").param("fromDate", "01/10/2026")
+                            .param("toDate", "2026-10-31"))
+                    .andExpect(status().isBadRequest());
+            verifyNoInteractions(approvedFundedService);
+        }
+
+        @Test
+        @DisplayName("When the service rejects the period, then return 400")
+        void whenServiceRejectsPeriod_thenReturn400() throws Exception {
+            // Arrange
+            givenCurrentUser();
+            when(approvedFundedService.getCard(7L, 42L, OCT_31, OCT_1))
+                    .thenThrow(new IllegalArgumentException("fromDate must not be after toDate"));
+
+            // Act & Assert
+            mockMvc.perform(get(URL).param("organizationId", "42")
+                            .param("fromDate", "2026-10-31").param("toDate", "2026-10-01"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("fromDate must not be after toDate"));
+        }
+
+        @Test
+        @DisplayName("When the user is not a member, then return 404")
+        void whenNotMember_thenReturn404() throws Exception {
+            // Arrange
+            givenCurrentUser();
+            when(approvedFundedService.getCard(7L, 9L, null, null))
+                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Organization not found"));
+
+            // Act & Assert
+            mockMvc.perform(get(URL).param("organizationId", "9"))
+                    .andExpect(status().isNotFound());
         }
     }
 }
