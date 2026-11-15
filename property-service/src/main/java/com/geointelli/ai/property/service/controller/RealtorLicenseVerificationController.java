@@ -30,8 +30,8 @@ public class RealtorLicenseVerificationController {
 
     @PostMapping
     @Operation(summary = "Submit my license for verification", description = "licenseHolderName (1-160), licensingState "
-        + "(two letters, only FL accepted) and licenseNumber (1-40) are required; licenseExpirationDate (yyyy-MM-dd, not "
-        + "in the past), brokerageName (max 160) and workEmail (valid e-mail) are optional. Creates a PENDING_REVIEW "
+        + "(two letters, only FL accepted) and licenseNumber (1-40) are required; licenseExpirationDate (yyyy-MM-dd, "
+        + "from today to 9999-12-31), brokerageName (max 160) and workEmail (valid e-mail) are optional. Creates a PENDING_REVIEW "
         + "submission (201). Refused with 409 while a submission is pending or verified; allowed again after a rejection, "
         + "as a new record that keeps the rejected one in history.")
     public ResponseEntity<RealtorLicenseVerificationDTO> submit(@Valid @RequestBody RealtorLicenseSubmissionRequest request) {

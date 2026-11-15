@@ -18,7 +18,7 @@ public interface RealtorLicenseVerificationService {
      * Creates a new PENDING_REVIEW submission for the current user.
      *
      * @param request submitted details; the licensing state must be FL and the expiration date, if
-     *                given, must not be in the past (otherwise {@link IllegalArgumentException}, 400)
+     *                given, must be between today and 9999-12-31 (otherwise {@link IllegalArgumentException}, 400)
      * @return the created submission
      * @throws org.springframework.web.server.ResponseStatusException 409 when the user already has a
      *         PENDING_REVIEW or VERIFIED submission; a new submission is allowed only after a rejection

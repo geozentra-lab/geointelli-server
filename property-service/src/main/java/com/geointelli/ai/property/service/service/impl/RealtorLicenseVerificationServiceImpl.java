@@ -3,6 +3,7 @@ package com.geointelli.ai.property.service.service.impl;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -34,6 +35,8 @@ public class RealtorLicenseVerificationServiceImpl implements RealtorLicenseVeri
     /** A submission in one of these statuses blocks a new one; only REJECTED allows resubmission. */
     private static final List<RealtorLicenseVerificationStatus> BLOCKING_STATUSES =
         List.of(RealtorLicenseVerificationStatus.PENDING_REVIEW, RealtorLicenseVerificationStatus.VERIFIED);
+    /** Latest accepted expiration date: a four-digit year (yyyy-MM-dd), which PostgreSQL can always store. */
+    private static final LocalDate MAX_EXPIRATION_DATE = LocalDate.of(9999, 12, 31);
 
     private final RealtorLicenseVerificationRepository verifications;
     private final CurrentUserService currentUser;
@@ -50,6 +53,9 @@ public class RealtorLicenseVerificationServiceImpl implements RealtorLicenseVeri
         if (request.licenseExpirationDate() != null && request.licenseExpirationDate().isBefore(today)) {
             throw new IllegalArgumentException("licenseExpirationDate must not be in the past");
         }
+        if (request.licenseExpirationDate() != null && request.licenseExpirationDate().isAfter(MAX_EXPIRATION_DATE)) {
+            throw new IllegalArgumentException("licenseExpirationDate must not be after " + MAX_EXPIRATION_DATE);
+        }
         if (verifications.existsByUserIdAndStatusIn(owner, BLOCKING_STATUSES)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "A license submission is already pending or verified; a new one is allowed only after a rejection");
@@ -63,9 +69,10 @@ public class RealtorLicenseVerificationServiceImpl implements RealtorLicenseVeri
         row.setBrokerageName(blankToNull(request.brokerageName()));
         row.setWorkEmail(blankToNull(request.workEmail()));
         row.setStatus(RealtorLicenseVerificationStatus.PENDING_REVIEW);
-        row.setSubmittedAt(Instant.now());
+        // PostgreSQL keeps microseconds; truncating here makes the 201 body match what GET returns later
+        row.setSubmittedAt(Instant.now().truncatedTo(ChronoUnit.MICROS));
         // saveAndFlush so the partial unique index (one pending per user) fails here, inside this method,
-        // when two submissions race; the CRM-style advice turns that into a 409.
+        // when two submissions race; RealtorLicenseExceptionHandler turns that into a 409.
         return toDTO(verifications.saveAndFlush(row));
     }
 

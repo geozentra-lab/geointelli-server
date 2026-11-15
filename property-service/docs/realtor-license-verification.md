@@ -52,16 +52,16 @@ Body:
 | `licenseHolderName` | string | required, 1 to 160 characters, trimmed |
 | `licensingState` | string | required, two letters, upper-cased; only `FL` is accepted today |
 | `licenseNumber` | string | required, 1 to 40 characters, trimmed; no format check (the registry check decides) |
-| `licenseExpirationDate` | date `yyyy-MM-dd` | optional; must not be before today (UTC) |
+| `licenseExpirationDate` | date `yyyy-MM-dd` | optional; from today (UTC) to 9999-12-31 |
 | `brokerageName` | string | optional, max 160; blank becomes null |
-| `workEmail` | string | optional, valid e-mail, max 254; blank becomes null |
+| `workEmail` | string | optional, valid e-mail, max 254; an empty string becomes null, spaces only are an invalid e-mail |
 
 Responses:
 
 | Status | When |
 |--------|------|
 | 201 | created; body is the submission (see below), `Location: /api/users/me/realtor-license` |
-| 400 | missing or invalid field, unsupported state, expiration date in the past, unreadable JSON |
+| 400 | missing or invalid field, unsupported state, expiration date in the past or after 9999-12-31, unreadable JSON, a value the database cannot store (for example a NUL character) |
 | 401 | no bearer token |
 | 409 | the user already has a PENDING_REVIEW or VERIFIED submission (also when two submissions race) |
 
