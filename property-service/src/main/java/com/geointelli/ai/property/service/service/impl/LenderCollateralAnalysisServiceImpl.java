@@ -20,9 +20,9 @@ import java.math.RoundingMode;
 import java.util.List;
 
 /**
- * Divides the loan amount by the stored model value of the linked property. Not transactional on purpose: the
- * valuation reads supporting comparables in their own transaction and handles their failures, which must not mark
- * a shared transaction rollback-only.
+ * Divides the loan amount by the stored model value of the linked property. The valuation is read without its
+ * supporting comparable sales: the analysis does not show them, and searching them made every call take about two
+ * seconds instead of a few milliseconds. Each repository read runs in its own read-only transaction.
  */
 @Service
 @RequiredArgsConstructor
@@ -62,10 +62,10 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
                     unavailable(LenderCollateralAnalysisDTO.NO_COLLATERAL_PROPERTY));
         }
 
-        // Collateral: the stored valuation, unchanged
+        // Collateral: the stored valuation, unchanged (its figures only; no comparable search)
         ValuationResponse valuation;
         try {
-            valuation = valuations.getValuation(propertyId);
+            valuation = valuations.getValuationWithoutComparables(propertyId);
         } catch (PropertyNotFoundException e) {
             return result(application, loanAmount, basis, null,
                     unavailable(LenderCollateralAnalysisDTO.COLLATERAL_PROPERTY_NOT_FOUND));

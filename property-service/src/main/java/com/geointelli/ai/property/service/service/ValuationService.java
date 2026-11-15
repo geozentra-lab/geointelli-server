@@ -17,6 +17,19 @@ public interface ValuationService {
     ValuationResponse getValuation(Long propertyId);
 
     /**
+     * Returns the same stored valuation as {@link #getValuation(Long)} without searching supporting comparable
+     * sales, for callers that use only the figures (status, estimate, method and reasons), such as the lender
+     * collateral analysis. The comparable search is the slow part of a valuation read; in the result,
+     * {@code evidence.comparables} is null.
+     *
+     * @param propertyId positive internal property ID
+     * @return supported/limited output, or unsupported with reasons when no model result is available
+     * @throws IllegalArgumentException if the ID is not positive
+     * @throws com.geointelli.ai.property.service.exception.PropertyNotFoundException if the property does not exist
+     */
+    ValuationResponse getValuationWithoutComparables(Long propertyId);
+
+    /**
      * Formats an archived model output without consulting current property facts or live comparables.
      *
      * @param snapshot frozen prediction fields reconstructed from history, not today's prediction row

@@ -64,7 +64,7 @@ class LenderCollateralAnalysisServiceImplTest {
 
     @Test
     void supportedValuationGivesAvailableLtvWithValuationDateAndConfidence() {
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
 
@@ -89,7 +89,7 @@ class LenderCollateralAnalysisServiceImplTest {
     @Test
     void fundedAmountWinsOverApprovedAndRequested() {
         application.setFundedAmount(new BigDecimal("280000.00"));
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
 
@@ -100,7 +100,7 @@ class LenderCollateralAnalysisServiceImplTest {
     @Test
     void requestedAmountIsUsedWhenNothingIsApproved() {
         application.setApprovedAmount(null);
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("supported", "400000.00", List.of()));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
 
@@ -112,14 +112,14 @@ class LenderCollateralAnalysisServiceImplTest {
     @Test
     void percentIsRoundedToTwoDecimals() {
         application.setApprovedAmount(new BigDecimal("100000.00"));
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("supported", "300000.00", List.of()));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("supported", "300000.00", List.of()));
 
         assertThat(service.analyze(ACTOR, ORG, APP).ltv().percent()).isEqualByComparingTo("33.33");
     }
 
     @Test
     void limitedValuationGivesLimitedLtvWithModelReasons() {
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("limited", "400000.00",
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("limited", "400000.00",
                 List.of(new Reason("few_comparables", "Few comparable sales"))));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
@@ -132,7 +132,7 @@ class LenderCollateralAnalysisServiceImplTest {
 
     @Test
     void unsupportedValuationGivesUnavailableLtvWithoutPercent() {
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("unsupported", null,
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("unsupported", null,
                 List.of(new Reason("not_modelled", "Not modelled"))));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
@@ -147,7 +147,7 @@ class LenderCollateralAnalysisServiceImplTest {
 
     @Test
     void nonPositiveValueGivesInvalidValuation() {
-        when(valuations.getValuation(PROPERTY)).thenReturn(valuation("supported", "0.00", List.of()));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenReturn(valuation("supported", "0.00", List.of()));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
 
@@ -170,7 +170,7 @@ class LenderCollateralAnalysisServiceImplTest {
 
     @Test
     void deletedPropertyIsUnavailableInsteadOf404() {
-        when(valuations.getValuation(PROPERTY)).thenThrow(new PropertyNotFoundException("Property not found: 100"));
+        when(valuations.getValuationWithoutComparables(PROPERTY)).thenThrow(new PropertyNotFoundException("Property not found: 100"));
 
         LenderCollateralAnalysisDTO result = service.analyze(ACTOR, ORG, APP);
 

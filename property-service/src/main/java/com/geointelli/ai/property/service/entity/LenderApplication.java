@@ -29,6 +29,8 @@ public class LenderApplication extends AuditableEntity {
     @Column(nullable = false, length = 3) private String currency = "USD";
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30) private LenderApplicationStage stage = LenderApplicationStage.DRAFT;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20) private LenderLoanType loanType = LenderLoanType.UNKNOWN;
     @Column(precision = 18, scale = 2) private BigDecimal approvedAmount;
     @Column(precision = 18, scale = 2) private BigDecimal fundedAmount;
     private Instant approvedAt;

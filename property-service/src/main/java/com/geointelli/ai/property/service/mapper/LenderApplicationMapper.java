@@ -10,7 +10,7 @@ public class LenderApplicationMapper {
     public LenderApplicationDTO toDTO(LenderApplication value) {
         return new LenderApplicationDTO(value.getId(), value.getOrganizationId(), value.getCreatedByUserId(),
             value.getApplicantName(), value.getApplicantEmail(), value.getPropertyId(), value.getRequestedAmount(),
-            value.getCurrency(), value.getStage(), value.getApprovedAmount(), value.getFundedAmount(),
+            value.getCurrency(), value.getStage(),value.getLoanType(), value.getApprovedAmount(), value.getFundedAmount(),
             value.getApprovedAt(), value.getFundedAt(), value.getNotes(), value.getSource(), value.getExternalId(),
             value.getCreatedAt(), value.getUpdatedAt());
     }

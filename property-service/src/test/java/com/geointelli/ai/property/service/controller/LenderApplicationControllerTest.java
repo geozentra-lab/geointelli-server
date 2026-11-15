@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.geointelli.ai.property.service.entity.LenderLoanType;
+
 import com.geointelli.ai.property.service.service.LenderCollateralAnalysisService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +58,7 @@ class LenderApplicationControllerTest {
 
     private LenderApplicationDTO application() {
         return new LenderApplicationDTO(5L, 1L, 7L, "Applicant", null, null, new BigDecimal("100000.00"),
-            "USD", LenderApplicationStage.DRAFT, null, null, null, null, null, null, null, null, null);
+                "USD", LenderApplicationStage.DRAFT, LenderLoanType.UNKNOWN, null, null, null, null, null, null, null, null, null);
     }
 
     @Test
@@ -136,11 +138,37 @@ class LenderApplicationControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"{", "{\"stage\":\"BOGUS\"}", "{\"organizationId\":2}",
-        "{\"approvedAt\":\"2020-01-01T00:00:00Z\"}", "{\"source\":\"OTHER\"}"})
+        "{\"approvedAt\":\"2020-01-01T00:00:00Z\"}", "{\"source\":\"OTHER\"}",
+        "{\"loanType\":\"JUMBO\"}", "{\"loanType\":\"fha\"}", "{\"loanType\":\"\"}", "{\"loanType\":0}",
+        "{\"loanType\":3}"})
     void unsupportedPatchFieldsAndInvalidJsonReturn400(String body) throws Exception {
         mvc.perform(patch("/api/lender/applications/5?organizationId=1").contentType(MediaType.APPLICATION_JSON)
                 .content(body)).andExpect(status().isBadRequest());
         verifyNoInteractions(applications);
+    }
+
+    @Test
+    void loanTypeIsReadByNameOnly() throws Exception {
+        // A number would otherwise be read as a position in the enum (3 = USDA)
+        mvc.perform(post("/api/lender/applications?organizationId=1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"applicantName\":\"Applicant\",\"requestedAmount\":100000,\"loanType\":3}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/lender/applications/import?organizationId=1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"source\":\"PARTNER\",\"rows\":[{\"externalId\":\"A\",\"applicantName\":\"Applicant\","
+                    + "\"requestedAmount\":100000,\"currency\":\"USD\",\"stage\":\"DRAFT\",\"loanType\":1}]}"))
+            .andExpect(status().isBadRequest());
+        verifyNoInteractions(applications, imports);
+
+        // Names still bind, with surrounding spaces ignored as before, and null stays an explicit null
+        when(applications.update(eq(7L), eq(1L), eq(5L), any())).thenReturn(application());
+        mvc.perform(patch("/api/lender/applications/5?organizationId=1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanType\":\" FHA \"}")).andExpect(status().isOk());
+        mvc.perform(patch("/api/lender/applications/5?organizationId=1").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"loanType\":null}")).andExpect(status().isOk());
+        verify(applications).update(eq(7L), eq(1L), eq(5L), argThat(request ->
+            request.isLoanTypeProvided() && request.getLoanType() == LenderLoanType.FHA));
+        verify(applications).update(eq(7L), eq(1L), eq(5L), argThat(request ->
+            request.isLoanTypeProvided() && request.getLoanType() == null));
     }
 
     @Test
