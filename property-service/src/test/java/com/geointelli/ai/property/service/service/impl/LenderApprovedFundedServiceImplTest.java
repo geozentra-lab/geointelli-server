@@ -36,7 +36,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Runs the real aggregation queries on V24 + V34 in a disposable H2 database. */
+/** Runs the real aggregation queries on V24 + V36 in a disposable H2 database. */
 @DataJpaTest(showSql = false, properties = {
         "spring.datasource.url=jdbc:h2:mem:lender-dashboard-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
@@ -237,6 +237,28 @@ class LenderApprovedFundedServiceImplTest {
         IllegalArgumentException reversed = assertThrows(IllegalArgumentException.class,
                 () -> approvedFunded.getCard(7L, atlas, OCT_31, OCT_1));
         assertEquals("fromDate must not be after toDate", reversed.getMessage());
+    }
+
+    @Test
+    @DisplayName("When a date is outside 1900-01-01 to 9999-12-31, then throw IllegalArgumentException, not a 500")
+    void whenDateOutOfRange_thenThrow() {
+        // Arrange
+        givenAtlasApplications();
+        String message = "fromDate and toDate must be between 1900-01-01 and 9999-12-31";
+
+        // Act & Assert: LocalDate.MAX used to overflow when the end of the period was computed
+        assertEquals(message, assertThrows(IllegalArgumentException.class,
+                () -> approvedFunded.getCard(7L, atlas, OCT_1, LocalDate.MAX)).getMessage());
+        assertEquals(message, assertThrows(IllegalArgumentException.class,
+                () -> approvedFunded.getCard(7L, atlas, OCT_1, LocalDate.of(10000, 1, 1))).getMessage());
+        assertEquals(message, assertThrows(IllegalArgumentException.class,
+                () -> approvedFunded.getCard(7L, atlas, LocalDate.of(1899, 12, 31), OCT_31)).getMessage());
+
+        // The bounds themselves are accepted and include everything recorded
+        LenderApprovedFundedCardDTO card = approvedFunded.getCard(7L, atlas, LocalDate.of(1900, 1, 1),
+                LocalDate.of(9999, 12, 31));
+        assertEquals(5, card.approved().count());
+        assertEquals(4, card.funded().count());
     }
 
     @Test

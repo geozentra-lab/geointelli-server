@@ -20,8 +20,8 @@ public interface LenderApprovedFundedService {
      * @param fromDate       first day of the period (UTC, included); with toDate, or both null for the current month
      * @param toDate         last day of the period (UTC, included); with fromDate, or both null for the current month
      * @return the card, with status OK or EMPTY
-     * @throws IllegalArgumentException if organizationId is not positive, only one date is given, or fromDate is
-     *         after toDate
+     * @throws IllegalArgumentException if organizationId is not positive, only one date is given, fromDate is
+     *         after toDate, or a date is outside 1900-01-01 to 9999-12-31
      * @throws org.springframework.web.server.ResponseStatusException 404 if the organization is missing or the user
      *         is not a member
      */

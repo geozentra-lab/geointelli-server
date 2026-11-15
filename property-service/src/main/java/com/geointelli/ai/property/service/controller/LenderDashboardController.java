@@ -58,7 +58,8 @@ public class LenderDashboardController {
      * @param fromDate       first day (UTC, included); give both dates or none for the current month
      * @param toDate         last day (UTC, included)
      * @return 200 with the card (EMPTY without approved or funded applications); 400 if organizationId is missing
-     *         or not positive, a date is not yyyy-MM-dd, only one date is given or fromDate is after toDate; 401
+     *         or not positive, a date is not yyyy-MM-dd or outside 1900-01-01 to 9999-12-31, only one date is given
+     *         or fromDate is after toDate; 401
      *         without a bearer token; 404 if the organization is missing or the user is not a member
      */
     @GetMapping("/approved-funded")
@@ -67,8 +68,8 @@ public class LenderDashboardController {
             + "applications of organizationId (membership required). approved = approvedAmount of applications approved "
             + "in the period (approvedAt) and still APPROVED or FUNDED; funded = fundedAmount of FUNDED applications "
             + "funded in the period (fundedAt). fundedLoanMix splits the funded applications by loan type, every type "
-            + "listed and UNKNOWN when none was recorded. Dates are UTC days, both included; without dates the current "
-            + "month is used.")
+            + "listed and UNKNOWN when none was recorded. Dates are UTC days from 1900-01-01 to 9999-12-31, both "
+            + "included; without dates the current month is used.")
     public ResponseEntity<LenderApprovedFundedCardDTO> approvedFunded(
             @RequestParam Long organizationId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,

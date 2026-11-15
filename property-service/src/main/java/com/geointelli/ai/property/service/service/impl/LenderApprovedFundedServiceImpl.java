@@ -32,6 +32,12 @@ public class LenderApprovedFundedServiceImpl implements LenderApprovedFundedServ
             + "excluded. funded = fundedAmount of FUNDED applications funded in the period (fundedAt); funded "
             + "applications are also counted in approved when approved in the same period, so do not add the two. "
             + "fundedLoanMix splits exactly the funded applications by loan type; UNKNOWN means no type was recorded.";
+    /**
+     * Accepted period: applications are only dated from 1900, and a four-digit year keeps the end of the period
+     * within what Java and PostgreSQL can represent (an ISO date such as +999999999-12-31 otherwise failed with 500).
+     */
+    static final LocalDate MIN_DATE = LocalDate.of(1900, 1, 1);
+    static final LocalDate MAX_DATE = LocalDate.of(9999, 12, 31);
 
     private final LenderOrganizationService organizations;
     private final LenderApplicationRepository applications;
@@ -63,6 +69,9 @@ public class LenderApprovedFundedServiceImpl implements LenderApprovedFundedServ
         }
         if (fromDate.isAfter(toDate)) {
             throw new IllegalArgumentException("fromDate must not be after toDate");
+        }
+        if (fromDate.isBefore(MIN_DATE) || toDate.isAfter(MAX_DATE)) {
+            throw new IllegalArgumentException("fromDate and toDate must be between " + MIN_DATE + " and " + MAX_DATE);
         }
         Instant from = fromDate.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant to = toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();

@@ -43,7 +43,8 @@ public class LenderApplicationController {
     @PostMapping("/applications")
     @Operation(summary = "Create a DRAFT application", description = "Requires applicantName (1-160) and requestedAmount "
         + "(up to 9999999999999999.99). Currency defaults to USD. Optional applicantEmail max 254, existing propertyId, "
-        + "notes max 2000. Every manual POST creates a separate record. Actor and organization are not taken from the body.")
+        + "notes max 2000, loanType CONVENTIONAL, FHA, VA, USDA or UNKNOWN (missing or null is stored as UNKNOWN). "
+        + "Every manual POST creates a separate record. Actor and organization are not taken from the body.")
     public ResponseEntity<LenderApplicationDTO> create(@RequestParam Long organizationId,
             @RequestBody LenderApplicationCreateRequest request) {
         var result = applications.create(actor(), organizationId, request);
@@ -68,7 +69,8 @@ public class LenderApplicationController {
 
     @PatchMapping("/applications/{id}")
     @Operation(summary = "Update application fields or stage", description = "Omitted fields stay unchanged; "
-        + "applicantEmail, propertyId and notes may be null. Transitions: DRAFT -> SUBMITTED -> UNDER_REVIEW -> "
+        + "applicantEmail, propertyId and notes may be null; a null loanType is stored as UNKNOWN. "
+        + "Transitions: DRAFT -> SUBMITTED -> UNDER_REVIEW -> "
         + "APPROVED -> FUNDED; UNDER_REVIEW -> REJECTED; any nonterminal stage -> WITHDRAWN. "
         + "FUNDED, REJECTED and WITHDRAWN cannot change stage. Same-stage corrections are allowed. "
         + "APPROVED requires approvedAmount <= requestedAmount; entering APPROVED records approvedAt in UTC. "
@@ -93,7 +95,8 @@ public class LenderApplicationController {
     @Operation(summary = "Import 1-100 complete partner snapshots", description = "JSON body: source (1-80) and rows. "
         + "Each row requires externalId (1-160, case-sensitive), applicantName, requestedAmount, currency USD and stage. "
         + "Source is trimmed and uppercased. Identity is organization + source + externalId. Optional fields are replaced "
-        + "by the snapshot, including nulls. New snapshots may start at any consistent recorded stage; APPROVED/FUNDED "
+        + "by the snapshot, including nulls; a missing or null loanType is stored as UNKNOWN. New snapshots may start at "
+        + "any consistent recorded stage; APPROVED/FUNDED "
         + "require approvedAmount/approvedAt and FUNDED also requires fundedAmount/fundedAt. Dates must be UTC instants "
         + "between 1900 and now, approvedAt <= fundedAt. Times normalize to PostgreSQL microseconds. Existing snapshots "
         + "must follow the same transitions as PATCH and cannot change recorded milestone dates. "
