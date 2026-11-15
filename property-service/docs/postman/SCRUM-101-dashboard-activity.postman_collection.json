@@ -1,0 +1,1213 @@
+{
+  "info": {
+    "name": "SCRUM-101 Dashboard recent-activity card",
+    "description": "Manual checks for GET /api/dashboards/user/activity. Variables: baseUrl (app), keycloakUrl (realm geozentra), clientId, userA/passwordA and userB/passwordB (two distinct users), favPropertyId (an existing property, default 4). Requests 01 and 02 fetch tokens into tokenA/tokenB. Run 03-04 on a user without records, then 05-09 create one record of each kind for user A through the existing endpoints (ids stored in ssId, ruleId, portfolioId, holdingId). 10 checks the five created items, 11-12 rename the search and check the updated item, 13-15 check the bound, 16-17 ownership, 18-22 clean up and confirm the card is empty again. 23-27 are the error cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for user A (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{userA}}"
+            },
+            {
+              "key": "password",
+              "value": "{{passwordA}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for user B (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{userB}}"
+            },
+            {
+              "key": "password",
+              "value": "{{passwordB}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 User A without records (200, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 User A without records, limit=1 (200, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 1', () => pm.expect(b.limit).to.eql(1));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Setup: user A favorites property {{favPropertyId}} (existing endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/{{favPropertyId}}/favorite",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "{{favPropertyId}}",
+            "favorite"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('favorite true', () => pm.expect(pm.response.json().favorite).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Setup: user A saves a search",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Miami homes\",\n  \"filters\": {\n    \"city\": \"Miami\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('ssId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Setup: user A creates an alert on that search",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/alerts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "alerts"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"New Miami matches\",\n  \"eventType\": \"NEW_MATCH\",\n  \"savedSearchId\": \"{{ssId}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('ruleId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Setup: user A creates a portfolio",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/portfolios",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "portfolios"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Activity card test\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('portfolioId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Setup: user A adds property {{favPropertyId}} to the portfolio",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "portfolios",
+            "{{portfolioId}}",
+            "holdings"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"propertyId\": \"{{favPropertyId}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('holdingId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 User A with 5 records (200: 5 created items, one per record, newest first)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const v = k => Number(pm.collectionVariables.get(k)); const ssId = v('ssId'), ruleId = v('ruleId'), portfolioId = v('portfolioId'), holdingId = v('holdingId'), propId = v('favPropertyId');",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 5, 5 items', () => { pm.expect(b.limit).to.eql(5); pm.expect(b.recent.length).to.eql(5); });",
+              "pm.test('order: holding, portfolio, alert, search, favorite', () => pm.expect(b.recent.map(r => r.type)).to.eql(['HOLDING_ADDED', 'PORTFOLIO_CREATED', 'ALERT_RULE_CREATED', 'SAVED_SEARCH_CREATED', 'FAVORITE_ADDED']));",
+              "pm.test('favorite item: property id as label, no portfolio', () => { const r = b.recent.find(x => x.type === 'FAVORITE_ADDED'); pm.expect(r.propertyId).to.eql(propId); pm.expect(r.label).to.eql('property ' + propId); pm.expect(r.portfolioId).to.be.null; });",
+              "pm.test('search item: SAVED_SEARCH_CREATED with its name', () => { const r = b.recent.find(x => x.type === 'SAVED_SEARCH_CREATED'); pm.expect(r.entityId).to.eql(ssId); pm.expect(r.label).to.eql('Miami homes'); pm.expect(r.propertyId).to.be.null; });",
+              "pm.test('holding item: HOLDING_ADDED, property and portfolio filled, label names both', () => { const r = b.recent.find(x => x.type === 'HOLDING_ADDED'); pm.expect(r.entityId).to.eql(holdingId); pm.expect(r.propertyId).to.eql(propId); pm.expect(r.portfolioId).to.eql(portfolioId); pm.expect(r.label).to.eql('property ' + propId + ' in Activity card test'); });",
+              "pm.test('portfolio item: PORTFOLIO_CREATED, name as label, no property', () => { const r = b.recent.find(x => x.type === 'PORTFOLIO_CREATED'); pm.expect(r.entityId).to.eql(portfolioId); pm.expect(r.label).to.eql('Activity card test'); pm.expect(r.propertyId).to.be.null; pm.expect(r.portfolioId).to.be.null; });",
+              "pm.test('alert item: ALERT_RULE_CREATED on a saved search, no property', () => { const r = b.recent.find(x => x.type === 'ALERT_RULE_CREATED'); pm.expect(r.entityId).to.eql(ruleId); pm.expect(r.label).to.eql('New Miami matches'); pm.expect(r.propertyId).to.be.null; });",
+              "pm.test('no updated items yet', () => pm.expect(b.recent.filter(r => r.type.endsWith('_UPDATED'))).to.be.empty);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Setup: user A renames the saved search (produces an updated item)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Miami homes (renamed)\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('renamed', () => pm.expect(pm.response.json().name).to.eql('Miami homes (renamed)'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 User A after the rename (200: SAVED_SEARCH_UPDATED first, created item kept with the new name)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const v = k => Number(pm.collectionVariables.get(k)); const ssId = v('ssId'), ruleId = v('ruleId'), portfolioId = v('portfolioId'), holdingId = v('holdingId'), propId = v('favPropertyId');",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('still 5 items (the favorite is pushed out)', () => pm.expect(b.recent.length).to.eql(5));",
+              "pm.test('newest item is the rename', () => { const r = b.recent[0]; pm.expect(r.type).to.eql('SAVED_SEARCH_UPDATED'); pm.expect(r.entityId).to.eql(ssId); pm.expect(r.label).to.eql('Miami homes (renamed)'); });",
+              "pm.test('order after the rename', () => pm.expect(b.recent.map(r => r.type)).to.eql(['SAVED_SEARCH_UPDATED', 'HOLDING_ADDED', 'PORTFOLIO_CREATED', 'ALERT_RULE_CREATED', 'SAVED_SEARCH_CREATED']));",
+              "pm.test('created item of the search still exists, same id, current name', () => { const r = b.recent.find(x => x.type === 'SAVED_SEARCH_CREATED'); pm.expect(r.entityId).to.eql(ssId); pm.expect(r.label).to.eql('Miami homes (renamed)'); });",
+              "pm.test('created item is older than the updated item', () => { const c = b.recent.find(x => x.type === 'SAVED_SEARCH_CREATED'), u = b.recent[0]; pm.expect(JSON.stringify(c.occurredAt)).to.not.eql(JSON.stringify(u.occurredAt)); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 User A, limit=6 (200: all 6 items, the favorite is the oldest)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=6",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "6"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "const v = k => Number(pm.collectionVariables.get(k)); const ssId = v('ssId'), ruleId = v('ruleId'), portfolioId = v('portfolioId'), holdingId = v('holdingId'), propId = v('favPropertyId');",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 6, 6 items', () => { pm.expect(b.limit).to.eql(6); pm.expect(b.recent.length).to.eql(6); });",
+              "pm.test('favorite is last', () => { const r = b.recent[5]; pm.expect(r.type).to.eql('FAVORITE_ADDED'); pm.expect(r.propertyId).to.eql(propId); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 User A, limit=2 (200: the 2 newest only)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=2",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "2"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('limit 2, two newest', () => { pm.expect(b.limit).to.eql(2); pm.expect(b.recent.map(r => r.type)).to.eql(['SAVED_SEARCH_UPDATED', 'HOLDING_ADDED']); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 User A, limit=20 (200: max bound accepted, still 6 items)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('limit 20, 6 items', () => { pm.expect(b.limit).to.eql(20); pm.expect(b.recent.length).to.eql(6); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Ownership: user B at the same time (200, empty list)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenB}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Ownership: user B cannot read user A's portfolio by id (404)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenB}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "portfolios",
+            "{{portfolioId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Cleanup: delete the portfolio (removes its holding)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "portfolios",
+            "{{portfolioId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Cleanup: delete the alert rule",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/alerts/{{ruleId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "alerts",
+            "{{ruleId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Cleanup: delete the saved search",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/saved-searches/{{ssId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "saved-searches",
+            "{{ssId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Cleanup: remove the favorite",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/{{favPropertyId}}/favorite",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "{{favPropertyId}}",
+            "favorite"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 After cleanup: user A back to an empty list (200; deletions leave no trace)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('envelope', () => { pm.expect(b.scope).to.eql('CURRENT_USER'); pm.expect(b.status).to.eql('OK'); pm.expect(b.error).to.be.null; pm.expect(b.generatedAt).to.exist; });",
+              "pm.test('dates are ISO text and newest first', () => { const t = b.recent.map(r => { pm.expect(r.occurredAt).to.be.a('string'); return r.occurredAt; }); for (let i = 1; i < t.length; i++) pm.expect(t[i - 1] >= t[i], t[i - 1] + ' >= ' + t[i]).to.be.true; });",
+              "pm.test('each item has the item fields', () => b.recent.forEach(r => ['type', 'occurredAt', 'entityId', 'label', 'propertyId', 'portfolioId'].forEach(k => pm.expect(r).to.have.property(k))));",
+              "pm.test('limit 5', () => pm.expect(b.limit).to.eql(5));",
+              "pm.test('recent is an empty list', () => pm.expect(b.recent).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 No token (401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"bearer token\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Invalid token (401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer not-a-real-token"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 limit=0 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit must be between 1 and 20, got 0\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 limit=21 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=21",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "21"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit must be between 1 and 20, got 21\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 limit=abc (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tokenA}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/user/activity?limit=abc",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "user",
+            "activity"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "abc"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(pm.response.json().message).to.include(\"limit\"));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "userA",
+      "value": "dash_user_a"
+    },
+    {
+      "key": "passwordA",
+      "value": "Test1234!"
+    },
+    {
+      "key": "userB",
+      "value": "dash_user_b"
+    },
+    {
+      "key": "passwordB",
+      "value": "Test1234!"
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "favPropertyId",
+      "value": "4"
+    },
+    {
+      "key": "ssId",
+      "value": ""
+    },
+    {
+      "key": "ruleId",
+      "value": ""
+    },
+    {
+      "key": "portfolioId",
+      "value": ""
+    },
+    {
+      "key": "holdingId",
+      "value": ""
+    }
+  ]
+}
