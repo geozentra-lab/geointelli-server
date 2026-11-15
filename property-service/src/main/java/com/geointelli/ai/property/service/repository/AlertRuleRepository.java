@@ -32,6 +32,9 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
     @EntityGraph(attributePaths = "savedSearch")
     List<AlertRule> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
+    /** The most recently created or modified rules of the user, bounded by the page size (dashboard activity card). */
+    List<AlertRule> findByUser_IdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+
     /** Locks only the rule; avoids locking the nullable side of a saved-search outer join. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM AlertRule r WHERE r.id = :id AND r.user.id = :userId")
