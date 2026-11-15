@@ -1,5 +1,11 @@
 package com.geointelli.ai.property.service.dto;
 
+import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.Digits;
+import com.geointelli.ai.property.service.entity.ValuationChangeDirection;
+
 import java.util.HashSet;
 import java.util.Set;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -14,11 +20,15 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 
-/** Creates a stable target/event identity; PATCH edits name, cadence and paused state only. */
+/**
+ * Creates a stable target/event identity; PATCH also accepts valuation
+ * direction/threshold criteria.
+ */
 @Getter
 @Schema(description = "POST requires name, eventType and exactly one of propertyId or savedSearchId. "
-    + "NEW_MATCH requires savedSearchId. One event per rule. PATCH changes supplied name/cadence/paused fields; "
-    + "target and eventType are immutable. Recreate the rule to change its target or trigger.")
+        + "NEW_MATCH requires savedSearchId. One event per rule. PATCH changes supplied name/cadence/paused fields; "
+        + "Valuation rules also accept minimumChangePercent and changeDirection. Target and eventType are immutable. "
+        + "Recreate the rule to change its target or event type.")
 public class AlertRuleRequest {
     @NotBlank(groups = AlertRuleCreate.class)
     @Size(max = 120)
@@ -38,30 +48,82 @@ public class AlertRuleRequest {
     private AlertCadence cadence;
     private Boolean paused;
 
+    @DecimalMin("0")
+    @DecimalMax("100000")
+    @Digits(integer = 6, fraction = 4)
+    @Schema(description = "VALUATION_CHANGED only: minimum absolute percentage change, inclusive. Defaults to 0 (any nonzero change).")
+    private BigDecimal minimumChangePercent;
+    @Schema(description = "VALUATION_CHANGED only: ANY, INCREASE or DECREASE. Defaults to ANY.")
+    private ValuationChangeDirection changeDirection;
+
     @JsonIgnore
     private final Set<String> providedFields = new HashSet<>();
 
-    public boolean hasField(String field) { return providedFields.contains(field); }
+    public boolean hasField(String field) {
+        return providedFields.contains(field);
+    }
 
     @JsonSetter
-    public void setName(String value) { name = value; providedFields.add("name"); }
-    @JsonSetter
-    public void setEventType(AlertEventType value) { eventType = value; providedFields.add("eventType"); }
-    @JsonSetter
-    public void setPropertyId(Long value) { propertyId = value; providedFields.add("propertyId"); }
-    @JsonSetter
-    public void setSavedSearchId(Long value) { savedSearchId = value; providedFields.add("savedSearchId"); }
-    @JsonSetter
-    public void setCadence(AlertCadence value) { cadence = value; providedFields.add("cadence"); }
-    @JsonSetter
-    public void setPaused(Boolean value) { paused = value; providedFields.add("paused"); }
+    public void setName(String value) {
+        name = value;
+        providedFields.add("name");
+    }
 
-    @AssertTrue(message = "Supplied name must not be blank; eventType, cadence and paused must not be null when supplied")
+    @JsonSetter
+    public void setEventType(AlertEventType value) {
+        eventType = value;
+        providedFields.add("eventType");
+    }
+
+    @JsonSetter
+    public void setPropertyId(Long value) {
+        propertyId = value;
+        providedFields.add("propertyId");
+    }
+
+    @JsonSetter
+    public void setSavedSearchId(Long value) {
+        savedSearchId = value;
+        providedFields.add("savedSearchId");
+    }
+
+    @JsonSetter
+    public void setCadence(AlertCadence value) {
+        cadence = value;
+        providedFields.add("cadence");
+    }
+
+    @JsonSetter
+    public void setPaused(Boolean value) {
+        paused = value;
+        providedFields.add("paused");
+    }
+
+    /**
+     * Records an explicitly supplied valuation threshold, including invalid
+     * explicit null.
+     */
+    @JsonSetter
+    public void setMinimumChangePercent(BigDecimal value) {
+        minimumChangePercent = value;
+        providedFields.add("minimumChangePercent");
+    }
+
+    /** Records an explicitly supplied valuation direction. */
+    @JsonSetter
+    public void setChangeDirection(ValuationChangeDirection value) {
+        changeDirection = value;
+        providedFields.add("changeDirection");
+    }
+
+    @AssertTrue(message = "Supplied name must not be blank; eventType, cadence, paused and valuation criteria must not be null when supplied")
     @JsonIgnore
     public boolean isSuppliedFieldsValid() {
         return (!hasField("name") || (name != null && !name.isBlank()))
-            && (!hasField("eventType") || eventType != null)
-            && (!hasField("cadence") || cadence != null)
-            && (!hasField("paused") || paused != null);
+                && (!hasField("eventType") || eventType != null)
+                && (!hasField("cadence") || cadence != null)
+                && (!hasField("paused") || paused != null)
+                && (!hasField("minimumChangePercent") || minimumChangePercent != null)
+                && (!hasField("changeDirection") || changeDirection != null);
     }
 }
