@@ -60,7 +60,8 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
         String recipient = user.getSubject();
         if (request == null || request.inAppEnabled() == null || request.emailEnabled() == null
                 || request.enabledEventTypes() == null || request.emailCadence() == null
-                || request.enabledEventTypes().stream().anyMatch(type -> !("NEW_MATCH".equals(type) || "CONTACT_REQUEST".equals(type))))
+                || request.enabledEventTypes().stream().anyMatch(type -> !("NEW_MATCH".equals(type)
+                        || "CONTACT_REQUEST".equals(type) || "VALUATION_CHANGED".equals(type))))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Provide valid channels, event types and email cadence");
         String address = request.emailEnabled() ? user.getVerifiedEmail() : null;
@@ -69,12 +70,14 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
         boolean routingChanged = preference.isEmailEnabled() != request.emailEnabled()
                 || preference.isNewMatchEnabled() != request.enabledEventTypes().contains("NEW_MATCH")
                 || preference.isContactRequestEnabled() != request.enabledEventTypes().contains("CONTACT_REQUEST")
+                || preference.isValuationChangedEnabled() != request.enabledEventTypes().contains("VALUATION_CHANGED")
                 || preference.getEmailCadence() != request.emailCadence()
                 || !Objects.equals(address, preference.getEmailAddress());
         preference.setInAppEnabled(request.inAppEnabled());
         preference.setEmailEnabled(request.emailEnabled());
         preference.setNewMatchEnabled(request.enabledEventTypes().contains("NEW_MATCH"));
         preference.setContactRequestEnabled(request.enabledEventTypes().contains("CONTACT_REQUEST"));
+        preference.setValuationChangedEnabled(request.enabledEventTypes().contains("VALUATION_CHANGED"));
         preference.setEmailAddress(address);
         preference.setEmailCadence(request.emailCadence());
         preference.setUpdatedAt(now);
@@ -85,8 +88,12 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
         if (!preference.isEmailEnabled()) {
             queue.suppressPending(recipient);
         } else {
-            if (!preference.isNewMatchEnabled()) queue.suppressPendingType(recipient, "NEW_MATCH");
-            if (!preference.isContactRequestEnabled()) queue.suppressPendingType(recipient, "CONTACT_REQUEST");
+            if (!preference.isNewMatchEnabled())
+                queue.suppressPendingType(recipient, "NEW_MATCH");
+            if (!preference.isContactRequestEnabled())
+                queue.suppressPendingType(recipient, "CONTACT_REQUEST");
+            if (!preference.isValuationChangedEnabled())
+                queue.suppressPendingType(recipient, "VALUATION_CHANGED");
         }
         return toDTO(preference);
     }
@@ -100,8 +107,12 @@ public class NotificationPreferenceServiceImpl implements NotificationPreference
 
     private NotificationPreferencesDTO toDTO(NotificationPreference preference) {
         Set<String> types = new HashSet<>();
-        if (preference.isNewMatchEnabled()) types.add("NEW_MATCH");
-        if (preference.isContactRequestEnabled()) types.add("CONTACT_REQUEST");
+        if (preference.isNewMatchEnabled())
+            types.add("NEW_MATCH");
+        if (preference.isContactRequestEnabled())
+            types.add("CONTACT_REQUEST");
+        if (preference.isValuationChangedEnabled())
+            types.add("VALUATION_CHANGED");
         return new NotificationPreferencesDTO(preference.isInAppEnabled(), preference.isEmailEnabled(),
                 Set.copyOf(types), preference.getEmailCadence(),
                 preference.getEmailAddress(), preference.getNextEmailAt(), preference.getUpdatedAt(),
