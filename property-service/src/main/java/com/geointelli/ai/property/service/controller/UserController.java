@@ -11,6 +11,7 @@ import com.geointelli.ai.property.service.dto.UserDTO;
 import com.geointelli.ai.property.service.dto.UserPreferencesDTO;
 import com.geointelli.ai.property.service.dto.UserProfileUpdateRequest;
 import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.RealtorLicenseVerificationService;
 import com.geointelli.ai.property.service.service.UserProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,15 +23,22 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
     private final CurrentUserService currentUserService;
     private final UserProfileService userProfileService;
+    private final RealtorLicenseVerificationService realtorLicenseVerificationService;
 
     @GetMapping("/me")
     public ResponseEntity<UserDTO> getCurrentUser() {
-        return ResponseEntity.ok(currentUserService.getCurrentUser());
+        return ResponseEntity.ok(withLicenseStatus(currentUserService.getCurrentUser()));
     }
 
     @PatchMapping("/me")
     public ResponseEntity<UserDTO> updateProfile(@Valid @RequestBody UserProfileUpdateRequest request) {
-        return ResponseEntity.ok(userProfileService.updateProfile(request));
+        return ResponseEntity.ok(withLicenseStatus(userProfileService.updateProfile(request)));
+    }
+
+    /** Adds the latest realtor license status (SCRUM-200); persona and verification stay separate fields. */
+    private UserDTO withLicenseStatus(UserDTO user) {
+        user.setRealtorLicenseStatus(realtorLicenseVerificationService.latestStatusOf(user.getId()).orElse(null));
+        return user;
     }
 
     @GetMapping("/me/preferences")
