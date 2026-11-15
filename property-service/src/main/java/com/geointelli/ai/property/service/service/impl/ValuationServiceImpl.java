@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.dto.ComparableCandidateRequest;
+import com.geointelli.ai.property.service.dto.ComparableResponse;
 import com.geointelli.ai.property.service.dto.ValuationResponse;
 import com.geointelli.ai.property.service.dto.ValuationResponse.Evidence;
 import com.geointelli.ai.property.service.dto.ValuationResponse.Estimate;
@@ -60,6 +61,19 @@ public class ValuationServiceImpl implements ValuationService {
         PropertyValuePrediction prediction = predictions.findByPropertyId(propertyId).orElse(null);
         if (prediction == null) return unsupported(List.of(reason("not_modelled")), null);
 
+        return display(prediction, false, null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ValuationResponse explainSnapshot(PropertyValuePrediction snapshot, ComparableResponse supportingComparables) {
+        if (snapshot == null || snapshot.getPropertyId() == null || snapshot.getPropertyId() <= 0)
+            throw new IllegalArgumentException("A snapshot with a positive propertyId is required");
+        return display(snapshot, true, supportingComparables);
+    }
+
+    private ValuationResponse display(PropertyValuePrediction prediction, boolean historical, ComparableResponse archivedComparables) {
+        Long propertyId = prediction.getPropertyId();
         Method method = new Method(prediction.getValuationMethod(), prediction.getModelVersion(),
             prediction.getPredictionDate(), prediction.getDataThrough(), prediction.getCreatedAt());
         List<Reason> reasons = new ArrayList<>();
@@ -82,9 +96,12 @@ public class ValuationServiceImpl implements ValuationService {
             new Range(prediction.getPredictedPriceLow90(), prediction.getPredictedPriceHigh90()), prediction.getConfidence());
         Forecasts forecasts = forecasts(prediction);
         if (forecasts != null) notes.add("Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.");
-        Explanation explanation = explanation(prediction, notes);
+        Explanation explanation = explanation(prediction, notes, historical);
+        SupportingComparables comparables = historical ? archivedComparables(archivedComparables) : supportingComparables(propertyId);
+        if (historical && archivedComparables == null)
+            notes.add("Supporting comparables were not retained for this valuation; current sales are not substituted.");
         Evidence evidence = new Evidence(new LastSale(prediction.getHasSaleHistory(), prediction.getLastSalePrice(),
-            prediction.getLastSaleDate()), supportingComparables(propertyId));
+            prediction.getLastSaleDate()), comparables);
         return new ValuationResponse(status, List.copyOf(reasons), estimate, forecasts, explanation, evidence, method,
             new Reproducibility(prediction.getRunId(), prediction.getInputHash()), List.copyOf(notes));
     }
@@ -104,7 +121,7 @@ public class ValuationServiceImpl implements ValuationService {
             new Projection(p.getForecast7y(), p.getForecast7yLow(), p.getForecast7yHigh()));
     }
 
-    private Explanation explanation(PropertyValuePrediction p, List<String> notes) {
+    private Explanation explanation(PropertyValuePrediction p, List<String> notes, boolean historical) {
         JsonNode value = parse(p.getValuationFactors(), "valuation_factors", p.getPropertyId());
         BigDecimal baseline = value == null ? null : number(value.get("baseline"));
         List<Factor> factors = new ArrayList<>();
@@ -125,10 +142,17 @@ public class ValuationServiceImpl implements ValuationService {
         } else {
             notes.add("Model explanation factors are unavailable.");
         }
+        String timing = historical ? p.getPredictionDate() == null ? " at the recorded valuation time"
+            : " as of " + p.getPredictionDate() : " today";
         String summary = baseline == null ? "This property is estimated at " + money(p.getPredictedPrice()) + "."
             : "A typical Miami-Dade home is valued at about " + money(baseline)
-                + " today. This property is estimated at " + money(p.getPredictedPrice()) + ".";
+                + timing + ". This property is estimated at " + money(p.getPredictedPrice()) + ".";
         return new Explanation(baseline, summary, List.copyOf(factors), EXPLANATION_NOTE);
+    }
+
+    private SupportingComparables archivedComparables(ComparableResponse archived) {
+        return new SupportingComparables("Supporting comparables archived with this version, not the model's calculation.",
+            archived == null ? "NOT_RECORDED" : archived.getStatus(), archived);
     }
 
     private SupportingComparables supportingComparables(Long propertyId) {

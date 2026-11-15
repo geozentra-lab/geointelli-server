@@ -1,9 +1,12 @@
 package com.geointelli.ai.property.service.repository;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.util.List;
+import org.hibernate.Session;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,10 +21,19 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.ActiveProfiles;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geointelli.ai.property.service.dto.SavedSearchFilters;
+import com.geointelli.ai.property.service.dto.SavedSearchRequest;
 import com.geointelli.ai.property.service.entity.SavedSearch;
 import com.geointelli.ai.property.service.entity.SavedSearchCadence;
 import com.geointelli.ai.property.service.entity.User;
+import com.geointelli.ai.property.service.service.AlertEvaluationScheduleService;
+import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.PropertySearchService;
+import com.geointelli.ai.property.service.service.impl.PropertySearchValidationServiceImpl;
+import com.geointelli.ai.property.service.service.impl.SavedSearchServiceImpl;
 import jakarta.persistence.EntityManager;
+import jakarta.validation.Validation;
+import jakarta.validation.ValidatorFactory;
 
 /** Executes owner-scoped queries and JSON persistence against an explicitly isolated H2 database. */
 @DataJpaTest(showSql = false, properties = {
@@ -92,6 +104,50 @@ class SavedSearchRepositoryTest {
         var page = searches.findByUser_Id(7L, PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "id")));
         assertEquals(2, page.getTotalElements());
         assertEquals(List.of(newest), page.getContent().stream().map(SavedSearch::getId).toList());
+    }
+
+    /**
+     * Hibernate compares the filters with the JSON it read back; any difference is written a second time at
+     * commit, which moves {@code updated_at} past {@code created_at} and shows a false "updated" activity item.
+     */
+    @Test
+    void searchCreatedThroughTheServiceHasNothingLeftToWrite() {
+        CurrentUserService currentUser = mock(CurrentUserService.class);
+        when(currentUser.getCurrentUserEntity()).thenReturn(entityManager.getReference(User.class, 7L));
+        SavedSearchFilters filters = new SavedSearchFilters();
+        filters.setCountyId(31L);
+        filters.setMinBedrooms(new BigDecimal("3"));
+        filters.setMinBathrooms(new BigDecimal("1.5"));
+        filters.setCity("  MIAMI ");
+        SavedSearchRequest request = new SavedSearchRequest();
+        request.setName("Miami homes");
+        request.setFilters(filters);
+
+        try (ValidatorFactory validation = Validation.buildDefaultValidatorFactory()) {
+            new SavedSearchServiceImpl(searches, currentUser, mock(PropertySearchService.class),
+                new PropertySearchValidationServiceImpl(validation.getValidator()), new ObjectMapper(),
+                validation.getValidator(), mock(AlertEvaluationScheduleService.class)).create(request);
+        }
+
+        assertFalse(entityManager.unwrap(Session.class).isDirty(),
+            "the saved search would be updated again right after it was created");
+    }
+
+    @Test
+    void activityQueryOrdersByUpdateTimeThenNewestId() throws Exception {
+        Long first = save(7L, "Changed last").getId();
+        Long second = save(7L, "Tied older").getId();
+        Long third = save(7L, "Tied newer").getId();
+        jdbc.update("UPDATE saved_searches SET updated_at = TIMESTAMP '2026-11-02 10:00:00' WHERE id = ?", first);
+        jdbc.update("UPDATE saved_searches SET updated_at = TIMESTAMP '2026-11-01 10:00:00' WHERE id IN (?, ?)",
+            second, third);
+        entityManager.clear();
+
+        // The page's id sort comes after the ORDER BY of the method name; it only decides ties.
+        List<SavedSearch> newest = searches.findByUser_IdOrderByUpdatedAtDesc(7L,
+            PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "id")));
+
+        assertEquals(List.of(first, third), newest.stream().map(SavedSearch::getId).toList());
     }
 
     @Test
