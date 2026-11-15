@@ -1,0 +1,763 @@
+{
+  "info": {
+    "name": "SCRUM-200 Realtor license verification",
+    "description": "Manual checks for the applicant side of realtor license verification. Variables: baseUrl (app), access_token (bearer token of user A), access_token_b (bearer token of a second user, for ownership). Run in order: 01-02 before any submission, 03-05 success, 06-11 invalid input and duplicates, 12-13 ownership, then run the SQL in the description of 14 and continue with 14-16 (resubmission after rejection).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "access_token_b",
+      "value": ""
+    },
+    {
+      "key": "submissionId",
+      "value": ""
+    },
+    {
+      "key": "resubmissionId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Latest before any submission (404)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Run on a user A who never submitted. If A already has rows, delete them first: DELETE FROM realtor_license_verifications WHERE user_id = (SELECT id FROM users WHERE email = '<A>');"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 History before any submission (empty)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license/history",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license",
+            "history"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('empty array', () => pm.expect(pm.response.json()).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Submit valid license (201)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.eql('/api/users/me/realtor-license'));",
+              "const r = pm.response.json();",
+              "pm.test('pending, trimmed, upper-cased state', () => {",
+              "  pm.expect(r.status).to.eql('PENDING_REVIEW');",
+              "  pm.expect(r.licenseHolderName).to.eql('Jane Doe');",
+              "  pm.expect(r.licensingState).to.eql('FL');",
+              "  pm.expect(r.licenseNumber).to.eql('SL3456789');",
+              "  pm.expect(r.licenseExpirationDate).to.eql('2030-03-31');",
+              "  pm.expect(r.rejectionReason).to.eql(null);",
+              "  pm.expect(r.decidedAt).to.eql(null);",
+              "  pm.expect(r.submittedAt).to.be.a('string');",
+              "});",
+              "pm.test('no internal fields', () => { pm.expect(r).to.not.have.property('reviewedByUserId'); pm.expect(r).to.not.have.property('registrySource'); pm.expect(r).to.not.have.property('autoCheckResult'); });",
+              "pm.collectionVariables.set('submissionId', r.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Latest after submission",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('same submission', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('submissionId'))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Profile shows the status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const u = pm.response.json();",
+              "pm.test('realtorLicenseStatus pending', () => pm.expect(u.realtorLicenseStatus).to.eql('PENDING_REVIEW'));",
+              "pm.test('persona still present and separate', () => pm.expect(u).to.have.property('persona'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Submit again while pending (409)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Missing required fields (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licensingState\": \"FL\",\n  \"brokerageName\": \"x\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the fields', () => { const m = JSON.stringify(pm.response.json()); pm.expect(m).to.include('licenseHolderName'); pm.expect(m).to.include('licenseNumber'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Unsupported state NY (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"NY\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('mentions the state', () => pm.expect(JSON.stringify(pm.response.json())).to.include('NY'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Expiration date in the past (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2020-01-01\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('mentions the date', () => pm.expect(JSON.stringify(pm.response.json())).to.include('licenseExpirationDate'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Invalid work e-mail (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"not-an-email\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Submit without token (401)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"  Jane Doe  \",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Latest as user B (404, ownership)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token_b}}",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "User B never submitted; A's pending row must not be visible to B."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 History as user B (empty, ownership)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license/history",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license",
+            "history"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token_b}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('empty array', () => pm.expect(pm.response.json()).to.eql([]));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Latest after rejection (prepared by SQL)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "SCRUM-199 is not implemented yet, so reject A's pending row by hand first, exactly as the admin endpoint will:\n\nUPDATE realtor_license_verifications SET status = 'REJECTED', decision_method = 'MANUAL',\n  reviewed_by_user_id = (SELECT id FROM users WHERE email = '<admin email>'), decided_at = NOW(),\n  registry_source = 'Florida DBPR licensee search', rejection_reason = 'Name does not match the registry'\nWHERE id = <submissionId from 03>;"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('rejected with reason', () => { pm.expect(r.status).to.eql('REJECTED'); pm.expect(r.rejectionReason).to.eql('Name does not match the registry'); pm.expect(r.decidedAt).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Resubmit after rejection (201, new row)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"Jane A. Doe\",\n  \"licensingState\": \"fl\",\n  \"licenseNumber\": \" SL3456789 \",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "const r = pm.response.json();",
+              "pm.test('new pending row', () => { pm.expect(r.status).to.eql('PENDING_REVIEW'); pm.expect(r.id).to.not.eql(Number(pm.collectionVariables.get('submissionId'))); pm.expect(r.licenseHolderName).to.eql('Jane A. Doe'); });",
+              "pm.collectionVariables.set('resubmissionId', r.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 History keeps the rejected row",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license/history",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license",
+            "history"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const h = pm.response.json();",
+              "pm.test('two rows, newest first', () => { pm.expect(h.length).to.eql(2); pm.expect(h[0].id).to.eql(Number(pm.collectionVariables.get('resubmissionId'))); pm.expect(h[0].status).to.eql('PENDING_REVIEW'); pm.expect(h[1].id).to.eql(Number(pm.collectionVariables.get('submissionId'))); pm.expect(h[1].status).to.eql('REJECTED'); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
