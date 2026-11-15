@@ -29,7 +29,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Opt-in checks of the opportunity score SQL and the V38 table on a real PostgreSQL database. Runs in a schema of
+ * Opt-in checks of the opportunity score SQL and the V40 table on a real PostgreSQL database. Runs in a schema of
  * its own on a dedicated local test database only, and drops it afterwards; never the application's database.
  */
 @EnabledIfEnvironmentVariable(named = "OPPORTUNITY_TEST_DB_URL", matches = ".+")
@@ -66,7 +66,7 @@ class OpportunityScoreJdbcRepositoryDatabaseTest {
                     valuation_status varchar(12), predicted_price numeric(38,2), forecast_1y numeric(38,2),
                     forecast_3y numeric(38,2), market_outlook_1y_pct double precision, confidence varchar(10),
                     confidence_score integer, model_version varchar(32), data_through date, run_id varchar(32))""");
-        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V38__add_property_opportunity_scores.sql")));
+        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V40__add_property_opportunity_scores.sql")));
         repository = new OpportunityScoreJdbcRepository(new NamedParameterJdbcTemplate(dataSource),
                 JsonMapper.builder().addModule(new JavaTimeModule()).build());
         scoring = new OpportunityScoringServiceImpl(repository);

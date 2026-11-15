@@ -126,7 +126,7 @@ valuation:
     # It requires a Python worker started with --allow-full-market.
     scope: ${VALUATION_REFRESH_SCOPE:PROPERTY}
 
-# Stored opportunity scores (SCRUM-76), read by GET /api/opportunities. Needs the V38 table.
+# Stored opportunity scores (SCRUM-76), read by GET /api/opportunities. Needs the V40 table.
 opportunity-scores:
   refresh:
     # Periodic INCREMENTAL rescoring of missing or stale scores; POST /api/admin/opportunity-scores/refresh runs it on demand.

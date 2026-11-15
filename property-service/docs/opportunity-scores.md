@@ -185,7 +185,7 @@ the valuation was re-run after `scoredAt` and the refresh has not caught up yet.
 
 ## Stored scores and the refresh job
 
-Table `property_opportunity_scores` (migration **V38**, see the note below): one row per property with a stored
+Table `property_opportunity_scores` (migration **V40**, see the note below): one row per property with a stored
 valuation, with the score, status, coverage, factors and reasons (JSONB), the property's county and state, the
 estimate and one-year growth (for filtering and sorting), the valuation run, model version and data date, and
 `scored_at`. Rows are written only by the refresh job; the API reads them through a read-only entity.
@@ -221,9 +221,9 @@ Scheduled incremental refresh (off by default):
 | `opportunity-scores.refresh.poll-delay-millis` | `OPPORTUNITY_SCORES_REFRESH_DELAY_MILLIS` | 900000 (15 min) |
 | `opportunity-scores.refresh.batch-size` | `OPPORTUNITY_SCORES_BATCH_SIZE` | 1000 |
 
-**Migration number.** `master` ends at V35; V36 and V37 are claimed by open PRs (#164, #170), so this branch uses
-V38. Rename it to the next free number at merge time if needed. The app uses `ddl-auto: validate`, so the table must
-exist before the app starts.
+**Migration number.** V40: V35 to V37 and V39 were merged first (V39 by SCRUM-151), and Flyway refuses a migration
+numbered below one already applied, so this one must come after V39. V38 stays unused. The app uses
+`ddl-auto: validate`, so the table must exist before the app starts.
 
 ## Errors
 
@@ -252,7 +252,7 @@ Set `baseUrl`, a scored `propertyId`, a `propertyWithoutValuationId`, a `countyI
 `refreshToken` (the collection exchanges it for an access token; no secret is stored in the file). The defaults
 (95340, 21, county 1) are local Miami-Dade IDs.
 
-1. Apply V38 to the database, start the app, run the refresh (`FULL` once).
+1. Apply V40 to the database, start the app, run the refresh (`FULL` once).
 2. Live score: a scored property (factors, coverage, version, unavailable rent/financing/price), a property without
    valuation (`UNAVAILABLE`, `NO_VALUATION`), an unknown ID (404), invalid IDs (400).
 3. Browse: default page (score descending), filters and every sort, paging without overlap, `NO_MATCHES`
@@ -270,7 +270,7 @@ Ownership: none applies — scores are derived from public property data and con
 
 | File | Role |
 |---|---|
-| `db/migration/V38__add_property_opportunity_scores.sql` | stored scores; one index per order (score, growth, value) and per county/state filter, each ending in the full sort order where values tie |
+| `db/migration/V40__add_property_opportunity_scores.sql` | stored scores; one index per order (score, growth, value) and per county/state filter, each ending in the full sort order where values tie |
 | `service/OpportunityScoringService.java`, `impl/OpportunityScoringServiceImpl.java` | rules `opportunity-v1`; live score of one property; `score(signals)` shared with the refresh |
 | `service/OpportunityBrowseService.java`, `impl/OpportunityBrowseServiceImpl.java` | validated filters and orders over the stored scores |
 | `service/OpportunityScoreRefreshService.java`, `impl/OpportunityScoreRefreshServiceImpl.java` | batch scoring (incremental or full), one run at a time |
