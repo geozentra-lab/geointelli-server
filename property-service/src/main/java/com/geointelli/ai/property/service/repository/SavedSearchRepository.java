@@ -21,6 +21,9 @@ public interface SavedSearchRepository extends JpaRepository<SavedSearch, Long> 
     /** The newest saved searches of the user, bounded by the page size (for example {@code PageRequest.of(0, 5)}). */
     List<SavedSearch> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
+    /** The most recently created or modified saved searches of the user, bounded by the page size (dashboard activity card). */
+    List<SavedSearch> findByUser_IdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SavedSearch s WHERE s.id = :id AND s.user.id = :userId")
     Optional<SavedSearch> findOwnedForUpdate(@Param("id") Long id, @Param("userId") Long userId);

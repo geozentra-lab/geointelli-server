@@ -1,0 +1,115 @@
+﻿{
+    "info":  {
+                 "name":  "SCRUM-59 Valuation history and refresh",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+                 "description":  "Apply V33 unchanged, seed history using Python, start the worker, then enable VALUATION_REFRESH_ENABLED. Source changes enqueue atomically; Python polls PostgreSQL. History never recalculates values or fetches live comparables. Admin routes require realm role admin. FULL_MARKET scope is an explicit bulk import choice and requires --allow-full-market."
+             },
+    "auth":  {
+                 "type":  "bearer",
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "value":  "{{access_token}}",
+                                    "type":  "string"
+                                }
+                            ]
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:8081"
+                     },
+                     {
+                         "key":  "access_token",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "propertyId",
+                         "value":  "301400"
+                     },
+                     {
+                         "key":  "missingPropertyId",
+                         "value":  "584317"
+                     },
+                     {
+                         "key":  "requestId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "retryKey",
+                         "value":  "manual-1"
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "Frozen valuation history",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/properties/id/{{propertyId}}/valuations?page=0\u0026size=20",
+                                     "description":  "200 with recorded versions newest loadedAt first. Forecasts remain future scenarios within each valuation, not historical observations. modelEvidence is frozen; seeded versions say recorded before history. method.createdAt is null; use Instant loadedAt, scoredAt and archivedAt. Empty history stays empty."
+                                 }
+                 },
+                 {
+                     "name":  "Missing property",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/properties/id/{{missingPropertyId}}/valuations",
+                                     "description":  "404 if this ID does not exist; choose another nonexistent ID if needed."
+                                 }
+                 },
+                 {
+                     "name":  "Invalid page",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/properties/id/{{propertyId}}/valuations?page=-1",
+                                     "description":  "400; validation happens before history lookup."
+                                 }
+                 },
+                 {
+                     "name":  "Invalid page size",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/properties/id/{{propertyId}}/valuations?size=101",
+                                     "description":  "400; allowed sizes 1-100."
+                                 }
+                 },
+                 {
+                     "name":  "List refresh requests",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/admin/valuation-refresh-requests?page=0\u0026size=20",
+                                     "description":  "200 for admin; 401 without token, 403 without admin role. Optional status=PENDING/LEASED/FAILED/COMPLETED/CANCELLED."
+                                 }
+                 },
+                 {
+                     "name":  "Refresh status",
+                     "request":  {
+                                     "method":  "GET",
+                                     "url":  "{{baseUrl}}/api/admin/valuation-refresh-requests/{{requestId}}",
+                                     "description":  "Observe PENDING -\u003e LEASED -\u003e COMPLETED and runId. Python owns attempts, lease and outcome. 404 for unknown UUID."
+                                 }
+                 },
+                 {
+                     "name":  "Cancel pending or failed refresh",
+                     "request":  {
+                                     "method":  "POST",
+                                     "url":  "{{baseUrl}}/api/admin/valuation-refresh-requests/{{requestId}}/cancel",
+                                     "description":  "200 CANCELLED; repeated cancellation is idempotent. LEASED/COMPLETED -\u003e 409."
+                                 }
+                 },
+                 {
+                     "name":  "Retry failed refresh",
+                     "request":  {
+                                     "method":  "POST",
+                                     "url":  "{{baseUrl}}/api/admin/valuation-refresh-requests/{{requestId}}/retry",
+                                     "description":  "Returns a new PENDING request. Repeat the same key: same new request, original remains FAILED. MODEL_PUBLICATION requests -\u003e 409 (Python-owned).",
+                                     "header":  [
+                                                    {
+                                                        "key":  "Idempotency-Key",
+                                                        "value":  "{{retryKey}}"
+                                                    }
+                                                ]
+                                 }
+                 }
+             ]
+}
