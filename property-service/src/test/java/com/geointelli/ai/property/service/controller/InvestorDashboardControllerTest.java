@@ -1,9 +1,12 @@
 package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
+import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
 import com.geointelli.ai.property.service.dto.PortfolioGeographyDTO;
+import com.geointelli.ai.property.service.dto.PortfolioMetricDTO;
 import com.geointelli.ai.property.service.entity.HoldingOccupancyStatus;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
+import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,9 @@ public class InvestorDashboardControllerTest {
 
     @MockBean
     InvestorOccupancyExposureService investorOccupancyExposureService;
+
+    @MockBean
+    InvestorValueEquityDebtService investorValueEquityDebtService;
 
     private static final String URL = "/api/dashboards/investor/occupancy-exposure";
 
@@ -136,6 +142,94 @@ public class InvestorDashboardControllerTest {
 
             // Act & Assert
             mockMvc.perform(get(URL).param("portfolioId", "9"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Portfolio not found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Value, Equity And Debt Card Endpoint")
+    class ValueEquityDebtTest {
+
+        private static final String VALUE_URL = "/api/dashboards/investor/value-equity-debt";
+
+        @Test
+        @DisplayName("When no portfolio is given, then return 200 with partial totals and coverage")
+        void whenNoPortfolio_thenReturnAllPortfoliosCard() throws Exception {
+            // Arrange
+            InvestorValueEquityDebtCardDTO card = new InvestorValueEquityDebtCardDTO();
+            card.setScope(InvestorValueEquityDebtCardDTO.SCOPE_ALL_PORTFOLIOS);
+            card.setStatus(InvestorValueEquityDebtCardDTO.STATUS_OK);
+            card.setAsOfDate(LocalDate.of(2026, 11, 10));
+            card.setCurrency("USD");
+            card.setTotalHoldings(4);
+            card.setValue(new PortfolioMetricDTO("PARTIAL", null, new BigDecimal("650000.00"), 3, 4));
+            card.setEquity(new PortfolioMetricDTO("PARTIAL", null, new BigDecimal("200000.00"), 2, 4));
+            card.setValueCoveragePercent(new BigDecimal("75.00"));
+            when(investorValueEquityDebtService.getCard(null)).thenReturn(card);
+
+            // Act & Assert
+            mockMvc.perform(get(VALUE_URL))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.scope").value("ALL_PORTFOLIOS"))
+                    .andExpect(jsonPath("$.asOfDate").value("2026-11-10"))
+                    .andExpect(jsonPath("$.value.status").value("PARTIAL"))
+                    .andExpect(jsonPath("$.value.total").isEmpty())
+                    .andExpect(jsonPath("$.value.knownTotal").value(650000.00))
+                    .andExpect(jsonPath("$.equity.coveredHoldings").value(2))
+                    .andExpect(jsonPath("$.valueCoveragePercent").value(75.00));
+            verify(investorValueEquityDebtService).getCard(null);
+            verifyNoInteractions(investorOccupancyExposureService);
+        }
+
+        @Test
+        @DisplayName("When a portfolio is given, then pass it to the service")
+        void whenPortfolioGiven_thenPassIt() throws Exception {
+            // Arrange
+            InvestorValueEquityDebtCardDTO card = new InvestorValueEquityDebtCardDTO();
+            card.setScope(InvestorValueEquityDebtCardDTO.SCOPE_PORTFOLIO);
+            card.setPortfolioId(5L);
+            card.setStatus(InvestorValueEquityDebtCardDTO.STATUS_EMPTY);
+            when(investorValueEquityDebtService.getCard(5L)).thenReturn(card);
+
+            // Act & Assert
+            mockMvc.perform(get(VALUE_URL).param("portfolioId", "5"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.portfolioId").value(5))
+                    .andExpect(jsonPath("$.status").value("EMPTY"));
+        }
+
+        @Test
+        @DisplayName("When portfolioId is not a number, then return 400 without calling the service")
+        void whenPortfolioIdNotANumber_thenReturn400() throws Exception {
+            // Act & Assert
+            mockMvc.perform(get(VALUE_URL).param("portfolioId", "abc"))
+                    .andExpect(status().isBadRequest());
+            verifyNoInteractions(investorValueEquityDebtService);
+        }
+
+        @Test
+        @DisplayName("When the service rejects portfolioId, then return 400")
+        void whenServiceRejectsPortfolioId_thenReturn400() throws Exception {
+            // Arrange
+            when(investorValueEquityDebtService.getCard(-1L))
+                    .thenThrow(new IllegalArgumentException("portfolioId must be a positive number"));
+
+            // Act & Assert
+            mockMvc.perform(get(VALUE_URL).param("portfolioId", "-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("portfolioId must be a positive number"));
+        }
+
+        @Test
+        @DisplayName("When the portfolio is missing or belongs to another user, then return 404")
+        void whenForeignPortfolio_thenReturn404() throws Exception {
+            // Arrange
+            when(investorValueEquityDebtService.getCard(9L))
+                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Portfolio not found"));
+
+            // Act & Assert
+            mockMvc.perform(get(VALUE_URL).param("portfolioId", "9"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Portfolio not found"));
         }
