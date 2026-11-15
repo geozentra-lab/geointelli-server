@@ -64,7 +64,7 @@ class ValuationAlertDatabaseTest {
         jdbc.execute(
                 "CREATE TABLE alert_rules(id bigint PRIMARY KEY,user_id bigint,property_id bigint,saved_search_id bigint,paused boolean DEFAULT false,event_type varchar(30))");
         for (String file : List.of("V20__add_alert_monitoring_and_outbox.sql",
-                "V33__add_valuation_history_and_refresh_requests.sql", "V35__add_valuation_change_alerts.sql"))
+                "V33__add_valuation_history_and_refresh_requests.sql", "V39__add_valuation_change_alerts.sql"))
             jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/" + file)));
         transactions = new TransactionTemplate(new DataSourceTransactionManager(source));
     }
