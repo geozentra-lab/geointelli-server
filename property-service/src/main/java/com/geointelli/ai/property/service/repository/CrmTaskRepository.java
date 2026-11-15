@@ -1,6 +1,8 @@
 package com.geointelli.ai.property.service.repository;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +20,17 @@ public interface CrmTaskRepository extends JpaRepository<CrmTask, Long> {
     Page<CrmTask> findByUserIdAndStatus(Long userId, CrmTaskStatus status, Pageable pageable);
     Optional<CrmTask> findByIdAndUserId(Long id, Long userId);
     boolean existsByClientId(Long clientId);
+
+    /** Active (OPEN/IN_PROGRESS) tasks of this user already past their due date, earliest first; bounded by the pageable. */
+    List<CrmTask> findByUserIdAndStatusInAndDueAtBeforeOrderByDueAtAsc(Long userId, Collection<CrmTaskStatus> statuses,
+        Instant before, Pageable pageable);
+
+    /** Active tasks of this user due inside [from, to], earliest first; bounded by the pageable. */
+    List<CrmTask> findByUserIdAndStatusInAndDueAtBetweenOrderByDueAtAsc(Long userId, Collection<CrmTaskStatus> statuses,
+        Instant from, Instant to, Pageable pageable);
+
+    /** How many active tasks of this user are due inside [from, to], regardless of the list bound. */
+    long countByUserIdAndStatusInAndDueAtBetween(Long userId, Collection<CrmTaskStatus> statuses, Instant from, Instant to);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM CrmTask t WHERE t.id = :id AND t.userId = :owner")
