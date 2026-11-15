@@ -55,13 +55,24 @@ public class ValuationServiceImpl implements ValuationService {
     /** {@inheritDoc} */
     @Override
     public ValuationResponse getValuation(Long propertyId) {
+        return current(propertyId, true);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ValuationResponse getValuationWithoutComparables(Long propertyId) {
+        return current(propertyId, false);
+    }
+
+    /** Current stored valuation; the supporting comparable search runs only when asked for. */
+    private ValuationResponse current(Long propertyId, boolean withComparables) {
         if (propertyId == null || propertyId <= 0) throw new IllegalArgumentException("propertyId must be positive");
         if (!propertyRepository.existsById(propertyId))
             throw new PropertyNotFoundException("Property not found: " + propertyId);
         PropertyValuePrediction prediction = predictions.findByPropertyId(propertyId).orElse(null);
         if (prediction == null) return unsupported(List.of(reason("not_modelled")), null);
 
-        return display(prediction, false, null);
+        return display(prediction, false, null, withComparables);
     }
 
     /** {@inheritDoc} */
@@ -69,10 +80,12 @@ public class ValuationServiceImpl implements ValuationService {
     public ValuationResponse explainSnapshot(PropertyValuePrediction snapshot, ComparableResponse supportingComparables) {
         if (snapshot == null || snapshot.getPropertyId() == null || snapshot.getPropertyId() <= 0)
             throw new IllegalArgumentException("A snapshot with a positive propertyId is required");
-        return display(snapshot, true, supportingComparables);
+        return display(snapshot, true, supportingComparables, false);
     }
 
-    private ValuationResponse display(PropertyValuePrediction prediction, boolean historical, ComparableResponse archivedComparables) {
+    /** liveComparables: search today's supporting comparables (current valuations only; a snapshot uses its archive). */
+    private ValuationResponse display(PropertyValuePrediction prediction, boolean historical,
+            ComparableResponse archivedComparables, boolean liveComparables) {
         Long propertyId = prediction.getPropertyId();
         Method method = new Method(prediction.getValuationMethod(), prediction.getModelVersion(),
             prediction.getPredictionDate(), prediction.getDataThrough(), prediction.getCreatedAt());
@@ -97,7 +110,8 @@ public class ValuationServiceImpl implements ValuationService {
         Forecasts forecasts = forecasts(prediction);
         if (forecasts != null) notes.add("Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.");
         Explanation explanation = explanation(prediction, notes, historical);
-        SupportingComparables comparables = historical ? archivedComparables(archivedComparables) : supportingComparables(propertyId);
+        SupportingComparables comparables = historical ? archivedComparables(archivedComparables)
+            : liveComparables ? supportingComparables(propertyId) : null;
         if (historical && archivedComparables == null)
             notes.add("Supporting comparables were not retained for this valuation; current sales are not substituted.");
         Evidence evidence = new Evidence(new LastSale(prediction.getHasSaleHistory(), prediction.getLastSalePrice(),

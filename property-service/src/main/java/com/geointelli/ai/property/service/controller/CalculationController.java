@@ -1,10 +1,8 @@
 package com.geointelli.ai.property.service.controller;
 
-import com.geointelli.ai.property.service.dto.AffordabilityCalculationRequest;
-import com.geointelli.ai.property.service.dto.AffordabilityCalculationResponse;
-import com.geointelli.ai.property.service.dto.MortgageCalculationRequest;
-import com.geointelli.ai.property.service.dto.MortgageCalculationResponse;
+import com.geointelli.ai.property.service.dto.*;
 import com.geointelli.ai.property.service.service.AffordabilityCalculationService;
+import com.geointelli.ai.property.service.service.InvestmentAnalysisService;
 import com.geointelli.ai.property.service.service.MortgageCalculationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +20,8 @@ public class CalculationController {
     private final MortgageCalculationService mortgageCalculationService;
 
     private final AffordabilityCalculationService affordabilityCalculationService;
+
+    private final InvestmentAnalysisService investmentAnalysisService;
 
     /**
      * Calculates the monthly mortgage payment and itemized ownership costs.
@@ -49,6 +49,21 @@ public class CalculationController {
     @PostMapping("/affordability")
     public ResponseEntity<AffordabilityCalculationResponse> calculateAffordability(@Valid @RequestBody AffordabilityCalculationRequest request) {
         AffordabilityCalculationResponse response = affordabilityCalculationService.calculateAffordability(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Analyzes a residential investment scenario: unfinanced operating result (NOI), financed metrics
+     * (debt service, cash flow, cap rate, cash-on-cash), gross yield and, when requested, a labelled
+     * equity projection. Missing inputs are never filled in: the values that need them are null with a note.
+     *
+     * @param request operating inputs (monthly rent required), optional financing and optional projection
+     * @return 200 with current returns, projection and notes;
+     *         400 if the rent is missing, a field is invalid or the down payment exceeds the price
+     */
+    @PostMapping("/investment")
+    public ResponseEntity<InvestmentAnalysisResponse> analyzeInvestment(@Valid @RequestBody InvestmentAnalysisRequest request) {
+        InvestmentAnalysisResponse response = investmentAnalysisService.analyze(request);
         return ResponseEntity.ok(response);
     }
 }
