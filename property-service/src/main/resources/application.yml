@@ -125,3 +125,12 @@ valuation:
     # FULL_MARKET coalesces each bulk source transaction into one full-market request.
     # It requires a Python worker started with --allow-full-market.
     scope: ${VALUATION_REFRESH_SCOPE:PROPERTY}
+
+# Stored opportunity scores (SCRUM-76), read by GET /api/opportunities. Needs the V38 table.
+opportunity-scores:
+  refresh:
+    # Periodic INCREMENTAL rescoring of missing or stale scores; POST /api/admin/opportunity-scores/refresh runs it on demand.
+    enabled: ${OPPORTUNITY_SCORES_REFRESH_ENABLED:false}
+    initial-delay-millis: ${OPPORTUNITY_SCORES_REFRESH_INITIAL_DELAY_MILLIS:60000}
+    poll-delay-millis: ${OPPORTUNITY_SCORES_REFRESH_DELAY_MILLIS:900000}
+    batch-size: ${OPPORTUNITY_SCORES_BATCH_SIZE:1000}

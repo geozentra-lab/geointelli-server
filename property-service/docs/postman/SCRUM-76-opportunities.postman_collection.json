@@ -1,0 +1,204 @@
+{
+  "info": {
+    "name": "SCRUM-76 Investment opportunity scores",
+    "description": "Manual checks for GET /api/properties/id/{id}/opportunity-score (SCRUM-167), GET /api/opportunities (SCRUM-168) and POST /api/admin/opportunity-scores/refresh. See docs/opportunity-scores.md. Set baseUrl, propertyId (a property with a supported or limited valuation and forecasts), propertyWithoutValuationId, countyId and, for the refresh, refreshToken of an admin user. The defaults are local Miami-Dade IDs. The FULL refresh is synchronous and took about 8 minutes for 420,061 local valuations; keep Postman's request timeout at 0 (none). No secret is stored in this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8091" },
+    { "key": "keycloakUrl", "value": "http://localhost:8090/realms/geozentra" },
+    { "key": "clientId", "value": "geozentra-postman" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "propertyId", "value": "95340" },
+    { "key": "propertyWithoutValuationId", "value": "21" },
+    { "key": "countyId", "value": "1" },
+    { "key": "firstPageFirstId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Setup",
+      "item": [
+        {
+          "name": "Admin access token from refresh token",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('token issued', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('adminToken', body.access_token);",
+            "if (body.refresh_token) pm.collectionVariables.set('refreshToken', body.refresh_token);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "body": { "mode": "urlencoded", "urlencoded": [
+              { "key": "grant_type", "value": "refresh_token" },
+              { "key": "client_id", "value": "{{clientId}}" },
+              { "key": "refresh_token", "value": "{{refreshToken}}" }
+            ] },
+            "url": { "raw": "{{keycloakUrl}}/protocol/openid-connect/token", "host": ["{{keycloakUrl}}"], "path": ["protocol", "openid-connect", "token"] }
+          }
+        },
+        {
+          "name": "Refresh scores FULL (admin)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const r = pm.response.json();",
+            "pm.test('FULL run of the current version', () => { pm.expect(r.mode).to.eql('FULL'); pm.expect(r.scoreVersion).to.eql('opportunity-v1'); });",
+            "pm.test('scored + unavailable = processed', () => pm.expect(r.scored + r.unavailable).to.eql(r.processed));"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/admin/opportunity-scores/refresh?mode=FULL", "host": ["{{baseUrl}}"], "path": ["api", "admin", "opportunity-scores", "refresh"], "query": [{ "key": "mode", "value": "FULL" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Live score (SCRUM-167)",
+      "item": [
+        {
+          "name": "Scored property",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json();",
+            "pm.test('scored with the documented version', () => { pm.expect(s.status).to.eql('SCORED'); pm.expect(s.scoreVersion).to.eql('opportunity-v1'); pm.expect(s.maxScore).to.eql(100); });",
+            "pm.test('seven factors whose weights add up to 100', () => { pm.expect(s.factors).to.have.length(7); pm.expect(s.factors.reduce((t, f) => t + f.weight, 0)).to.eql(100); });",
+            "pm.test('score is the sum of the available points and never exceeds coverage', () => {",
+            "  const available = s.factors.filter(f => f.status === 'AVAILABLE');",
+            "  const points = available.reduce((t, f) => t + f.points, 0);",
+            "  pm.expect(Math.abs(points - s.score)).to.be.below(0.011);",
+            "  pm.expect(s.score).to.be.at.most(s.coveragePercent);",
+            "  pm.expect(available.reduce((t, f) => t + f.weight, 0)).to.eql(s.coveragePercent);",
+            "});",
+            "pm.test('rent, financing and asking price are unavailable with a reason and no points', () => {",
+            "  for (const code of ['RENTAL_YIELD', 'FINANCED_CASH_FLOW', 'ASKING_PRICE_DISCOUNT']) {",
+            "    const f = s.factors.find(x => x.code === code);",
+            "    pm.expect(f.status).to.eql('UNAVAILABLE'); pm.expect(f.points).to.eql(null); pm.expect(f.explanation).to.match(/^Unavailable: /);",
+            "  }",
+            "});",
+            "pm.test('valuation basis is shown', () => { pm.expect(s.valuation.runId).to.be.a('string'); pm.expect(s.valuation.modelVersion).to.be.a('string'); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{propertyId}}/opportunity-score", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{propertyId}}", "opportunity-score"] } }
+        },
+        {
+          "name": "Property without valuation: UNAVAILABLE",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const s = pm.response.json();",
+            "pm.test('no score, with the reason', () => { pm.expect(s.status).to.eql('UNAVAILABLE'); pm.expect(s.score).to.eql(null); pm.expect(s.reasons[0].code).to.eql('NO_VALUATION'); pm.expect(s.coveragePercent).to.eql(0); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{propertyWithoutValuationId}}/opportunity-score", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{propertyWithoutValuationId}}", "opportunity-score"] } }
+        },
+        {
+          "name": "Unknown property: 404",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/999999999/opportunity-score", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "999999999", "opportunity-score"] } }
+        },
+        {
+          "name": "ID 0: 400",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));", "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('propertyId must be positive'));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/0/opportunity-score", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "0", "opportunity-score"] } }
+        },
+        {
+          "name": "ID not a number: 400",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/abc/opportunity-score", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "abc", "opportunity-score"] } }
+        }
+      ]
+    },
+    {
+      "name": "2. Browse (SCRUM-168)",
+      "item": [
+        {
+          "name": "Default page: best score first",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const p = pm.response.json();",
+            "pm.test('OK, current version, default order', () => { pm.expect(p.status).to.eql('OK'); pm.expect(p.scoreVersion).to.eql('opportunity-v1'); pm.expect(p.sort).to.eql('SCORE_DESC'); pm.expect(p.results.size).to.eql(20); });",
+            "const items = p.results.content;",
+            "pm.test('scores never increase', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i].score).to.be.at.most(items[i - 1].score); });",
+            "pm.test('every item has factors and coverage', () => items.forEach(i => { pm.expect(i.factors).to.have.length(7); pm.expect(i.score).to.be.at.most(i.coveragePercent); }));",
+            "if (items.length) pm.collectionVariables.set('firstPageFirstId', items[0].propertyId);"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"] } }
+        },
+        {
+          "name": "Second page of size 1 does not repeat the first",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const items = pm.response.json().results.content;",
+            "pm.test('one item, not the first page item', () => { pm.expect(items).to.have.length(1); pm.expect(String(items[0].propertyId)).to.not.eql(pm.collectionVariables.get('firstPageFirstId')); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities?page=1&size=1", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"], "query": [{ "key": "page", "value": "1" }, { "key": "size", "value": "1" }] } }
+        },
+        {
+          "name": "Filters: county, minimum score, value range, cheapest first",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const p = pm.response.json();",
+            "const items = p.results.content;",
+            "pm.test('filters echoed', () => { pm.expect(p.filters.countyId).to.eql(Number(pm.collectionVariables.get('countyId'))); pm.expect(p.filters.minScore).to.eql(30); pm.expect(p.sort).to.eql('VALUE_ASC'); });",
+            "pm.test('every item matches', () => items.forEach(i => { pm.expect(i.score).to.be.at.least(30); pm.expect(i.estimatedValue).to.be.within(200000, 600000); }));",
+            "pm.test('values never decrease', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i].estimatedValue).to.be.at.least(items[i - 1].estimatedValue); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities?countyId={{countyId}}&minScore=30&minValue=200000&maxValue=600000&sort=VALUE_ASC", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"], "query": [{ "key": "countyId", "value": "{{countyId}}" }, { "key": "minScore", "value": "30" }, { "key": "minValue", "value": "200000" }, { "key": "maxValue", "value": "600000" }, { "key": "sort", "value": "VALUE_ASC" }] } }
+        },
+        {
+          "name": "Highest forecast growth first",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const items = pm.response.json().results.content;",
+            "pm.test('growth never increases', () => { for (let i = 1; i < items.length; i++) pm.expect(items[i].forecastGrowth1yPct).to.be.at.most(items[i - 1].forecastGrowth1yPct); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities?sort=forecast_growth_1y_desc&size=10", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"], "query": [{ "key": "sort", "value": "forecast_growth_1y_desc" }, { "key": "size", "value": "10" }] } }
+        },
+        {
+          "name": "No match: minScore=100 (above today's coverage)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const p = pm.response.json();",
+            "pm.test('NO_MATCHES with an empty page', () => { pm.expect(p.status).to.eql('NO_MATCHES'); pm.expect(p.results.content).to.have.length(0); pm.expect(p.results.totalElements).to.eql(0); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities?minScore=100", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"], "query": [{ "key": "minScore", "value": "100" }] } }
+        },
+        {
+          "name": "Invalid parameters: 400 each",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "const cases = [['size=0', 'size must be between 1 and 100'], ['size=101', 'size must be between 1 and 100'], ['page=-1', 'page must be 0 or greater'], ['minScore=101', 'minScore must be between 0 and 100'], ['minValue=500&maxValue=100', 'minValue must not exceed maxValue'], ['countyId=0', 'countyId must be a positive number'], ['sort=BEST', 'sort must be one of SCORE_DESC, FORECAST_GROWTH_1Y_DESC, VALUE_ASC, VALUE_DESC'], ['countyId=abc', 'countyId: invalid value'], ['page=100&size=100', 'page is too large: only the first 10000 results can be paged; narrow the filters']];",
+            "for (const [query, message] of cases) {",
+            "  pm.sendRequest(pm.collectionVariables.get('baseUrl') + '/api/opportunities?' + query, (err, res) => {",
+            "    pm.test(query + ' -> 400 ' + message, () => { pm.expect(err).to.eql(null); pm.expect(res.code).to.eql(400); pm.expect(res.json().message).to.eql(message); });",
+            "  });",
+            "}"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/opportunities?size=0", "host": ["{{baseUrl}}"], "path": ["api", "opportunities"], "query": [{ "key": "size", "value": "0" }] } }
+        }
+      ]
+    },
+    {
+      "name": "3. Refresh",
+      "item": [
+        {
+          "name": "Incremental after the full run processes nothing",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('nothing stale', () => pm.expect(pm.response.json().processed).to.eql(0));"
+          ] } }],
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": { "raw": "{{baseUrl}}/api/admin/opportunity-scores/refresh", "host": ["{{baseUrl}}"], "path": ["api", "admin", "opportunity-scores", "refresh"] } }
+        },
+        {
+          "name": "Unknown mode: 400",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }], "url": { "raw": "{{baseUrl}}/api/admin/opportunity-scores/refresh?mode=EVERYTHING", "host": ["{{baseUrl}}"], "path": ["api", "admin", "opportunity-scores", "refresh"], "query": [{ "key": "mode", "value": "EVERYTHING" }] } }
+        },
+        {
+          "name": "Without a token: refused",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401 or 403', () => pm.expect(pm.response.code).to.be.oneOf([401, 403]));"] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/admin/opportunity-scores/refresh", "host": ["{{baseUrl}}"], "path": ["api", "admin", "opportunity-scores", "refresh"] } }
+        }
+      ]
+    }
+  ]
+}
