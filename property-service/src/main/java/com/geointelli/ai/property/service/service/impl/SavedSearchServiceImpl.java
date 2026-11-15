@@ -165,7 +165,14 @@ public class SavedSearchServiceImpl implements SavedSearchService {
                 else result.put(name, value);
             }
         }
-        return result;
+        // valueToTree keeps the DTO's Long and BigDecimal values as LongNode and DecimalNode, which never equal the
+        // nodes Hibernate reads back from the stored JSON, so every save was written again at commit and moved
+        // updated_at. Parsing the JSON text gives the same nodes as a read.
+        try {
+            return json.readTree(result.toString());
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Canonical saved-search filters are not valid JSON", error);
+        }
     }
 
     private SavedSearchDTO toDTO(SavedSearch search) {
