@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.EnumMap;
+
+import com.geointelli.ai.property.service.entity.LenderLoanType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -50,6 +52,7 @@ public class LenderApplicationServiceImpl implements LenderApplicationService {
         value.setRequestedAmount(request.requestedAmount());
         value.setCurrency(request.currency() == null ? "USD" : request.currency());
         value.setNotes(request.notes());
+        value.setLoanType(loanType(request.loanType()));
         validation.validate(value);
         return mapper.toDTO(applications.saveAndFlush(value));
     }
@@ -86,6 +89,7 @@ public class LenderApplicationServiceImpl implements LenderApplicationService {
         if (request.isApprovedAmountProvided()) value.setApprovedAmount(request.getApprovedAmount());
         if (request.isFundedAmountProvided()) value.setFundedAmount(request.getFundedAmount());
         if (request.isNotesProvided()) value.setNotes(request.getNotes());
+        if (request.isLoanTypeProvided()) value.setLoanType(loanType(request.getLoanType()));
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         if (next == LenderApplicationStage.APPROVED && value.getStage() != next) value.setApprovedAt(now);
         if (next == LenderApplicationStage.FUNDED && value.getStage() != next) value.setFundedAt(now);
@@ -156,6 +160,7 @@ public class LenderApplicationServiceImpl implements LenderApplicationService {
         value.setApprovedAt(row.approvedAt());
         value.setFundedAt(row.fundedAt());
         value.setNotes(row.notes());
+        value.setLoanType(loanType(row.loanType()));
         validation.validate(value);
         if (!created && before.equals(mapper.toDTO(value)))
             return new LenderApplicationImportResult.RowResult(rowNumber, "UNCHANGED", value.getId(), null);
@@ -174,6 +179,9 @@ public class LenderApplicationServiceImpl implements LenderApplicationService {
         if (!previous.canChangeTo(next)) throw new ResponseStatusException(HttpStatus.CONFLICT,
             "Unsupported application transition: " + previous + " -> " + next);
     }
+
+    /** A missing loan type is recorded as UNKNOWN, never left empty. */
+    private LenderLoanType loanType(LenderLoanType value) { return value == null ? LenderLoanType.UNKNOWN : value; }
 
     private BigDecimal zero(BigDecimal value) { return value == null ? BigDecimal.ZERO.setScale(2) : value.setScale(2); }
     private Instant micros(Instant value) { return value == null ? null : value.truncatedTo(ChronoUnit.MICROS); }
