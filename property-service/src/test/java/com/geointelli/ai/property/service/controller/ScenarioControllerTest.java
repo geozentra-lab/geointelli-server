@@ -2,9 +2,11 @@ package com.geointelli.ai.property.service.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.dto.PageResponse;
+import com.geointelli.ai.property.service.dto.ScenarioCalculationDTO;
 import com.geointelli.ai.property.service.dto.ScenarioDTO;
 import com.geointelli.ai.property.service.entity.ScenarioType;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
+import com.geointelli.ai.property.service.service.ScenarioCalculationService;
 import com.geointelli.ai.property.service.service.ScenarioService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +22,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,6 +42,9 @@ public class ScenarioControllerTest {
 
     @MockBean
     ScenarioService scenarioService;
+
+    @MockBean
+    ScenarioCalculationService scenarioCalculationService;
 
     private static final String URL = "/api/scenarios";
     private static final String BODY = """
@@ -213,6 +220,64 @@ public class ScenarioControllerTest {
             // Act & Assert
             mockMvc.perform(delete(URL + "/7")).andExpect(status().isNoContent());
             verify(scenarioService).delete(7L);
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Calculate Scenario Endpoint")
+    class CalculateScenarioTest {
+
+        @Test
+        @DisplayName("When the scenario is owned, then POST calculate returns 200 with facts, changes and result")
+        void whenOwned_thenReturn200() throws Exception {
+            // Arrange
+            var facts = new ScenarioCalculationDTO.CurrentFacts(42L, ScenarioCalculationDTO.FACTS_AVAILABLE,
+                    new BigDecimal("430000.00"), "supported", "high", LocalDate.of(2026, 11, 1));
+            var change = new ScenarioCalculationDTO.InputChange("financing.purchasePrice",
+                    new BigDecimal("400000"), new BigDecimal("430000.00"), "differs");
+            when(scenarioCalculationService.calculate(7L)).thenReturn(new ScenarioCalculationDTO(7L, "Miami duplex",
+                    ScenarioType.INVESTMENT, 1, scenario(7L).assumptions(), facts, List.of(change), null,
+                    ScenarioCalculationDTO.NOTE));
+
+            // Act & Assert
+            mockMvc.perform(post(URL + "/7/calculate"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.scenarioId").value(7))
+                    .andExpect(jsonPath("$.savedAssumptions.operating.monthlyRent").value(2500))
+                    .andExpect(jsonPath("$.currentFacts.status").value("AVAILABLE"))
+                    .andExpect(jsonPath("$.currentFacts.valuationDate").value("2026-11-01"))
+                    .andExpect(jsonPath("$.inputChanges[0].field").value("financing.purchasePrice"))
+                    .andExpect(jsonPath("$.note").value(ScenarioCalculationDTO.NOTE));
+        }
+
+        @Test
+        @DisplayName("When the scenario is missing or foreign, then return 404")
+        void whenMissingOrForeign_thenReturn404() throws Exception {
+            // Arrange
+            when(scenarioCalculationService.calculate(7L))
+                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario not found"));
+
+            // Act & Assert
+            mockMvc.perform(post(URL + "/7/calculate")).andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("When the saved assumptions are invalid, then return 400")
+        void whenAssumptionsInvalid_thenReturn400() throws Exception {
+            // Arrange
+            when(scenarioCalculationService.calculate(7L))
+                    .thenThrow(new IllegalArgumentException("Saved assumptions are invalid: operating.monthlyRent"));
+
+            // Act & Assert
+            mockMvc.perform(post(URL + "/7/calculate")).andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("When the ID is not a number, then return 400 without calling the service")
+        void whenIdNotANumber_thenReturn400() throws Exception {
+            // Act & Assert
+            mockMvc.perform(post(URL + "/abc/calculate")).andExpect(status().isBadRequest());
+            verifyNoInteractions(scenarioCalculationService);
         }
     }
 }
