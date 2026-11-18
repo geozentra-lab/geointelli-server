@@ -5,8 +5,8 @@ endpoint validates the request, stores the uploaded files, inserts a `QUEUED` jo
 with the job and a `Location` header. Any application instance may pick the job up; progress, errors and
 retries are visible to administrators next to the Mapillary backfill jobs.
 
-Authentication: `/api/ingestion/*` keeps the access it had before (no role required). The admin endpoints
-under `/api/admin/import-jobs` need the Keycloak realm role `admin`.
+Authentication: `/api/ingestion/**` and `/api/admin/import-jobs/**` require a valid bearer token
+with the Keycloak realm role `admin` (SCRUM-94). Missing/invalid tokens return 401; other roles return 403.
 
 ## Start a job
 

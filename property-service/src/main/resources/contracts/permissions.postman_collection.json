@@ -1,0 +1,475 @@
+{
+  "info": {
+    "name": "SCRUM-94 Roles and ownership",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "SCRUM-194/195/196 permission matrix (property-service).\n\nKeycloak setup: create case-sensitive REALM roles investor, realtor, lender and admin. Assign approved roles to users; do not assign professional/admin roles as realm defaults. Obtain a fresh access_token after changes. Only realm_access.roles from the validated JWT grants feature access. Client roles, persona, request bodies and organization IDs cannot grant a feature role. Every authenticated identity has baseline user access without needing an explicit user role. Users may hold multiple roles.\n\nBASELINE (any valid bearer token): property/search/details, valuation/history/forecast routes when present, comparables, property comparison, addresses/locations/parcels/map, image reads, prediction reads, read-only school/transport bulk lookups, favorites, profile/preferences, realtor license submission/status, saved searches, alerts/evaluation, contact requests, recommendations, user dashboard, mortgage and affordability calculations.\nINVESTOR or ADMIN: portfolios/holdings/financial records/summaries, scenarios, investor dashboard, opportunities/property opportunity score and investment calculations.\nREALTOR or ADMIN: clients/leads/tasks/transactions/CRM activities and realtor dashboard.\nLENDER or ADMIN: lender organizations/applications/imports/collateral and lender dashboard.\nADMIN only: all /api/admin/** and /api/ingestion/** routes, image imports/backfills (including job reads), prediction bulk writes, school/transport calculate-all and calculate-property-score writes.\nPUBLIC: Swagger UI/API descriptions and health/liveness/readiness. Other actuator paths and unclassified routes are denied. Existing configured CORS origins can preflight before authentication.\n\nScope: every personal resource remains owner-scoped, including for admins. A lender role does not imply organization membership. Lender application IDs must match the requested member organization. Only an organization owner manages membership. Foreign/missing private resources return 404; role denials return 403; missing/invalid JWTs return 401. Record IDs, owner fields and membership IDs are not feature grants.\n\nSubscriptions: NOT_CONFIGURED. There is no implemented billing/subscription approval contract, so no plan is inferred from persona or arbitrary JWT claims. License submission and selection of REALTOR persona do not grant the realtor role. Existing contact-directory categories do not certify credentials.\n\nManual setup: run against a test database. Use access_token for the current tester; switch it between an ordinary user, each professional role and admin. To test private ownership, create resources as account A using the existing feature collections, then read them as a second account B WITH THE SAME FEATURE ROLE. Fill foreign_* variables with A's IDs; never use a missing ID as the only ownership test. Foreign lender organization and mismatched application/organization are separate checks. No test in this collection deletes or changes business data.\n\nWorkflow checks: as an ordinary account PATCH /api/users/me with persona=REALTOR, then GET entitlements; realtorCrm must remain false and GET /api/clients must remain 403. Use the existing collections to verify foreign PATCH/DELETE attempts also return 404 without changing A's records. A lender organization member attempting membership changes must get 403; the organization owner succeeds. Repeat foreign-resource checks as an admin to ensure no ownership bypass. Existing access tokens retain their grants until replaced/expired; these endpoints do not administer Keycloak roles.\n"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "foreign_saved_search_id",
+      "value": ""
+    },
+    {
+      "key": "foreign_portfolio_id",
+      "value": ""
+    },
+    {
+      "key": "foreign_client_id",
+      "value": ""
+    },
+    {
+      "key": "foreign_scenario_id",
+      "value": ""
+    },
+    {
+      "key": "foreign_organization_id",
+      "value": ""
+    },
+    {
+      "key": "foreign_application_id",
+      "value": ""
+    },
+    {
+      "key": "own_organization_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Baseline - any signed-in account",
+      "item": [
+        {
+          "name": "My effective permissions",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/users/me/entitlements",
+            "description": "Expect normalUser=true. Professional flags reflect realm roles, not selected persona. Only visible lender organizations are listed. subscriptionPolicy=NOT_CONFIGURED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Property search",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/properties/search?page=0&size=1",
+            "description": "Any valid account, including professional roles."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Missing token - expect 401",
+      "item": [
+        {
+          "name": "Anonymous property search",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/properties/search?page=0&size=1",
+            "description": "No bearer token.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous entitlements",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/users/me/entitlements",
+            "description": "No bearer token.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ordinary user role denials - expect 403",
+      "description": "Set access_token to an ordinary account with no professional/admin roles.",
+      "item": [
+        {
+          "name": "No admin import access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/admin/import-jobs",
+            "description": "Ordinary user must be denied before service execution."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No legacy ingestion job access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/ingestion/jobs/00000000-0000-0000-0000-000000000000",
+            "description": "Legacy operational routes also require admin."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No realtor CRM access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/clients",
+            "description": "Changing persona must not enable this."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No lender organization access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/lender/organizations",
+            "description": "Membership alone does not grant the feature role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No investor portfolio access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios",
+            "description": "Requires investor or admin role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No investor calculation access",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/calculations/investment",
+            "description": "Must be denied before validating this intentionally empty input.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Role allow checks - switch access_token as described",
+      "item": [
+        {
+          "name": "Realtor - own clients",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/clients",
+            "description": "Use realtor or admin token; expect 200, only own records."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Investor - own portfolios",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios",
+            "description": "Use investor or admin token; expect 200, only own records."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lender - member organizations",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/lender/organizations",
+            "description": "Use lender or admin token; expect 200, only owned/member organizations."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - import jobs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/admin/import-jobs",
+            "description": "Use admin token; expect 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Private ownership - two accounts with same feature role",
+      "item": [
+        {
+          "name": "Foreign saved search",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/saved-searches/{{foreign_saved_search_id}}",
+            "description": "Use B token and A saved search ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign investor portfolio",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/portfolios/{{foreign_portfolio_id}}",
+            "description": "B investor/admin token and A portfolio ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign realtor client",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/clients/{{foreign_client_id}}",
+            "description": "B realtor/admin token and A client ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign scenario",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/scenarios/{{foreign_scenario_id}}",
+            "description": "B investor/admin token and A scenario ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign lender organization",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/lender/applications?organizationId={{foreign_organization_id}}",
+            "description": "B lender/admin token; B is not a member of A organization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Application from another organization",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/lender/applications/{{foreign_application_id}}?organizationId={{own_organization_id}}",
+            "description": "B has membership of own_organization_id, but the application belongs to A organization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
