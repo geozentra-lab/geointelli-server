@@ -25,11 +25,11 @@
   },
   "item": [
     {
-      "name": "Stored 1/3/7-year forecast",
+      "name": "Stored 1/3/5-year forecast",
       "request": {
         "method": "GET",
         "url": "{{base_url}}/api/properties/id/{{property_id}}/forecast",
-        "description": "Expect 200. status is valuation support; available indicates forecast availability. USD values and bounds are unchanged model output. Low confidence remains visible. Three/seven-year values are trend scenarios. Try supported, limited, unsupported and unmodelled IDs. Existing unmodelled properties return unsupported/not_modelled with 200; nonexistent properties return 404."
+        "description": "Expect 200. status is valuation support; available indicates forecast availability. USD values and bounds are unchanged model output. Low confidence remains visible. Three/five-year values are trend scenarios. The 5-year forecast replaced the 7-year one: until the first scoring run after migration V43 (and on older valuations) a property shows forecasts.sevenYears instead of forecasts.fiveYears. Try supported, limited, unsupported and unmodelled IDs. Existing unmodelled properties return unsupported/not_modelled with 200; nonexistent properties return 404."
       }
     },
     {

@@ -45,7 +45,7 @@ class ForecastControllerTest {
         prediction.setForecast1y(new BigDecimal("700001.23"));
         prediction.setForecast1yLow(new BigDecimal("550000.12"));
         prediction.setForecast1yHigh(new BigDecimal("850000.34"));
-        prediction.setForecast7y(new BigDecimal("900002.35"));
+        prediction.setForecast5y(new BigDecimal("900002.35"));
         prediction.setModelVersion("monthly-v1");
         when(predictions.findByPropertyId(7L)).thenReturn(Optional.of(prediction));
         var valuation = new ValuationServiceImpl(properties, predictions, comparables, new ObjectMapper());
@@ -61,11 +61,22 @@ class ForecastControllerTest {
                 .andExpect(jsonPath("$.forecasts.oneYear.value").value(700001.23))
                 .andExpect(jsonPath("$.forecasts.oneYear.low").value(550000.12))
                 .andExpect(jsonPath("$.forecasts.oneYear.high").value(850000.34))
-                .andExpect(jsonPath("$.forecasts.sevenYears.value").value(900002.35))
+                .andExpect(jsonPath("$.forecasts.fiveYears.value").value(900002.35))
+                .andExpect(jsonPath("$.forecasts.sevenYears").doesNotExist())
                 .andExpect(jsonPath("$.forecasts.threeYears.value").isEmpty())
                 .andExpect(jsonPath("$.method.modelVersion").value("monthly-v1"))
                 .andExpect(jsonPath("$.evidence").doesNotExist());
         verifyNoInteractions(comparables);
+    }
+
+    @Test
+    void valuationPublishedBeforeFiveYearForecastKeepsItsSevenYearHorizon() throws Exception {
+        prediction.setForecast5y(null);
+        prediction.setForecast7y(new BigDecimal("950000.00"));
+        mvc.perform(get("/api/properties/id/7/forecast"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.available").value(true))
+                .andExpect(jsonPath("$.forecasts.sevenYears.value").value(950000.00))
+                .andExpect(jsonPath("$.forecasts.fiveYears").doesNotExist());
     }
 
     @Test

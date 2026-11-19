@@ -6,7 +6,8 @@ import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 /** Read-only access to model forecasts. */
 public interface ForecastService {
     /**
-     * Reads stored one-, three- and seven-year projections without recalculating
+     * Reads stored one-, three- and five-year projections (seven-year on valuations
+     * published before the 5-year forecast replaced it) without recalculating
      * them.
      *
      * @param propertyId
