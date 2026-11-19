@@ -108,7 +108,12 @@ public class ValuationServiceImpl implements ValuationService {
             new Range(prediction.getPredictedPriceLow(), prediction.getPredictedPriceHigh()),
             new Range(prediction.getPredictedPriceLow90(), prediction.getPredictedPriceHigh90()), prediction.getConfidence());
         Forecasts forecasts = forecasts(prediction);
-        if (forecasts != null) notes.add("Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.");
+        if (forecasts != null && forecasts.sevenYears() != null) {
+            notes.add("Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.");
+            notes.add("This valuation was published before the five-year forecast replaced the seven-year one.");
+        } else if (forecasts != null) {
+            notes.add("Three- and five-year forecasts are trend scenarios; forecast ranges are illustrative.");
+        }
         Explanation explanation = explanation(prediction, notes, historical);
         SupportingComparables comparables = historical ? archivedComparables(archivedComparables)
             : liveComparables ? supportingComparables(propertyId) : null;
@@ -128,11 +133,21 @@ public class ValuationServiceImpl implements ValuationService {
         return new Reason(code, ValuationDisplayText.reason(code));
     }
 
+    /**
+     * The 5-year forecast replaced the 7-year one (V43). A row without a 5-year value but with a 7-year value was
+     * published before the change (history, or current rows until the next full scoring run): its 7-year value is
+     * shown as seven years, never relabelled as five.
+     */
     private Forecasts forecasts(PropertyValuePrediction p) {
         if (p.getForecast1y() == null) return null;
-        return new Forecasts(new Projection(p.getForecast1y(), p.getForecast1yLow(), p.getForecast1yHigh()),
-            new Projection(p.getForecast3y(), p.getForecast3yLow(), p.getForecast3yHigh()),
-            new Projection(p.getForecast7y(), p.getForecast7yLow(), p.getForecast7yHigh()));
+        Projection oneYear = new Projection(p.getForecast1y(), p.getForecast1yLow(), p.getForecast1yHigh());
+        Projection threeYears = new Projection(p.getForecast3y(), p.getForecast3yLow(), p.getForecast3yHigh());
+        if (p.getForecast5y() == null && p.getForecast7y() != null) {
+            return new Forecasts(oneYear, threeYears, null,
+                new Projection(p.getForecast7y(), p.getForecast7yLow(), p.getForecast7yHigh()));
+        }
+        return new Forecasts(oneYear, threeYears,
+            new Projection(p.getForecast5y(), p.getForecast5yLow(), p.getForecast5yHigh()), null);
     }
 
     private Explanation explanation(PropertyValuePrediction p, List<String> notes, boolean historical) {

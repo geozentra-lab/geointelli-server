@@ -32,7 +32,7 @@ public class PropertyValuePredictionDTO {
     private BigDecimal lastSalePrice;
     private LocalDate lastSaleDate;
 
-    /** Forecasts; 3/7-year values are trend scenarios and their ranges are illustrative. */
+    /** Forecasts; 3- and 5-year values are trend scenarios and their ranges are illustrative. */
     private BigDecimal forecast1y;
     private BigDecimal forecast1yLow;
     private BigDecimal forecast1yHigh;
@@ -40,6 +40,10 @@ public class PropertyValuePredictionDTO {
     private BigDecimal forecast3y;
     private BigDecimal forecast3yLow;
     private BigDecimal forecast3yHigh;
+    private BigDecimal forecast5y;
+    private BigDecimal forecast5yLow;
+    private BigDecimal forecast5yHigh;
+    /** Previous 7-year forecast, set only on rows published before the 5-year forecast replaced it. */
     private BigDecimal forecast7y;
     private BigDecimal forecast7yLow;
     private BigDecimal forecast7yHigh;
