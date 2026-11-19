@@ -24,8 +24,17 @@ public record ValuationResponse(
     /** Model lower and upper bounds in USD. */
     public record Range(BigDecimal low, BigDecimal high) {}
 
-    /** Model forecasts; three/seven-year values are trend scenarios and all forecast ranges are illustrative. */
-    public record Forecasts(Projection oneYear, Projection threeYears, Projection sevenYears) {}
+    /**
+     * Model forecasts; three- and five-year values are trend scenarios and all forecast ranges are illustrative.
+     * The 5-year forecast replaced the 7-year one: sevenYears appears only on valuations published before the
+     * change (no 5-year value stored), and fiveYears is then omitted. Otherwise fiveYears is always present and
+     * sevenYears is omitted.
+     */
+    public record Forecasts(Projection oneYear, Projection threeYears,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Projection fiveYears,
+            @JsonInclude(JsonInclude.Include.NON_NULL)
+            @Schema(description = "Only on valuations published before the 5-year forecast replaced the 7-year one")
+            Projection sevenYears) {}
 
     /** A stored projected value and its illustrative bounds, in USD. */
     public record Projection(BigDecimal value, BigDecimal low, BigDecimal high) {}
