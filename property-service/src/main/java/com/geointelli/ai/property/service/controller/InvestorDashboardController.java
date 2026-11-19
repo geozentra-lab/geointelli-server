@@ -1,8 +1,10 @@
 package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
+import com.geointelli.ai.property.service.dto.InvestorOpportunitiesCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
+import com.geointelli.ai.property.service.service.InvestorOpportunitiesService;
 import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -28,6 +30,7 @@ public class InvestorDashboardController {
 
     private final InvestorOccupancyExposureService investorOccupancyExposureService;
     private final InvestorValueEquityDebtService investorValueEquityDebtService;
+    private final InvestorOpportunitiesService investorOpportunitiesService;
 
     /**
      * Occupancy and exposure card: occupancy counts, rental occupancy, state and county exposure and their coverage.
@@ -64,5 +67,32 @@ public class InvestorDashboardController {
     public ResponseEntity<InvestorValueEquityDebtCardDTO> valueEquityDebt(
             @RequestParam(required = false) Long portfolioId) {
         return ResponseEntity.ok(investorValueEquityDebtService.getCard(portfolioId));
+    }
+
+    /**
+     * Opportunities card: a bounded list of the best stored opportunity scores (SCRUM-76) with their explanation
+     * and evidence coverage, flagged when the investor already holds the property.
+     *
+     * @param portfolioId optional portfolio of the current user whose holdings are flagged; all portfolios when omitted
+     * @param countyId    optional county filter passed to the shared opportunity service
+     * @param stateId     optional state filter passed to the shared opportunity service
+     * @param limit       number of items, 1 to 20; 5 when omitted
+     * @return 200 with the card (EMPTY with the shared service's reason when there is no candidate); 400 if a
+     *         parameter is invalid; 401 without a bearer token; 404 if the portfolio is missing or belongs to
+     *         another user
+     */
+    @GetMapping("/opportunities")
+    @Operation(summary = "Opportunities card of my investor dashboard", description = "First page of the shared "
+            + "opportunity browse (SCRUM-76) in score order, bounded by limit (default 5, max 20), optionally within "
+            + "countyId or stateId. Each item keeps the shared service's factors (ranking explanation) and "
+            + "coveragePercent; nothing is rescored. alreadyHeld marks properties held in my portfolios (or in "
+            + "portfolioId). Without candidates: status EMPTY, candidateStatus NOT_SCORED, "
+            + "NO_ELIGIBLE_OPPORTUNITIES or NO_MATCHES, and an empty list; nothing is invented.")
+    public ResponseEntity<InvestorOpportunitiesCardDTO> opportunities(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) Long countyId,
+            @RequestParam(required = false) Long stateId,
+            @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(investorOpportunitiesService.getCard(portfolioId, countyId, stateId, limit));
     }
 }
