@@ -17,7 +17,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,7 +32,38 @@ public class AdminCoverageHealthServiceImplTest {
 
     DataQualityService dataQualityService = mock(DataQualityService.class);
     CoverageHealthReader coverageHealthReader = mock(CoverageHealthReader.class);
-    AdminCoverageHealthServiceImpl service = new AdminCoverageHealthServiceImpl(dataQualityService, coverageHealthReader);
+    MovingClock clock = new MovingClock(Instant.parse("2026-11-16T10:00:00Z"));
+    /** Runs the background refresh on the calling thread, so a first call already sees its result. */
+    AdminCoverageHealthServiceImpl service = new AdminCoverageHealthServiceImpl(dataQualityService,
+            coverageHealthReader, 600, clock, Runnable::run);
+
+    /** A clock the test moves forward. */
+    static final class MovingClock extends Clock {
+        private Instant now;
+
+        MovingClock(Instant start) { this.now = start; }
+
+        void advance(Duration duration) { now = now.plus(duration); }
+
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+
+        @Override public Clock withZone(ZoneId zone) { return this; }
+
+        @Override public Instant instant() { return now; }
+    }
+
+    /** Keeps the submitted refreshes until the test runs them, like a background thread that has not finished. */
+    static final class DeferredExecutor implements java.util.concurrent.Executor {
+        final List<Runnable> queued = new ArrayList<>();
+
+        @Override public void execute(Runnable task) { queued.add(task); }
+
+        void runAll() {
+            List<Runnable> tasks = new ArrayList<>(queued);
+            queued.clear();
+            tasks.forEach(Runnable::run);
+        }
+    }
 
     private static final Instant GENERATED_AT = Instant.parse("2026-11-16T09:58:00Z");
     private static final Instant NOV_10 = Instant.parse("2026-11-10T02:00:00Z");
@@ -207,6 +243,149 @@ public class AdminCoverageHealthServiceImplTest {
             assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, provider(dto, AdminCoverageHealthServiceImpl.MAPILLARY).status());
             assertEquals(AdminCoverageHealthDTO.HEALTHY, provider(dto, AdminCoverageHealthServiceImpl.MIAMI_DADE_API).status());
             assertEquals(3, dto.providers().size());
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Background Refresh")
+    class BackgroundRefreshTest {
+        DeferredExecutor background = new DeferredExecutor();
+        AdminCoverageHealthServiceImpl deferred = new AdminCoverageHealthServiceImpl(dataQualityService,
+                coverageHealthReader, 600, clock, background);
+
+        @Test
+        @DisplayName("Before the first calculation ends, quality and coverage are unavailable with the reason, at once")
+        void whenFirstCalculationRunning_thenCalculatingWithoutWaiting() {
+            // Act
+            AdminCoverageHealthDTO dto = deferred.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.quality().status());
+            assertEquals(AdminCoverageHealthServiceImpl.CALCULATING, dto.quality().reason());
+            assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.coverage().status());
+            assertEquals(AdminCoverageHealthServiceImpl.CALCULATING, dto.coverage().reason());
+            assertNull(dto.coverage().countedAt());
+            assertEquals(AdminCoverageHealthDTO.HEALTHY, provider(dto, AdminCoverageHealthServiceImpl.MIAMI_DADE_API).status(),
+                    "provider health is read live");
+            assertEquals(1, background.queued.size());
+            verifyNoInteractions(dataQualityService);
+            verify(coverageHealthReader, never()).countCoverage();
+        }
+
+        @Test
+        @DisplayName("Calls while a refresh is running start no second refresh")
+        void whenRefreshRunning_thenNoSecondRefresh() {
+            // Act
+            deferred.getDashboard();
+            deferred.getDashboard();
+            deferred.getDashboard();
+
+            // Assert
+            assertEquals(1, background.queued.size());
+        }
+
+        @Test
+        @DisplayName("Once calculated, the counts are served from memory with their time until the refresh period ends")
+        void whenCalculated_thenServedFromMemory() {
+            // Arrange
+            Instant countedAt = clock.instant();
+            deferred.getDashboard();
+            background.runAll();
+            clock.advance(Duration.ofSeconds(599));
+
+            // Act
+            AdminCoverageHealthDTO dto = deferred.getDashboard();
+            deferred.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.coverage().status());
+            assertEquals(countedAt, dto.coverage().countedAt());
+            assertEquals(GENERATED_AT, dto.quality().generatedAt());
+            assertEquals(clock.instant(), dto.observedAt());
+            assertTrue(background.queued.isEmpty(), "no refresh within the period");
+            verify(coverageHealthReader, times(1)).countCoverage();
+            verify(dataQualityService, times(1)).getReport(null, 0, 1);
+        }
+
+        @Test
+        @DisplayName("After the refresh period the old counts are returned at once and one refresh starts in the background")
+        void whenOlderThanPeriod_thenOldCountsAndOneRefresh() {
+            // Arrange
+            Instant firstCount = clock.instant();
+            deferred.getDashboard();
+            background.runAll();
+            clock.advance(Duration.ofSeconds(600));
+            when(coverageHealthReader.countCoverage()).thenReturn(new CoverageCounts(2000, 2000, 1000, 0, 0, 0, 0));
+
+            // Act
+            AdminCoverageHealthDTO stale = deferred.getDashboard();
+            background.runAll();
+            AdminCoverageHealthDTO fresh = deferred.getDashboard();
+
+            // Assert
+            assertEquals(firstCount, stale.coverage().countedAt());
+            assertEquals(1000L, stale.coverage().totalProperties());
+            assertEquals(clock.instant(), fresh.coverage().countedAt());
+            assertEquals(2000L, fresh.coverage().totalProperties());
+            verify(coverageHealthReader, times(2)).countCoverage();
+        }
+
+        @Test
+        @DisplayName("A refresh that cannot read the records keeps the last good counts with their older time")
+        void whenRefreshFails_thenLastGoodCountsKept() {
+            // Arrange
+            Instant firstCount = clock.instant();
+            deferred.getDashboard();
+            background.runAll();
+            clock.advance(Duration.ofSeconds(700));
+            when(dataQualityService.getReport(null, 0, 1)).thenThrow(new DataAccessResourceFailureException("down"));
+            when(coverageHealthReader.countCoverage()).thenThrow(new DataAccessResourceFailureException("down"));
+
+            // Act
+            deferred.getDashboard();
+            background.runAll();
+            AdminCoverageHealthDTO dto = deferred.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.quality().status());
+            assertEquals(GENERATED_AT, dto.quality().generatedAt());
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.coverage().status());
+            assertEquals(firstCount, dto.coverage().countedAt());
+        }
+
+        @Test
+        @DisplayName("A refresh period below one second is refused")
+        void whenPeriodTooShort_thenRefused() {
+            assertThrows(IllegalArgumentException.class, () -> new AdminCoverageHealthServiceImpl(dataQualityService,
+                    coverageHealthReader, 0, clock, background));
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Coverage Percentages")
+    class PercentageTest {
+
+        @Test
+        @DisplayName("100.00 only when every property is covered, never by rounding")
+        void whenAlmostAll_thenNot100() {
+            assertEquals(new BigDecimal("99.99"),
+                    AdminCoverageHealthServiceImpl.source("ADDRESSES", 582_576, 582_589).coveragePercent());
+            assertEquals(new BigDecimal("100.00"),
+                    AdminCoverageHealthServiceImpl.source("ADDRESSES", 582_589, 582_589).coveragePercent());
+        }
+
+        @Test
+        @DisplayName("0.00 only when no property is covered, never by rounding")
+        void whenAlmostNone_thenNot0() {
+            assertEquals(new BigDecimal("0.01"), AdminCoverageHealthServiceImpl.source("IMAGES", 1, 582_589).coveragePercent());
+            assertEquals(new BigDecimal("0.00"), AdminCoverageHealthServiceImpl.source("IMAGES", 0, 582_589).coveragePercent());
+        }
+
+        @Test
+        @DisplayName("Other shares keep normal rounding to two decimals")
+        void whenInBetween_thenHalfUp() {
+            assertEquals(new BigDecimal("94.80"), AdminCoverageHealthServiceImpl.source("SALES", 552_272, 582_589).coveragePercent());
+            assertEquals(new BigDecimal("0.13"), AdminCoverageHealthServiceImpl.source("IMAGES", 777, 582_589).coveragePercent());
         }
     }
 }

@@ -30,10 +30,12 @@ public record AdminCoverageHealthDTO(
     public static final String HEALTHY = "HEALTHY";
     public static final String DEGRADED = "DEGRADED";
 
-    public static final String NOTE = "Read-only. Quality counts come from the data-quality scan (reused for up to its "
-            + "cache period, see quality.generatedAt); coverage counts properties with at least one recorded row per "
-            + "source; provider health comes from the latest finished recorded job: HEALTHY if COMPLETED, DEGRADED if "
-            + "PARTIAL, FAILED or INTERRUPTED, UNAVAILABLE if none. No provider is called.";
+    public static final String NOTE = "Read-only. Quality and coverage are full-table counts, kept in memory and "
+            + "recalculated in the background once they are older than the refresh period, so they are returned at "
+            + "once with their own times (quality.generatedAt, coverage.countedAt); until the first calculation ends "
+            + "they are UNAVAILABLE. Coverage counts properties with at least one recorded row per source. Provider "
+            + "health is read live from the latest finished recorded job: HEALTHY if COMPLETED, DEGRADED if PARTIAL, "
+            + "FAILED or INTERRUPTED, UNAVAILABLE if none. No provider is called.";
 
     /** Data-quality findings, or why they are unavailable. */
     public record Quality(
@@ -47,6 +49,8 @@ public record AdminCoverageHealthDTO(
     /** Source coverage over all properties, or why it is unavailable. */
     public record Coverage(
             @Schema(description = "AVAILABLE or UNAVAILABLE", example = AVAILABLE) String status,
+            @Schema(description = "When the counts were taken (UTC); null when they never were")
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Instant countedAt,
             @Schema(description = "Properties recorded; null when unavailable", example = "1000000") Long totalProperties,
             @Schema(description = "Coverage of each source") List<SourceCoverage> sources,
             @Schema(description = "Why the block is unavailable; null otherwise") String reason) {}
@@ -55,7 +59,8 @@ public record AdminCoverageHealthDTO(
     public record SourceCoverage(
             @Schema(description = "Source", example = "SALES") String source,
             @Schema(description = "Properties with at least one row", example = "700000") long propertiesCovered,
-            @Schema(description = "propertiesCovered / totalProperties x 100, two decimals", example = "70.00")
+            @Schema(description = "propertiesCovered / totalProperties x 100, two decimals; 100.00 only when every "
+                    + "property is covered and 0.00 only when none is", example = "70.00")
             BigDecimal coveragePercent) {}
 
     /** Health of one provider from its recorded jobs. */

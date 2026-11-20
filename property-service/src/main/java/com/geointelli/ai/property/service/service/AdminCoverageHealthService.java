@@ -10,7 +10,9 @@ public interface AdminCoverageHealthService {
 
     /**
      * Returns the quality counts, the source coverage and the health of each supported provider, with the time each
-     * was observed. A block that cannot be read, or has nothing to measure, is returned as UNAVAILABLE with a
+     * was observed. Does not wait for the full-table counts: quality and coverage are the last values calculated in
+     * the background (refreshed once older than the refresh period), UNAVAILABLE with a reason until the first
+     * calculation ends. A block that cannot be read, or has nothing to measure, is returned as UNAVAILABLE with a
      * reason instead of a default value.
      *
      * @return the dashboard

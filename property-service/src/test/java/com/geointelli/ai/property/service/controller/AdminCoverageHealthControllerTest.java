@@ -41,7 +41,8 @@ public class AdminCoverageHealthControllerTest {
             // Arrange
             var quality = new AdminCoverageHealthDTO.Quality(AdminCoverageHealthDTO.AVAILABLE,
                     Instant.parse("2026-11-16T09:58:00Z"), 352L, List.of(), null);
-            var coverage = new AdminCoverageHealthDTO.Coverage(AdminCoverageHealthDTO.AVAILABLE, 1000L,
+            var coverage = new AdminCoverageHealthDTO.Coverage(AdminCoverageHealthDTO.AVAILABLE,
+                    Instant.parse("2026-11-16T09:59:00Z"), 1000L,
                     List.of(new AdminCoverageHealthDTO.SourceCoverage("SALES", 700, new BigDecimal("70.00"))), null);
             var csv = new AdminCoverageHealthDTO.ProviderHealth("CSV_IMPORT", AdminCoverageHealthDTO.UNAVAILABLE,
                     null, null, null, null, 0, "No finished job is recorded");
@@ -53,6 +54,7 @@ public class AdminCoverageHealthControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.observedAt").value("2026-11-16T10:00:00Z"))
                     .andExpect(jsonPath("$.quality.generatedAt").value("2026-11-16T09:58:00Z"))
+                    .andExpect(jsonPath("$.coverage.countedAt").value("2026-11-16T09:59:00Z"))
                     .andExpect(jsonPath("$.quality.totalIssues").value(352))
                     .andExpect(jsonPath("$.coverage.sources[0].source").value("SALES"))
                     .andExpect(jsonPath("$.coverage.sources[0].coveragePercent").value(70.00))
