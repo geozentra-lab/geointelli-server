@@ -46,8 +46,8 @@ public class PropertyController {
         + "messages as caveats. Unsupported results expose only status, reasons and available method metadata. "
         + "A property without a prediction returns unsupported/not_modelled with HTTP 200. "
         + "Factors overlap and must not be summed. Comparables are separately selected supporting evidence, "
-        + "not transactions used to calculate this estimate. Forecast ranges are illustrative; 3/7-year values "
-        + "are trend scenarios. runId/inputHash reference retained Python scoring snapshots.")
+        + "not transactions used to calculate this estimate. Forecast ranges are illustrative; 3/5-year values "
+        + "are trend scenarios (sevenYears only on valuations published before the 5-year forecast replaced it). runId/inputHash reference retained Python scoring snapshots.")
     @ApiResponse(responseCode = "200", description = "Supported, limited or unsupported valuation")
     @ApiResponse(responseCode = "400", description = "Invalid property ID")
     @ApiResponse(responseCode = "404", description = "Property does not exist")

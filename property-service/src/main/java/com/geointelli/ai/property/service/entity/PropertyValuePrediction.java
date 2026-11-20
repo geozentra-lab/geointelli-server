@@ -80,6 +80,21 @@ public class PropertyValuePrediction extends AuditableEntity {
     @Column(name = "forecast_3y_high", precision = 38, scale = 2)
     private BigDecimal forecast3yHigh;
 
+    /** 5-year forecast (V43); replaces the 7-year forecast. NULL on rows published before the change. */
+    @Column(name = "forecast_5y", precision = 38, scale = 2)
+    private BigDecimal forecast5y;
+
+    @Column(name = "forecast_5y_low", precision = 38, scale = 2)
+    private BigDecimal forecast5yLow;
+
+    @Column(name = "forecast_5y_high", precision = 38, scale = 2)
+    private BigDecimal forecast5yHigh;
+
+    /**
+     * Previous 7-year forecast. Read only when forecast_5y is NULL: current rows until the first scoring run after
+     * V43, and history rows published before it (history keeps these columns). The model team's next step drops
+     * them from the current table; these three fields must become @Transient in that same change.
+     */
     @Column(name = "forecast_7y", precision = 38, scale = 2)
     private BigDecimal forecast7y;
 
@@ -120,7 +135,7 @@ public class PropertyValuePrediction extends AuditableEntity {
     /**
      * JSON: {"baseline": typical property value today, "factors": [{"f": code, "pct": effect %, "usd": effect $}]},
      * largest factors first, then "other". Codes: living_area, rooms, lot_and_land, age_and_condition,
-     * county_assessment, location, nearby_sales, sale_history, property_type, market_timing.
+     * county_assessment, location, nearby_sales, sale_history, property_type, market_timing, recent_sale.
      */
     @Column(name = "valuation_factors", columnDefinition = "text")
     private String valuationFactors;
