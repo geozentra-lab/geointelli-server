@@ -5,6 +5,10 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerification;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
 
@@ -19,6 +23,18 @@ public interface RealtorLicenseVerificationRepository extends JpaRepository<Real
     /** True when the owner already has a row in one of the given statuses (PENDING_REVIEW or VERIFIED blocks a new POST). */
     boolean existsByUserIdAndStatusIn(Long userId, List<RealtorLicenseVerificationStatus> statuses);
 
-    /** Admin listing by status, newest first (used by SCRUM-199). */
+    /** Admin listing by status, newest first (SCRUM-199). */
     Page<RealtorLicenseVerification> findByStatusOrderByIdDesc(RealtorLicenseVerificationStatus status, Pageable pageable);
+
+    /** Admin listing of every submission whatever its status, newest first (SCRUM-199). */
+    Page<RealtorLicenseVerification> findAllByOrderByIdDesc(Pageable pageable);
+
+    /**
+     * Loads one submission and locks its row until the current transaction ends (SELECT ... FOR UPDATE), so two
+     * admins deciding the same request at the same time are serialised: the second one sees the row already
+     * decided and is refused (SCRUM-199, "a decision only once per pending submission").
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT v FROM RealtorLicenseVerification v WHERE v.id = :id")
+    Optional<RealtorLicenseVerification> findByIdForUpdate(@Param("id") Long id);
 }
