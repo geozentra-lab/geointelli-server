@@ -1,8 +1,8 @@
 # Realtor license verification, applicant side — `/api/users/me/realtor-license`
 
 Ticket SCRUM-200 (parent SCRUM-198 "Submit and manually verify real estate agent licenses", epic
-SCRUM-39 "Realtor Workspace"). The admin side (list pending, approve, reject) is SCRUM-199 and is
-not part of this document; it builds on the same table.
+SCRUM-39 "Realtor Workspace"). The admin side (list pending, approve, reject) is SCRUM-199, documented
+in `realtor-license-review.md`; it builds on the same table.
 
 A signed-in user who works as a real estate agent submits the details of their license. GeoZentra
 checks the state registry (for Florida, the DBPR licensee search) and records a decision. The user

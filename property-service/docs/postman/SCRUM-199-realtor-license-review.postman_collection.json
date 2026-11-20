@@ -1,0 +1,822 @@
+{
+  "info": {
+    "name": "SCRUM-199 Realtor license review (admin)",
+    "description": "Admin side of realtor license verification: access control, listing, approval, rejection. Variables: baseUrl, admin_token (Keycloak realm role admin), user_a_token and user_b_token (applicants without the role, with no pending or verified submission). Run in order; 03, 11 and 14 call the SCRUM-200 applicant endpoint to create the rows the admin decides on.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{admin_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "user_a_token",
+      "value": ""
+    },
+    {
+      "key": "user_b_token",
+      "value": ""
+    },
+    {
+      "key": "submissionA",
+      "value": ""
+    },
+    {
+      "key": "submissionB",
+      "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 List without token (401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 List as user A without admin role (403)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_a_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 User A submits a license (setup, SCRUM-200)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"Jane Doe\",\n  \"licensingState\": \"FL\",\n  \"licenseNumber\": \"SL3456789\",\n  \"licenseExpirationDate\": \"2030-03-31\",\n  \"brokerageName\": \"Sunshine Realty LLC\",\n  \"workEmail\": \"jane@sunshine-realty.example\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_a_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "Creates the pending row the admin decides on. User A must have no pending or verified submission; otherwise delete A's rows first: DELETE FROM realtor_license_verifications WHERE user_id = (SELECT id FROM users WHERE email = '<A>');"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('submissionA', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Admin lists pending submissions",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications?status=PENDING_REVIEW&page=0&size=20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "PENDING_REVIEW"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "20"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const p = pm.response.json();",
+              "pm.test('page shape', () => { pm.expect(p).to.have.property('content'); pm.expect(p).to.have.property('totalElements'); });",
+              "const row = p.content.find(r => r.id === Number(pm.collectionVariables.get('submissionA')));",
+              "pm.test('contains submission A with applicant', () => { pm.expect(row).to.not.be.undefined; pm.expect(row.status).to.eql('PENDING_REVIEW'); pm.expect(row.applicantUserId).to.be.a('number'); pm.expect(row).to.have.property('applicantEmail'); });",
+              "pm.test('newest first', () => { const ids = p.content.map(r => r.id); pm.expect(ids).to.eql([...ids].sort((a, b) => b - a)); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Admin reads submission A",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionA}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionA}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('pending, nothing decided yet', () => { pm.expect(r.status).to.eql('PENDING_REVIEW'); pm.expect(r.decisionMethod).to.eql(null); pm.expect(r.reviewedByUserId).to.eql(null); pm.expect(r.decidedAt).to.eql(null); pm.expect(r.registrySource).to.eql(null); pm.expect(r.rejectionReason).to.eql(null); });",
+              "pm.test('submitted details present', () => { pm.expect(r.licenseHolderName).to.eql('Jane Doe'); pm.expect(r.licenseNumber).to.eql('SL3456789'); pm.expect(r.submittedAt).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Approve without registrySource (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionA}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionA}}",
+            "approve"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the field', () => pm.expect(JSON.stringify(pm.response.json())).to.include('registrySource'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Reject without rejectionReason (400)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionA}}/reject",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionA}}",
+            "reject"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"registrySource\": \"Florida DBPR licensee search\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the field', () => pm.expect(JSON.stringify(pm.response.json())).to.include('rejectionReason'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Approve submission A",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionA}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionA}}",
+            "approve"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"registrySource\": \"Florida DBPR licensee search\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('verified by this admin', () => { pm.expect(r.status).to.eql('VERIFIED'); pm.expect(r.decisionMethod).to.eql('MANUAL'); pm.expect(r.reviewedByUserId).to.be.a('number'); pm.expect(r.decidedAt).to.be.a('string'); pm.expect(r.registrySource).to.eql('Florida DBPR licensee search'); pm.expect(r.rejectionReason).to.eql(null); });",
+              "pm.collectionVariables.set('adminUserId', r.reviewedByUserId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Approve submission A again (409)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionA}}/approve",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionA}}",
+            "approve"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"registrySource\": \"Florida DBPR licensee search\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.test('says already decided', () => pm.expect(JSON.stringify(pm.response.json())).to.include('already decided'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 User A profile shows VERIFIED",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_a_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('realtorLicenseStatus VERIFIED', () => pm.expect(pm.response.json().realtorLicenseStatus).to.eql('VERIFIED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 User B submits a license (setup, SCRUM-200)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"John Roe\",\n  \"licensingState\": \"FL\",\n  \"licenseNumber\": \"BK1122334\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_b_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('submissionB', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Admin rejects submission B with a reason",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/{{submissionB}}/reject",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "{{submissionB}}",
+            "reject"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"registrySource\": \"Florida DBPR licensee search\",\n  \"rejectionReason\": \"Name does not match the registry\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('rejected with reason', () => { pm.expect(r.status).to.eql('REJECTED'); pm.expect(r.decisionMethod).to.eql('MANUAL'); pm.expect(r.rejectionReason).to.eql('Name does not match the registry'); pm.expect(r.reviewedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); pm.expect(r.decidedAt).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 User B reads the rejection",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_b_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('applicant sees REJECTED and the reason, not the reviewer', () => { pm.expect(r.status).to.eql('REJECTED'); pm.expect(r.rejectionReason).to.eql('Name does not match the registry'); pm.expect(r).to.not.have.property('reviewedByUserId'); pm.expect(r).to.not.have.property('registrySource'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 User B submits again after rejection (201)",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{baseUrl}}/api/users/me/realtor-license",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "users",
+            "me",
+            "realtor-license"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"licenseHolderName\": \"John A. Roe\",\n  \"licensingState\": \"FL\",\n  \"licenseNumber\": \"BK1122334\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_b_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "pm.test('new pending row', () => { const r = pm.response.json(); pm.expect(r.status).to.eql('PENDING_REVIEW'); pm.expect(r.id).to.not.eql(Number(pm.collectionVariables.get('submissionB'))); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Admin lists VERIFIED only",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications?status=VERIFIED",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications"
+          ],
+          "query": [
+            {
+              "key": "status",
+              "value": "VERIFIED"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const ids = pm.response.json().content.map(r => r.id);",
+              "pm.test('A listed, B not', () => { pm.expect(ids).to.include(Number(pm.collectionVariables.get('submissionA'))); pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('submissionB'))); });",
+              "pm.test('all VERIFIED', () => pm.response.json().content.forEach(r => pm.expect(r.status).to.eql('VERIFIED')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Unknown submission (404)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/realtor-license-verifications/999999",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "realtor-license-verifications",
+            "999999"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
