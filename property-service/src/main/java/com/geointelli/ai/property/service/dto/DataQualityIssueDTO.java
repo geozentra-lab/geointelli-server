@@ -1,13 +1,26 @@
 package com.geointelli.ai.property.service.dto;
 
+import java.time.Instant;
 import com.geointelli.ai.property.service.enums.DataQualityCategory;
+import com.geointelli.ai.property.service.enums.DataQualityReviewStatus;
 import com.geointelli.ai.property.service.enums.DataQualityRule;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-/** One data-quality issue with a reproducible reference and the provenance of the property (SCRUM-189). */
+/**
+ * One data-quality issue with a reproducible reference and the provenance of the property (SCRUM-189), plus its
+ * current review state from the review log (SCRUM-190).
+ */
 @Data
 public class DataQualityIssueDTO {
+    @Schema(description = "Current review status (SCRUM-190); OPEN when never reviewed or reopened", example = "RESOLVED")
+    private DataQualityReviewStatus reviewStatus = DataQualityReviewStatus.OPEN;
+    @Schema(description = "users.id of the admin of the latest review action; null when never reviewed", example = "3")
+    private Long reviewedByUserId;
+    @Schema(description = "Time of the latest review action (UTC); null when never reviewed")
+    private Instant reviewedAt;
+    @Schema(description = "Reason of the latest review action; null when never reviewed or not given", example = "Corrected in the November re-import")
+    private String reviewReason;
     @Schema(description = "Reproducible issue reference RULE:entityType:entityId", example = "SALE_DUPLICATE:SALE:9012")
     private String reference;
     @Schema(description = "Rule that found the issue", example = "SALE_DUPLICATE")
