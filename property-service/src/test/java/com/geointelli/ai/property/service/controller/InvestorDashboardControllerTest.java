@@ -5,6 +5,7 @@ import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
 import com.geointelli.ai.property.service.dto.PortfolioGeographyDTO;
 import com.geointelli.ai.property.service.dto.PortfolioMetricDTO;
 import com.geointelli.ai.property.service.entity.HoldingOccupancyStatus;
+import com.geointelli.ai.property.service.service.InvestorIncomeExpensesReturnsService;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
 import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +42,9 @@ public class InvestorDashboardControllerTest {
 
     @MockBean
     InvestorValueEquityDebtService investorValueEquityDebtService;
+
+    @MockBean
+    InvestorIncomeExpensesReturnsService investorIncomeExpensesReturnsService;
 
     private static final String URL = "/api/dashboards/investor/occupancy-exposure";
 

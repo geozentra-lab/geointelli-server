@@ -1,18 +1,23 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.InvestorIncomeExpensesReturnsCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
+import com.geointelli.ai.property.service.service.InvestorIncomeExpensesReturnsService;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
 import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.YearMonth;
 
 /**
  * Investor dashboard (SCRUM-85). Each card has its own endpoint so it can be verified alone;
@@ -28,6 +33,7 @@ public class InvestorDashboardController {
 
     private final InvestorOccupancyExposureService investorOccupancyExposureService;
     private final InvestorValueEquityDebtService investorValueEquityDebtService;
+    private final InvestorIncomeExpensesReturnsService investorIncomeExpensesReturnsService;
 
     /**
      * Occupancy and exposure card: occupancy counts, rental occupancy, state and county exposure and their coverage.
@@ -64,5 +70,31 @@ public class InvestorDashboardController {
     public ResponseEntity<InvestorValueEquityDebtCardDTO> valueEquityDebt(
             @RequestParam(required = false) Long portfolioId) {
         return ResponseEntity.ok(investorValueEquityDebtService.getCard(portfolioId));
+    }
+
+    /**
+     * Income, expenses and returns card: recorded cash and contract-rent figures over the same whole months.
+     *
+     * @param portfolioId optional portfolio of the current user; all portfolios when omitted
+     * @param fromMonth   first month (yyyy-MM, included); give both months or none for the last 12 complete months
+     * @param toMonth     last month (yyyy-MM, included); must be before the current month
+     * @return 200 with the card (EMPTY without holdings); 400 if portfolioId is invalid, a month is not yyyy-MM,
+     *         only one month is given, fromMonth is after toMonth, toMonth is not a complete past month, fromMonth
+     *         is before 1900-01 or the period exceeds 120 months; 401 without a bearer token; 404 if the portfolio
+     *         is missing or belongs to another user
+     */
+    @GetMapping("/income-expenses-returns")
+    @Operation(summary = "Income, expenses and returns card of my investor dashboard", description = "actual = the "
+            + "SCRUM-74 financial summaries of all my portfolios, or of portfolioId, over whole months: recorded "
+            + "income, expenses and cash flow after ownership share, with the expense categories that have no "
+            + "record (missing costs, not 0). projected = the monthly contract rent of the rented holdings x the "
+            + "same months and the gross yield, from the SCRUM-64 investment calculation; projected NOI is not "
+            + "calculated because holdings store no operating costs. The sections are never added together. "
+            + "Without months: the last 12 complete months (UTC).")
+    public ResponseEntity<InvestorIncomeExpensesReturnsCardDTO> incomeExpensesReturns(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth) {
+        return ResponseEntity.ok(investorIncomeExpensesReturnsService.getCard(portfolioId, fromMonth, toMonth));
     }
 }
