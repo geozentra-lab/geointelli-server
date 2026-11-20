@@ -59,7 +59,8 @@ public class RealtorLicenseReviewController {
         + "that the name matches and the license is active. Body: registrySource (required, max 200, for example "
         + "'Florida DBPR licensee search'); rejectionReason must be absent. The row becomes VERIFIED with decision "
         + "method MANUAL, the current admin as reviewer and the decision time. 409 when the submission was already "
-        + "decided; a decision is recorded only once.")
+        + "decided; a decision is recorded only once. 409 also when the submitted licenseExpirationDate is before "
+        + "today (UTC): the license expired while the submission was pending, so reject it instead.")
     public RealtorLicenseReviewDTO approve(@PathVariable Long id, @Valid @RequestBody RealtorLicenseDecisionRequest request) {
         return reviews.approve(id, request);
     }

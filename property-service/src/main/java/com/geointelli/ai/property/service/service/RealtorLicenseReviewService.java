@@ -51,7 +51,8 @@ public interface RealtorLicenseReviewService {
      * @throws com.geointelli.ai.property.service.exception.RealtorLicenseNotFoundException (404) when unknown
      * @throws IllegalArgumentException (400) when a rejection reason is given
      * @throws org.springframework.web.server.ResponseStatusException 409 when the submission is no longer
-     *         PENDING_REVIEW (already approved or rejected, possibly by another admin a moment ago)
+     *         PENDING_REVIEW (already approved or rejected, possibly by another admin a moment ago), or when the
+     *         submitted license expiration date is before today (UTC): the license expired while pending
      */
     RealtorLicenseReviewDTO approve(Long id, RealtorLicenseDecisionRequest request);
 

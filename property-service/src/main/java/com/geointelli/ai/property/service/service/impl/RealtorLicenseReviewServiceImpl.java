@@ -1,6 +1,8 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -103,6 +105,14 @@ public class RealtorLicenseReviewServiceImpl implements RealtorLicenseReviewServ
         if (row.getStatus() != RealtorLicenseVerificationStatus.PENDING_REVIEW) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Submission " + id + " was already decided (" + row.getStatus() + "); a decision is recorded only once");
+        }
+        // Submission refuses a past expiration date, but a license can expire while the submission waits in the
+        // queue. Same rule as submission (today in UTC), so a license expiring today can still be approved.
+        LocalDate expiration = row.getLicenseExpirationDate();
+        if (outcome == RealtorLicenseVerificationStatus.VERIFIED && expiration != null
+                && expiration.isBefore(LocalDate.now(ZoneOffset.UTC))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "The license expired on " + expiration
+                + " while the submission was pending; reject it so the applicant can submit the renewed license");
         }
         row.setStatus(outcome);
         row.setDecisionMethod(RealtorLicenseDecisionMethod.MANUAL);

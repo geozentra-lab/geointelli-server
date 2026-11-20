@@ -77,6 +77,7 @@ Body:
 | 400 | `registrySource` missing or blank, or a `rejectionReason` was sent along |
 | 404 | unknown ID |
 | 409 | the submission is no longer `PENDING_REVIEW` (already approved or rejected) |
+| 409 | the submitted `licenseExpirationDate` is before today (UTC): the license expired while the submission was pending. Reject it instead; the applicant can then submit the renewed license. A license expiring today, or a submission without an expiration date, can be approved. |
 
 ### `POST /api/admin/realtor-license-verifications/{id}/reject`
 
@@ -132,6 +133,7 @@ automatic registry check and shown so an admin would see its finding when it exi
 1. Open the pending list, newest first.
 2. For one submission, search the registry (Florida: DBPR licensee search) by license number.
 3. Name matches and license is active: approve, with the registry you used as `registrySource`.
+   Approve is refused (409) when the submitted expiration date has passed since the submission.
 4. Name does not match, license inactive or expired, number unknown: reject with a reason the
    applicant can act on ("Name does not match the registry", "License expired on ...").
 5. Registry unavailable or result unclear: do nothing; the submission stays pending.
