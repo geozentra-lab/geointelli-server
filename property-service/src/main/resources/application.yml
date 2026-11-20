@@ -95,6 +95,12 @@ contact-requests:
 data-quality:
   summary-cache-seconds: ${DATA_QUALITY_SUMMARY_CACHE_SECONDS:600}
 
+# Admin coverage and provider-health dashboard: quality and coverage are recalculated in the background once they
+# are older than this; a request never waits for the full-table counts (provider health is always read live).
+admin:
+  coverage-health:
+    refresh-seconds: ${ADMIN_COVERAGE_HEALTH_REFRESH_SECONDS:600}
+
 alerts:
   enabled: ${ALERTS_ENABLED:false}
   poll-delay-millis: ${ALERTS_POLL_DELAY_MILLIS:30000}
