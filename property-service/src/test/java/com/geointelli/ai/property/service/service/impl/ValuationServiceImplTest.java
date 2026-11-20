@@ -41,7 +41,7 @@ import com.geointelli.ai.property.service.service.ComparableService;
 class ValuationServiceImplTest {
     private static final long ID = 95340L;
     private static final String FORECAST_NOTE =
-        "Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.";
+        "Three- and five-year forecasts are trend scenarios; forecast ranges are illustrative.";
 
     private PropertyRepository propertyRepository;
     private PropertyValuePredictionRepository predictions;
@@ -74,9 +74,9 @@ class ValuationServiceImplTest {
         p.setForecast3y(new BigDecimal("906966.08"));
         p.setForecast3yLow(new BigDecimal("275678.47"));
         p.setForecast3yHigh(new BigDecimal("2983865.44"));
-        p.setForecast7y(new BigDecimal("1045157.70"));
-        p.setForecast7yLow(new BigDecimal("226584.78"));
-        p.setForecast7yHigh(new BigDecimal("4820953.26"));
+        p.setForecast5y(new BigDecimal("990000.00"));
+        p.setForecast5yLow(new BigDecimal("250000.00"));
+        p.setForecast5yHigh(new BigDecimal("3900000.00"));
         p.setHasSaleHistory(true);
         p.setLastSalePrice(new BigDecimal("610000.00"));
         p.setLastSaleDate(LocalDate.of(2019, 5, 2));
@@ -249,7 +249,8 @@ class ValuationServiceImplTest {
             assertThat(response.estimate().confidence()).isEqualTo("high");
             assertThat(response.forecasts().oneYear().value()).isEqualTo(new BigDecimal("844881.25"));
             assertThat(response.forecasts().threeYears().high()).isEqualTo(new BigDecimal("2983865.44"));
-            assertThat(response.forecasts().sevenYears().low()).isEqualTo(new BigDecimal("226584.78"));
+            assertThat(response.forecasts().fiveYears().low()).isEqualTo(new BigDecimal("250000.00"));
+            assertThat(response.forecasts().sevenYears()).isNull();
             assertThat(response.method().valuationMethod()).isEqualTo("gbm_hedonic");
             assertThat(response.method().predictionDate()).isEqualTo(LocalDate.of(2026, 10, 1));
             assertThat(response.method().dataThrough()).isEqualTo(LocalDate.of(2026, 9, 30));
@@ -472,6 +473,83 @@ class ValuationServiceImplTest {
                 .thenThrow(new TransactionTimedOutException("timed out"));
 
             assertThat(service.getValuation(ID).evidence().comparables().status()).isEqualTo("UNAVAILABLE");
+        }
+    }
+
+    @Nested
+    @DisplayName("Five-year forecast (V43) and the recent-sale contract additions")
+    class FiveYearForecast {
+        @Test
+        @DisplayName("When a row was published before the 5-year forecast, then its 7-year value stays seven years, never five")
+        void whenOnlySevenYearStored_thenShownAsSevenYears() {
+            PropertyValuePrediction p = supported();
+            p.setForecast5y(null);
+            p.setForecast5yLow(null);
+            p.setForecast5yHigh(null);
+            p.setForecast7y(new BigDecimal("1045157.70"));
+            p.setForecast7yLow(new BigDecimal("226584.78"));
+            p.setForecast7yHigh(new BigDecimal("4820953.26"));
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(p));
+
+            ValuationResponse response = service.getValuationWithoutComparables(ID);
+
+            assertThat(response.forecasts().fiveYears()).isNull();
+            assertThat(response.forecasts().sevenYears().value()).isEqualTo(new BigDecimal("1045157.70"));
+            assertThat(response.forecasts().sevenYears().high()).isEqualTo(new BigDecimal("4820953.26"));
+            assertThat(response.notes()).contains(
+                "Three- and seven-year forecasts are trend scenarios; forecast ranges are illustrative.",
+                "This valuation was published before the five-year forecast replaced the seven-year one.");
+        }
+
+        @Test
+        @DisplayName("When both horizons are stored, then only the 5-year forecast is returned")
+        void whenBothStored_thenFiveYearsOnly() {
+            PropertyValuePrediction p = supported();
+            p.setForecast7y(new BigDecimal("1045157.70"));
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(p));
+
+            ValuationResponse response = service.getValuationWithoutComparables(ID);
+
+            assertThat(response.forecasts().fiveYears().value()).isEqualTo(new BigDecimal("990000.00"));
+            assertThat(response.forecasts().sevenYears()).isNull();
+            assertThat(response.notes()).contains(FORECAST_NOTE)
+                .noneMatch(note -> note.contains("seven-year"));
+        }
+
+        @Test
+        @DisplayName("When neither horizon is stored, then the 5-year slot stays empty and no 7-year value is invented")
+        void whenNoLongHorizon_thenEmptyFiveYears() {
+            PropertyValuePrediction p = supported();
+            p.setForecast5y(null);
+            p.setForecast5yLow(null);
+            p.setForecast5yHigh(null);
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(p));
+
+            ValuationResponse response = service.getValuationWithoutComparables(ID);
+
+            assertThat(response.forecasts().fiveYears().value()).isNull();
+            assertThat(response.forecasts().sevenYears()).isNull();
+        }
+
+        @Test
+        @DisplayName("The recent-sale factor and reason codes have display labels from VALUATION_CONTRACT.md")
+        void recentSaleLabels() {
+            PropertyValuePrediction p = supported();
+            p.setValuationStatus("limited");
+            p.setStatusReasons("[\"recent_sale_disagrees\",\"recent_sale_outside_range\"]");
+            p.setValuationFactors("{\"baseline\": 757546, \"factors\": [{\"f\": \"recent_sale\", \"pct\": -8.4, \"usd\": -70000}]}");
+            when(predictions.findByPropertyId(ID)).thenReturn(Optional.of(p));
+
+            ValuationResponse response = service.getValuationWithoutComparables(ID);
+
+            assertThat(response.reasons()).containsExactly(
+                new Reason("recent_sale_disagrees",
+                    "The model and this property's recent sale differ by more than 20%; the estimate leans on the sale."),
+                new Reason("recent_sale_outside_range",
+                    "This property's qualified sale from the last 90 days lies outside the estimated range."));
+            Factor sale = response.explanation().factors().get(0);
+            assertThat(sale.label()).isEqualTo("Recent sale");
+            assertThat(sale.text()).isEqualTo("Its recent qualified sale lowers the value by about 8%.");
         }
     }
 }

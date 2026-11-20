@@ -271,7 +271,7 @@ public class PropertyControllerTest {
             return new ValuationResponse("supported", List.of(),
                     new Estimate(new BigDecimal("822855.47"), new Range(new BigDecimal("676666.91"), new BigDecimal("1000626.92")),
                             new Range(new BigDecimal("612063.54"), new BigDecimal("1106243.20")), "high"),
-                    new Forecasts(new Projection(new BigDecimal("844881.25"), null, null), null, null),
+                    new Forecasts(new Projection(new BigDecimal("844881.25"), null, null), null, null, null),
                     new Explanation(new BigDecimal("755227"), "summary",
                             List.of(new Factor("living_area", "Living area", new BigDecimal("12.345"), new BigDecimal("90123.40"),
                                     "Its living area raises the value by about 12%.")), "note"),

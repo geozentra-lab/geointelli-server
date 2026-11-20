@@ -1,0 +1,43 @@
+{
+  "info": {
+    "name": "SCRUM-75 Property forecasts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "property_id",
+      "value": "301400"
+    }
+  ],
+  "auth": {
+    "bearer": [
+      {
+        "key": "token",
+        "type": "string",
+        "value": "{{access_token}}"
+      }
+    ],
+    "type": "bearer"
+  },
+  "item": [
+    {
+      "name": "Stored 1/3/5-year forecast",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/properties/id/{{property_id}}/forecast",
+        "description": "Expect 200. status is valuation support; available indicates forecast availability. USD values and bounds are unchanged model output. Low confidence remains visible. Three/five-year values are trend scenarios. The 5-year forecast replaced the 7-year one: until the first scoring run after migration V43 (and on older valuations) a property shows forecasts.sevenYears instead of forecasts.fiveYears. Try supported, limited, unsupported and unmodelled IDs. Existing unmodelled properties return unsupported/not_modelled with 200; nonexistent properties return 404."
+      }
+    },
+    {
+      "name": "Invalid ID returns 400",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/properties/id/0/forecast"
+      }
+    }
+  ]
+}
