@@ -1,8 +1,10 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.LenderApplicationPipelineCardDTO;
 import com.geointelli.ai.property.service.dto.LenderApprovedFundedCardDTO;
 import com.geointelli.ai.property.service.dto.MortgageContextCardDTO;
 import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.LenderApplicationPipelineCardService;
 import com.geointelli.ai.property.service.service.LenderApprovedFundedService;
 import com.geointelli.ai.property.service.service.LenderDashboardMortgageContextService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +34,7 @@ public class LenderDashboardController {
 
     private final LenderDashboardMortgageContextService mortgageContextService;
     private final LenderApprovedFundedService approvedFundedService;
+    private final LenderApplicationPipelineCardService applicationPipelineService;
     private final CurrentUserService currentUser;
 
     /**
@@ -76,5 +79,25 @@ public class LenderDashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
         Long actor = currentUser.getCurrentUserEntity().getId();
         return ResponseEntity.ok(approvedFundedService.getCard(actor, organizationId, fromDate, toDate));
+    }
+
+    /**
+     * Application pipeline card: number of the organization's recorded applications in each stage right now.
+     *
+     * @param organizationId organization the current user belongs to
+     * @return 200 with every stage, 0 included (EMPTY without applications); 400 if organizationId is missing,
+     *         not a number or not positive; 401 without a bearer token; 404 if the organization is missing or the
+     *         user is not a member
+     */
+    @GetMapping("/application-pipeline")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Application pipeline card of the lender dashboard", description = "Counts the recorded "
+            + "applications of organizationId (membership required) by their current stage: DRAFT, SUBMITTED, "
+            + "UNDER_REVIEW, APPROVED, FUNDED, REJECTED and WITHDRAWN, 0 included. Reporting period: a snapshot "
+            + "at generatedAt (CURRENT_STATUS), not filtered by date; each application is counted once, in its "
+            + "current stage.")
+    public ResponseEntity<LenderApplicationPipelineCardDTO> applicationPipeline(@RequestParam Long organizationId) {
+        Long actor = currentUser.getCurrentUserEntity().getId();
+        return ResponseEntity.ok(applicationPipelineService.getCard(actor, organizationId));
     }
 }
