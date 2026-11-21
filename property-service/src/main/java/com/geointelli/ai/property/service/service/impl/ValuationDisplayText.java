@@ -18,7 +18,11 @@ final class ValuationDisplayText {
         Map.entry("no_sale_history", "No recorded sale; the estimate relies on attributes and nearby sales."),
         Map.entry("no_living_area", "Living area is not recorded for this property."),
         Map.entry("no_forecast", "Forecasts are not available for this property type or location."),
-        Map.entry("not_modelled", "This property type is not covered by the model yet."));
+        Map.entry("not_modelled", "This property type is not covered by the model yet."),
+        Map.entry("recent_sale_disagrees",
+            "The model and this property's recent sale differ by more than 20%; the estimate leans on the sale."),
+        Map.entry("recent_sale_outside_range",
+            "This property's qualified sale from the last 90 days lies outside the estimated range."));
 
     private static final Map<String, String> FACTORS = Map.ofEntries(
         Map.entry("living_area", "Living area"), Map.entry("rooms", "Bedrooms and bathrooms"),
@@ -26,7 +30,7 @@ final class ValuationDisplayText {
         Map.entry("county_assessment", "County assessment"), Map.entry("location", "Location"),
         Map.entry("nearby_sales", "Nearby sales"), Map.entry("sale_history", "Sale history"),
         Map.entry("property_type", "Property type"), Map.entry("market_timing", "Market timing"),
-        Map.entry("other", "Other factors"));
+        Map.entry("recent_sale", "Recent sale"), Map.entry("other", "Other factors"));
 
     private static final Map<String, String> SUBJECTS = Map.ofEntries(
         Map.entry("living_area", "Its living area"),
@@ -39,6 +43,7 @@ final class ValuationDisplayText {
         Map.entry("sale_history", "Its last sale price"),
         Map.entry("property_type", "Its property type"),
         Map.entry("market_timing", "Market timing"),
+        Map.entry("recent_sale", "Its recent qualified sale"),
         Map.entry("other", "The remaining model contribution"));
 
     private ValuationDisplayText() {}

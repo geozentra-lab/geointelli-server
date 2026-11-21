@@ -1,0 +1,818 @@
+{
+  "info": {
+    "name": "SCRUM-190 Data-quality findings review (admin)",
+    "description": "Review and resolution of data-quality findings: access control, reference validation, supported transitions, reasons, history, and the review state shown in the scanner list. Variables: baseUrl, admin_token (Keycloak realm role admin), user_a_token (a user without the role). Run in order; 03 reads the first PROPERTY_MISSING_ADDRESS finding from the scanner (SCRUM-189), so the database must contain at least one property without an address that was never reviewed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{admin_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "user_a_token",
+      "value": ""
+    },
+    {
+      "key": "ref",
+      "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Review state without token (401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/PROPERTY_MISSING_ADDRESS:PROPERTY:1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "PROPERTY_MISSING_ADDRESS:PROPERTY:1"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Review state as user A without admin role (403)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/PROPERTY_MISSING_ADDRESS:PROPERTY:1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "PROPERTY_MISSING_ADDRESS:PROPERTY:1"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_a_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Scanner list, first missing-address finding (setup, SCRUM-189)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues?rule=PROPERTY_MISSING_ADDRESS&page=0&size=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues"
+          ],
+          "query": [
+            {
+              "key": "rule",
+              "value": "PROPERTY_MISSING_ADDRESS"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "1"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Takes the reference of the first PROPERTY_MISSING_ADDRESS finding as {{ref}}. The finding must not have been reviewed before; otherwise pick another reference or reopen it first."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const p = pm.response.json();",
+              "pm.test('one finding with a review status', () => { pm.expect(p.issues.content.length).to.eql(1); pm.expect(p.issues.content[0]).to.have.property('reviewStatus'); });",
+              "pm.collectionVariables.set('ref', p.issues.content[0].reference);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Review state of the finding: OPEN, no history",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('OPEN and never reviewed', () => { pm.expect(r.reference).to.eql(pm.collectionVariables.get('ref')); pm.expect(r.status).to.eql('OPEN'); pm.expect(r.rule).to.eql('PROPERTY_MISSING_ADDRESS'); pm.expect(r.entityType).to.eql('PROPERTY'); pm.expect(r.reviewedByUserId).to.eql(null); pm.expect(r.history).to.eql([]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Unknown rule in the reference (400)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/FOO:PROPERTY:1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "FOO:PROPERTY:1"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the rule', () => pm.expect(JSON.stringify(pm.response.json())).to.include('FOO'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Entity type not the rule's (400)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/PROPERTY_MISSING_ADDRESS:SALE:1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "PROPERTY_MISSING_ADDRESS:SALE:1"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Entity does not exist (404)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/PROPERTY_MISSING_ADDRESS:PROPERTY:999999999",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "PROPERTY_MISSING_ADDRESS:PROPERTY:999999999"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 RESOLVED without reason (400)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"RESOLVED\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the field', () => pm.expect(JSON.stringify(pm.response.json())).to.include('reason'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Take into review (IN_REVIEW, no reason needed)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('IN_REVIEW by this admin', () => { pm.expect(r.status).to.eql('IN_REVIEW'); pm.expect(r.reviewedByUserId).to.be.a('number'); pm.expect(r.reviewedAt).to.be.a('string'); pm.expect(r.reason).to.eql(null); pm.expect(r.history.length).to.eql(1); pm.expect(r.history[0].fromStatus).to.eql('OPEN'); pm.expect(r.history[0].toStatus).to.eql('IN_REVIEW'); });",
+              "pm.collectionVariables.set('adminUserId', r.reviewedByUserId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Same status again (409)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.test('says the move is not allowed', () => pm.expect(JSON.stringify(pm.response.json())).to.include('IN_REVIEW'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Resolve with a reason",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"RESOLVED\",\n  \"reason\": \"Corrected in the November re-import\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('RESOLVED, reason kept, history grows', () => { pm.expect(r.status).to.eql('RESOLVED'); pm.expect(r.reason).to.eql('Corrected in the November re-import'); pm.expect(r.reviewedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); pm.expect(r.history.length).to.eql(2); pm.expect(r.history[1].fromStatus).to.eql('IN_REVIEW'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 RESOLVED to IGNORED is not supported (409)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IGNORED\",\n  \"reason\": \"Trying an unsupported move\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Scanner list shows the review state",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues?rule=PROPERTY_MISSING_ADDRESS&page=0&size=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues"
+          ],
+          "query": [
+            {
+              "key": "rule",
+              "value": "PROPERTY_MISSING_ADDRESS"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "size",
+              "value": "1"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "The finding is still reported because the data was not actually changed; the review state is shown next to it."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const i = pm.response.json().issues.content[0];",
+              "pm.test('first finding is RESOLVED with reason and reviewer', () => { pm.expect(i.reference).to.eql(pm.collectionVariables.get('ref')); pm.expect(i.reviewStatus).to.eql('RESOLVED'); pm.expect(i.reviewReason).to.eql('Corrected in the November re-import'); pm.expect(i.reviewedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); pm.expect(i.reviewedAt).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Reopen with a reason",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"OPEN\",\n  \"reason\": \"Address still missing after the re-import\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('OPEN again, history kept', () => { pm.expect(r.status).to.eql('OPEN'); pm.expect(r.reason).to.eql('Address still missing after the re-import'); pm.expect(r.history.length).to.eql(3); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Full history of the finding",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const h = pm.response.json().history.map(e => e.fromStatus + '>' + e.toStatus);",
+              "pm.test('OPEN > IN_REVIEW > RESOLVED > OPEN', () => pm.expect(h).to.eql(['OPEN>IN_REVIEW', 'IN_REVIEW>RESOLVED', 'RESOLVED>OPEN']));",
+              "pm.test('every action has reviewer and time', () => pm.response.json().history.forEach(e => { pm.expect(e.reviewedByUserId).to.be.a('number'); pm.expect(e.reviewedAt).to.be.a('string'); }));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Review as user A without admin role (403)",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/data-quality/issues/{{ref}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "data-quality",
+            "issues",
+            "{{ref}}"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"IN_REVIEW\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{user_a_token}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

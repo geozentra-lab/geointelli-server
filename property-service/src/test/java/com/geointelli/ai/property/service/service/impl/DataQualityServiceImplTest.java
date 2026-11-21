@@ -7,6 +7,7 @@ import com.geointelli.ai.property.service.enums.DataQualityCategory;
 import com.geointelli.ai.property.service.enums.DataQualityRule;
 import com.geointelli.ai.property.service.repository.DataQualityIssueRow;
 import com.geointelli.ai.property.service.repository.DataQualityRepository;
+import com.geointelli.ai.property.service.service.DataQualityReviewService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ public class DataQualityServiceImplTest {
 
     // 0 seconds: counts are recalculated on each request, so each test sees its own stubs.
     DataQualityServiceImpl dataQualityService =
-            new DataQualityServiceImpl(dataQualityRepository, 0, Clock.systemUTC());
+            new DataQualityServiceImpl(dataQualityRepository, mock(DataQualityReviewService.class), 0, Clock.systemUTC());
 
     /** Clock moved by the tests to expire reused counts. */
     private static final class MutableClock extends Clock {
@@ -205,7 +206,7 @@ public class DataQualityServiceImplTest {
 
         final Instant start = Instant.parse("2026-11-13T10:00:00Z");
         final MutableClock clock = new MutableClock(start);
-        final DataQualityServiceImpl cachingService = new DataQualityServiceImpl(dataQualityRepository, 600, clock);
+        final DataQualityServiceImpl cachingService = new DataQualityServiceImpl(dataQualityRepository, mock(DataQualityReviewService.class), 600, clock);
 
         @Test
         @DisplayName("When requested again within the reuse time, then reuse the counts and read the issue page again")
@@ -285,7 +286,7 @@ public class DataQualityServiceImplTest {
         void whenReuseTimeNegative_thenThrowIllegalArgumentException() {
             // Act & Assert
             IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                    () -> new DataQualityServiceImpl(dataQualityRepository, -1, clock));
+                    () -> new DataQualityServiceImpl(dataQualityRepository, mock(DataQualityReviewService.class), -1, clock));
             assertEquals("data-quality.summary-cache-seconds must be 0 or greater", exception.getMessage());
         }
     }
