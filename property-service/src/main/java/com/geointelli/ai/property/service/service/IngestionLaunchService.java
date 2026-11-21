@@ -48,6 +48,20 @@ public interface IngestionLaunchService {
             String createdBy);
 
     /**
+     * Validates and queues an environmental reference load (SCRUM-201): one file per job, loaded with COPY.
+     * FLOOD_ZONES needs the county of the file; the statewide datasets need no county and replace the state's rows.
+     *
+     * @param input        the file, stored under its own name (for example 12086_miami-dade.csv)
+     * @param downloadedOn date the source was downloaded, recorded as the data vintage
+     * @return the queued job
+     * @throws IllegalArgumentException if the request or the file is invalid, or the first row is outside the scope
+     * @throws org.springframework.web.server.ResponseStatusException 409 if migration V42 is missing, or a statewide
+     *         job for the dataset is already active
+     */
+    ImportJobDTO startReference(IngestionDataset dataset, String county, String state, InputSource input,
+            java.time.LocalDate downloadedOn, String createdBy);
+
+    /**
      * Queues a Miami-Dade API ingestion job.
      * @throws org.springframework.web.server.ResponseStatusException 409 if one for the dataset is already active
      */

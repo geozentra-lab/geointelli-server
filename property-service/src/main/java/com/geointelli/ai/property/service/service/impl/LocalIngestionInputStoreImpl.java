@@ -27,7 +27,9 @@ public class LocalIngestionInputStoreImpl implements IngestionInputStore {
 
     public LocalIngestionInputStoreImpl(IngestionProperties properties) {
         this.baseDirectory = Path.of(properties.getInput().getLocalDirectory()).toAbsolutePath().normalize();
-        this.instanceId = properties.getJobs().getInstanceId();
+        // The same ID the worker claims jobs with (host name when INGESTION_INSTANCE_ID is empty); with the raw,
+        // empty setting the job's scope matched no instance and the job stayed QUEUED until its deadline.
+        this.instanceId = properties.getJobs().resolvedInstanceId();
     }
 
     @Override

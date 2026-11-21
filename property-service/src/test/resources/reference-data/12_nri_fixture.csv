@@ -1,0 +1,4 @@
+fips5,STATEABBRV,COUNTY,TRACTFIPS,NRI_VER,RISK_SCORE,RISK_RATNG,HRCN_RISKS,HRCN_RISKR,IFLD_RISKS,IFLD_RISKR,CFLD_RISKS,CFLD_RISKR,TRND_RISKS,TRND_RISKR,WFIR_RISKS,WFIR_RISKR,SWND_RISKS,SWND_RISKR,LTNG_RISKS,LTNG_RISKR,HWAV_RISKS,HWAV_RISKR
+12086,FL,Miami-Dade,12086000100,December 2025,97.5,Very High,99.1,Very High,80.25,Relatively High,95,Very High,40.5,Relatively Moderate,10.2,Very Low,70,Relatively Moderate,55.123456,Relatively Moderate,30,Relatively Low
+12086,FL,Miami-Dade,12086000200,December 2025,12.3,Relatively Low,,Insufficient Data,0.000000,No Rating,,Not Applicable,20,Relatively Low,0.000000,No Rating,15,Very Low,22,Relatively Low,9,Very Low
+12086,FL,Miami-Dade,12086000300,December 2025,0.021404,,1,Very Low,2,Very Low,3,Very Low,4,Very Low,5,Very Low,6,Very Low,7,Very Low,8,Very Low

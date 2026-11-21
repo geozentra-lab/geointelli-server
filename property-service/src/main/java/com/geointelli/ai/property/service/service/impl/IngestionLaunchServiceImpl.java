@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +42,7 @@ import com.geointelli.ai.property.service.service.IngestionInputStore.StoredInpu
 import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService;
+import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -56,6 +59,7 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     static final String INPUT_CHANGED = "INPUT_CHANGED";
     static final String DATASET_JOB_ACTIVE = "DATASET_JOB_ACTIVE";
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
+    private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
 
     private final IngestionJobService jobService;
     private final IngestionInputStore inputStore;
@@ -64,6 +68,7 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     private final CountyService countyService;
     private final IngestionProperties properties;
     private final ObjectMapper objectMapper;
+    private final ReferenceDataScopeService referenceScopes;
 
     @Override
     public InputSource upload(MultipartFile file, String name) {
@@ -129,7 +134,60 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setSourceState(state.trim());
         job.setCounty(resolved);
         job.setCreatedBy(createdBy);
-        storeInputs(job, inputs);
+        storeInputs(job, inputs, null);
+        return queue(job);
+    }
+
+    @Override
+    public ImportJobDTO startReference(IngestionDataset dataset, String county, String state, InputSource input,
+            LocalDate downloadedOn, String createdBy) {
+        if (dataset == null || !dataset.isReferenceData()) {
+            throw new IllegalArgumentException("Not a reference dataset: " + dataset);
+        }
+        if (state == null || state.isBlank()) throw new IllegalArgumentException("sourceState is required");
+        if (downloadedOn == null) {
+            throw new IllegalArgumentException("downloadedOn (yyyy-MM-dd) is required: the date the source was downloaded");
+        }
+        if (downloadedOn.isAfter(LocalDate.now())) throw new IllegalArgumentException("downloadedOn is in the future");
+        if (input == null) throw new IllegalArgumentException("Upload 'file' or name a staged file");
+        if (!REFERENCE_FILE_NAME.matcher(input.name()).matches()) {
+            throw new IllegalArgumentException("The file name must be a .csv name of letters, digits, '-', '_' or '.'");
+        }
+        if (input.size() <= 0) throw new IllegalArgumentException("The file " + input.name() + " is empty");
+
+        County resolved = null;
+        String scope;
+        try {
+            if (dataset == IngestionDataset.FLOOD_ZONES) {
+                if (county == null || county.isBlank()) {
+                    throw new IllegalArgumentException("county is required for flood-zones: one county file per job");
+                }
+                resolved = countyService.resolve(county, state);
+                scope = referenceScopes.countyFips(resolved.getId()).orElseThrow(() -> new IllegalArgumentException(
+                    "The county " + county.trim() + " has no FIPS code (counties.fips_code)"));
+            } else {
+                if (county != null && !county.isBlank()) {
+                    throw new IllegalArgumentException(dataset.getPathSegment() + " loads a whole state; omit county");
+                }
+                scope = referenceScopes.stateFips(state).orElseThrow(() -> new IllegalArgumentException(
+                    "Unknown state " + state.trim() + ", or none of its counties has a FIPS code"));
+            }
+        } catch (IllegalStateException unavailable) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, unavailable.getMessage());
+        }
+        validateReferenceInput(dataset, input, scope);
+        if (dataset != IngestionDataset.FLOOD_ZONES) requireNoActiveJob(dataset);
+
+        IngestionJob job = new IngestionJob();
+        job.setId(UUID.randomUUID());
+        job.setJobType(ImportJobType.REFERENCE_DATA_IMPORT);
+        job.setDataset(dataset);
+        job.setStatus(IngestionJobStatus.QUEUED);
+        job.setSourceCounty(resolved == null ? null : county.trim());
+        job.setSourceState(state.trim());
+        job.setCounty(resolved);
+        job.setCreatedBy(createdBy);
+        storeInputs(job, List.of(input), downloadedOn.toString());
         return queue(job);
     }
 
@@ -256,7 +314,36 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         }
     }
 
-    private void storeInputs(IngestionJob job, List<InputSource> inputs) {
+    /**
+     * Checks a reference file before anything is stored: the columns the importer reads, and that its first row
+     * belongs to the county (flood zones) or state the job replaces.
+     */
+    private void validateReferenceInput(IngestionDataset dataset, InputSource input, String scope) {
+        validateHeader(input, dataset.getRequiredHeaders());
+        CSVRecord first;
+        try (Reader reader = new java.io.InputStreamReader(input.open(), StandardCharsets.UTF_8);
+                CSVParser parser = HEADER_FORMAT.parse(reader)) {
+            var records = parser.iterator();
+            if (!records.hasNext()) throw new IllegalArgumentException("The file " + input.name() + " has no data rows");
+            first = records.next();
+        } catch (IOException | java.io.UncheckedIOException | IllegalStateException unreadable) {
+            throw new IllegalArgumentException("The file " + input.name() + " is not a readable CSV: " + unreadable.getMessage());
+        }
+        String key = switch (dataset) {
+            case FLOOD_ZONES -> first.get("fips5");
+            case CENSUS_TRACTS -> first.get("tract_fips");
+            case NRI_TRACTS -> first.get("TRACTFIPS");
+            case STORM_EVENTS -> String.format("%2s", first.get("STATE_FIPS").trim()).replace(' ', '0');
+            default -> "";
+        };
+        boolean matches = dataset == IngestionDataset.FLOOD_ZONES ? scope.equals(key.trim()) : key.trim().startsWith(scope);
+        if (!matches) {
+            throw new IllegalArgumentException("The file " + input.name() + " is for " + key.trim() + ", not "
+                + (dataset == IngestionDataset.FLOOD_ZONES ? "the county " : "the state ") + scope);
+        }
+    }
+
+    private void storeInputs(IngestionJob job, List<InputSource> inputs, String downloadedOn) {
         String location = inputStore.locationFor(job.getId());
         List<StoredInputRef> stored = new ArrayList<>();
         try {
@@ -273,7 +360,7 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setInputStorage(inputStore.storageType());
         job.setInputLocation(location);
         job.setInputScope(inputStore.scope());
-        job.setParametersJson(json(new IngestionJobParameters(stored)));
+        job.setParametersJson(json(new IngestionJobParameters(stored, downloadedOn)));
         if ("LOCAL".equals(job.getInputStorage())) {
             // Nobody else can run it: give up if this instance does not claim it in time.
             job.setLeaseExpiresAt(Instant.now().plusSeconds(properties.getJobs().getQueueDeadlineSeconds()));
