@@ -38,13 +38,14 @@ public class JdbcPriceDivergenceReader implements PriceDivergenceReader{
     private static final String GROUP_VALUATIONS = """
             SELECT COUNT(*) AS sample_size,
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY v.predicted_price) AS median_value,
+                   AVG(v.predicted_price) AS average_value,
                    percentile_cont(0.5) WITHIN GROUP (ORDER BY v.predicted_price / p.building_heated_area)
                        FILTER (WHERE p.building_heated_area > 0) AS median_price_per_sqft,
                    MIN(v.prediction_date) AS valuations_from,
                    MAX(v.prediction_date) AS valuations_to
             """ + GROUP_FROM;
 
-    private static final String GROUP_FACTORS = "SELECT v.valuation_factors " + GROUP_FROM
+    private static final String GROUP_FACTORS = "SELECT v.predicted_price, v.valuation_factors " + GROUP_FROM
             + "  AND v.valuation_factors IS NOT NULL\n";
 
     private static final String BUILDING = "p.parent_property_id = ?";
@@ -73,6 +74,7 @@ public class JdbcPriceDivergenceReader implements PriceDivergenceReader{
         return jdbc.queryForObject(GROUP_VALUATIONS.formatted(condition(level)), (rs, row) -> new GroupValuations(
                 rs.getLong("sample_size"),
                 rs.getBigDecimal("median_value"),
+                rs.getBigDecimal("average_value"),
                 rs.getBigDecimal("median_price_per_sqft"),
                 rs.getObject("valuations_from", LocalDate.class),
                 rs.getObject("valuations_to", LocalDate.class)), parameters(level, subject));
@@ -80,8 +82,9 @@ public class JdbcPriceDivergenceReader implements PriceDivergenceReader{
 
     /** {@inheritDoc} */
     @Override
-    public List<String> groupValuationFactors(Level level, Subject subject) {
-        return jdbc.queryForList(GROUP_FACTORS.formatted(condition(level)), String.class, parameters(level, subject));
+    public List<MemberFactors> groupValuationFactors(Level level, Subject subject) {
+        return jdbc.query(GROUP_FACTORS.formatted(condition(level)), (rs, row) -> new MemberFactors(
+                rs.getBigDecimal("predicted_price"), rs.getString("valuation_factors")), parameters(level, subject));
     }
 
     /** Fixed SQL per level; no user text is ever concatenated. */

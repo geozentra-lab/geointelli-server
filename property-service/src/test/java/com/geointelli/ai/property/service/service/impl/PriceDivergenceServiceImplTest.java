@@ -8,6 +8,7 @@ import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader.GroupValuations;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader.Level;
+import com.geointelli.ai.property.service.repository.PriceDivergenceReader.MemberFactors;
 import com.geointelli.ai.property.service.service.ValuationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,10 +51,15 @@ public class PriceDivergenceServiceImplTest {
                 new ValuationResponse.Method("model", "v1", NOV_10, NOV_10, null), null, List.of());
     }
 
-    private static List<String> rows(int count, String json) {
-        List<String> rows = new ArrayList<>();
+    private static MemberFactors member(String estimate, String json) {
+        return new MemberFactors(new BigDecimal(estimate), json);
+    }
+
+    /** Members whose estimate is exactly baseline 400,000 plus their factors (80,000). */
+    private static List<MemberFactors> rows(int count, String json) {
+        List<MemberFactors> rows = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            rows.add(json);
+            rows.add(member("480000", json));
         }
         return rows;
     }
@@ -63,13 +69,15 @@ public class PriceDivergenceServiceImplTest {
         when(reader.findSubject(PROPERTY_ID)).thenReturn(Optional.of(SUBJECT));
         when(valuationService.getValuationWithoutComparables(PROPERTY_ID)).thenReturn(valuation("520000", List.of(
                 factor("living_area", "Living area", "60000"), factor("location", "Location", "40000"))));
-        when(reader.groupValuations(eq(Level.BUILDING), any())).thenReturn(new GroupValuations(3, null, null, OCT_1, OCT_1));
-        when(reader.groupValuations(eq(Level.COMMUNITY), any()))
-                .thenReturn(new GroupValuations(12, new BigDecimal("480000"), new BigDecimal("480.123"), OCT_1, NOV_10));
-        when(reader.groupValuations(eq(Level.MICRO_MARKET), any()))
-                .thenReturn(new GroupValuations(47, new BigDecimal("450000"), new BigDecimal("450"), OCT_1, NOV_10));
-        List<String> factors = rows(6, GROUP_FACTORS);
-        factors.add("not json");
+        when(reader.groupValuations(eq(Level.BUILDING), any()))
+                .thenReturn(new GroupValuations(3, null, null, null, OCT_1, OCT_1));
+        when(reader.groupValuations(eq(Level.COMMUNITY), any())).thenReturn(new GroupValuations(12,
+                new BigDecimal("480000"), new BigDecimal("490000.004"), new BigDecimal("480.123"), OCT_1, NOV_10));
+        when(reader.groupValuations(eq(Level.MICRO_MARKET), any())).thenReturn(new GroupValuations(47,
+                new BigDecimal("450000"), new BigDecimal("455000"), new BigDecimal("450"), OCT_1, NOV_10));
+        List<MemberFactors> factors = rows(6, GROUP_FACTORS);
+        // unreadable factors: neither its factors nor its estimate enter the averages
+        factors.add(member("9999999", "not json"));
         when(reader.groupValuationFactors(eq(Level.COMMUNITY), any())).thenReturn(factors);
     }
 
@@ -93,6 +101,7 @@ public class PriceDivergenceServiceImplTest {
             assertEquals("CORAL GARDENS SUB", community.groupKey());
             assertEquals(12, community.sampleSize());
             assertEquals(new BigDecimal("480000.00"), community.medianValue());
+            assertEquals(new BigDecimal("490000.00"), community.averageValue());
             assertEquals(new BigDecimal("480.12"), community.medianPricePerSqft());
             assertEquals(new BigDecimal("40000.00"), community.divergenceUsd());
             assertEquals(new BigDecimal("8.33"), community.divergencePct());
@@ -111,6 +120,7 @@ public class PriceDivergenceServiceImplTest {
             assertEquals(PriceDivergenceDTO.UNAVAILABLE, building.status());
             assertEquals(3, building.sampleSize());
             assertNull(building.medianValue());
+            assertNull(building.averageValue());
             assertNull(building.divergenceUsd());
             assertNull(building.divergencePct());
             assertEquals("Only 3 other valued properties in this group (minimum 5)", building.reason());
@@ -178,6 +188,8 @@ public class PriceDivergenceServiceImplTest {
             assertEquals(PriceDivergenceDTO.AVAILABLE, drivers.status());
             assertEquals("COMMUNITY", drivers.comparedWith());
             assertEquals(6, drivers.sampleSize());
+            assertEquals(new BigDecimal("480000.00"), drivers.groupAverageValue());
+            assertEquals(new BigDecimal("40000.00"), drivers.divergenceFromAverageUsd());
             assertEquals("living_area", drivers.factors().get(0).code());
             assertEquals(new BigDecimal("60000.00"), drivers.factors().get(0).subjectUsd());
             assertEquals(new BigDecimal("45000.00"), drivers.factors().get(0).groupAverageUsd());
@@ -190,12 +202,12 @@ public class PriceDivergenceServiceImplTest {
         }
 
         @Test
-        @DisplayName("When drivers are available, then the residual is the divergence minus the explained amount")
+        @DisplayName("When drivers are available, then the residual is the gap from the group average minus the explained amount")
         void whenDriversAvailable_thenResidualIsCalculated() {
             // Act
             PriceDivergenceDTO dto = service.getDivergence(PROPERTY_ID);
 
-            // Assert
+            // Assert: the property is 20,000 above baseline plus its factors; the members are exactly on it
             assertEquals(PriceDivergenceDTO.AVAILABLE, dto.unexplainedResidual().status());
             assertEquals("COMMUNITY", dto.unexplainedResidual().benchmark());
             assertEquals(new BigDecimal("20000.00"), dto.unexplainedResidual().usd());
@@ -204,12 +216,39 @@ public class PriceDivergenceServiceImplTest {
         }
 
         @Test
+        @DisplayName("When a few members are much higher than the rest, then the residual does not include the median-to-average gap")
+        void whenGroupSkewed_thenResidualExcludesMedianAverageGap() {
+            // Arrange: subject 500,000 = 400,000 + 60,000 + 40,000 exactly; four members at 480,000 and one at
+            // 980,000, each exactly baseline plus its factors; median 480,000, average 580,000
+            when(valuationService.getValuationWithoutComparables(PROPERTY_ID)).thenReturn(valuation("500000", List.of(
+                    factor("living_area", "Living area", "60000"), factor("location", "Location", "40000"))));
+            when(reader.groupValuations(eq(Level.COMMUNITY), any())).thenReturn(new GroupValuations(5,
+                    new BigDecimal("480000"), new BigDecimal("580000"), null, OCT_1, OCT_1));
+            List<MemberFactors> factors = rows(4, GROUP_FACTORS);
+            factors.add(member("980000", "{\"baseline\":400000,\"factors\":[{\"f\":\"living_area\",\"usd\":545000},"
+                    + "{\"f\":\"location\",\"usd\":38000},{\"f\":\"other\",\"usd\":-3000}]}"));
+            when(reader.groupValuationFactors(eq(Level.COMMUNITY), any())).thenReturn(factors);
+
+            // Act
+            PriceDivergenceDTO dto = service.getDivergence(PROPERTY_ID);
+
+            // Assert
+            Benchmark community = dto.benchmarks().get(1);
+            assertEquals(new BigDecimal("20000.00"), community.divergenceUsd());
+            assertEquals(new BigDecimal("580000.00"), community.averageValue());
+            assertEquals(new BigDecimal("580000.00"), dto.drivers().groupAverageValue());
+            assertEquals(new BigDecimal("-80000.00"), dto.drivers().divergenceFromAverageUsd());
+            assertEquals(new BigDecimal("-80000.00"), dto.drivers().explainedUsd());
+            assertEquals(new BigDecimal("0.00"), dto.unexplainedResidual().usd());
+        }
+
+        @Test
         @DisplayName("When fewer than 5 group members have readable factors, then drivers and residual are unavailable")
         void whenFewFactors_thenUnavailable() {
             // Arrange
-            List<String> factors = rows(4, GROUP_FACTORS);
-            factors.add("not json");
-            factors.add("{\"baseline\":400000}");
+            List<MemberFactors> factors = rows(4, GROUP_FACTORS);
+            factors.add(member("480000", "not json"));
+            factors.add(member("480000", "{\"baseline\":400000}"));
             when(reader.groupValuationFactors(eq(Level.COMMUNITY), any())).thenReturn(factors);
 
             // Act
@@ -220,6 +259,8 @@ public class PriceDivergenceServiceImplTest {
             assertEquals(4, dto.drivers().sampleSize());
             assertTrue(dto.drivers().factors().isEmpty());
             assertNull(dto.drivers().explainedUsd());
+            assertNull(dto.drivers().groupAverageValue());
+            assertNull(dto.drivers().divergenceFromAverageUsd());
             assertEquals(PriceDivergenceDTO.UNAVAILABLE, dto.unexplainedResidual().status());
             assertNull(dto.unexplainedResidual().usd());
         }
@@ -243,7 +284,7 @@ public class PriceDivergenceServiceImplTest {
         @DisplayName("When no group has enough evidence, then drivers, residual and confidence are unavailable")
         void whenNoBenchmark_thenEverythingUnavailable() {
             // Arrange
-            when(reader.groupValuations(any(), any())).thenReturn(new GroupValuations(2, null, null, OCT_1, OCT_1));
+            when(reader.groupValuations(any(), any())).thenReturn(new GroupValuations(2, null, null, null, OCT_1, OCT_1));
 
             // Act
             PriceDivergenceDTO dto = service.getDivergence(PROPERTY_ID);

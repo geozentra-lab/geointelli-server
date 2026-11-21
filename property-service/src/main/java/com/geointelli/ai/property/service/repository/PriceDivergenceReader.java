@@ -41,12 +41,22 @@ public interface PriceDivergenceReader {
      *
      * @param sampleSize         properties with a usable estimate
      * @param medianValue        median estimate, null when the sample is empty
+     * @param averageValue       average estimate, null when the sample is empty
      * @param medianPricePerSqft median estimate per sq ft of the members with a living area
      * @param valuationsFrom     oldest prediction date
      * @param valuationsTo       newest prediction date
      */
-    record GroupValuations(long sampleSize, BigDecimal medianValue, BigDecimal medianPricePerSqft,
-                           LocalDate valuationsFrom, LocalDate valuationsTo) {
+    record GroupValuations(long sampleSize, BigDecimal medianValue, BigDecimal averageValue,
+                           BigDecimal medianPricePerSqft, LocalDate valuationsFrom, LocalDate valuationsTo) {
+    }
+
+    /**
+     * One group member with stored valuation factors.
+     *
+     * @param estimate its estimate
+     * @param factors  its valuation_factors JSON
+     */
+    record MemberFactors(BigDecimal estimate, String factors) {
     }
 
     /**
@@ -63,18 +73,19 @@ public interface PriceDivergenceReader {
      *
      * @param level   group level
      * @param subject the property
-     * @return the sample size, medians and prediction dates
+     * @return the sample size, median, average and prediction dates
      */
     GroupValuations groupValuations(Level level, Subject subject);
 
     /**
-     * Returns the stored valuation_factors JSON of the same properties as {@link #groupValuations}.
+     * Returns the estimate and stored valuation_factors JSON of the same properties as {@link #groupValuations},
+     * for those that have factors.
      *
      * @param level   group level
      * @param subject the property
-     * @return one JSON text per property that has factors
+     * @return one entry per property that has factors
      */
-    List<String> groupValuationFactors(Level level, Subject subject);
+    List<MemberFactors> groupValuationFactors(Level level, Subject subject);
 
 
 }

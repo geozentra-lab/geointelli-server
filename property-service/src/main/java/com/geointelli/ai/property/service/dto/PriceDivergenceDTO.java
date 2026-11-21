@@ -17,7 +17,7 @@ import java.util.List;
  * @param benchmarks           one entry per level: BUILDING, COMMUNITY, MICRO_MARKET
  * @param primaryBenchmark     the most specific AVAILABLE level, or null when none has enough evidence
  * @param drivers              valuation factors compared with the primary benchmark group
- * @param unexplainedResidual  part of the primary divergence that the factors do not account for
+ * @param unexplainedResidual  part of the gap from the group average that no single factor accounts for
  * @param confidence           how much the explanation can be trusted
  * @param askingPriceComparison asking-price comparison, kept separate from the valuation benchmarks
  * @param note                 how the values are built
@@ -31,8 +31,10 @@ public record PriceDivergenceDTO(Long propertyId, String folio, Instant observed
     public static final String BASIS = "ZENTRAVALUE_ESTIMATES";
     public static final String DRIVER_SOURCE = "ZentraValue valuation factors";
     public static final String NOTE = "Benchmarks are the median ZentraValue estimates of other properties in the same "
-            + "group, not completed sales. Driver amounts are differences between the model's own valuation factors; "
-            + "none are estimated here. The residual also includes the gap between the group median and its average.";
+            + "group, not completed sales. Drivers compare the property's own valuation factors with the group's "
+            + "average factors, so they explain the gap from the group average; none are estimated here. The model "
+            + "combines its factors by multiplying them, so their dollar amounts do not add up exactly: the residual "
+            + "is the part of that gap that no single factor accounts for.";
 
     /**
      * The property's own valuation.
@@ -57,6 +59,8 @@ public record PriceDivergenceDTO(Long propertyId, String folio, Instant observed
      * @param basis              what the benchmark is built from
      * @param sampleSize         other properties of the group with a usable estimate
      * @param medianValue        median estimate of the group
+     * @param averageValue       average estimate of the group; far from medianValue when a few members are much
+     *                           higher or lower than the rest
      * @param medianPricePerSqft median estimate per sq ft of the group members with a living area
      * @param divergenceUsd      property estimate minus medianValue
      * @param divergencePct      divergenceUsd as a percentage of medianValue, two decimals
@@ -65,22 +69,27 @@ public record PriceDivergenceDTO(Long propertyId, String folio, Instant observed
      * @param reason             why a value is missing, null otherwise
      */
     public record Benchmark(String level, String status, String groupKey, String basis, long sampleSize,
-                            BigDecimal medianValue, BigDecimal medianPricePerSqft, BigDecimal divergenceUsd, BigDecimal divergencePct,
+                            BigDecimal medianValue, BigDecimal averageValue, BigDecimal medianPricePerSqft,
+                            BigDecimal divergenceUsd, BigDecimal divergencePct,
                             LocalDate valuationsFrom, LocalDate valuationsTo, String reason) {
     }
 
     /**
-     * Valuation factors of the property compared with the average factors of the primary benchmark group.
+     * Valuation factors of the property compared with the average factors of the primary benchmark group. Both
+     * averages are taken over the same members, so divergenceFromAverageUsd = explainedUsd + unexplainedResidual.usd.
      *
-     * @param status       AVAILABLE or UNAVAILABLE
-     * @param source       where the amounts come from
-     * @param comparedWith level of the group the factors are compared with
-     * @param sampleSize   group members whose factors could be read
-     * @param factors      one entry per factor, largest difference first
-     * @param explainedUsd sum of the differences
-     * @param reason       why the drivers are unavailable, null otherwise
+     * @param status                   AVAILABLE or UNAVAILABLE
+     * @param source                   where the amounts come from
+     * @param comparedWith             level of the group the factors are compared with
+     * @param sampleSize               group members whose factors could be read
+     * @param groupAverageValue        average estimate of those members
+     * @param divergenceFromAverageUsd property estimate minus groupAverageValue
+     * @param factors                  one entry per factor, largest difference first
+     * @param explainedUsd             sum of the differences
+     * @param reason                   why the drivers are unavailable, null otherwise
      */
     public record Drivers(String status, String source, String comparedWith, long sampleSize,
+                          BigDecimal groupAverageValue, BigDecimal divergenceFromAverageUsd,
                           List<DriverFactor> factors, BigDecimal explainedUsd, String reason) {
     }
 
@@ -98,11 +107,12 @@ public record PriceDivergenceDTO(Long propertyId, String folio, Instant observed
     }
 
     /**
-     * Part of the primary divergence that the drivers do not account for.
+     * Part of the gap from the group average that no single factor accounts for: the model multiplies its factors,
+     * so factors that reinforce each other add more than their separate dollar amounts.
      *
      * @param status    AVAILABLE or UNAVAILABLE
-     * @param benchmark level the divergence is measured against
-     * @param usd       primary divergence minus explainedUsd
+     * @param benchmark level of the group the drivers are compared with
+     * @param usd       drivers.divergenceFromAverageUsd minus drivers.explainedUsd
      * @param reason    why it is unavailable, null otherwise
      */
     public record Residual(String status, String benchmark, BigDecimal usd, String reason) {

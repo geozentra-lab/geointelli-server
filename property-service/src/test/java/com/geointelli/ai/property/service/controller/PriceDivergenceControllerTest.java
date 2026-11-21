@@ -38,19 +38,20 @@ public class PriceDivergenceControllerTest {
         var subject = new PriceDivergenceDTO.Subject("supported", new BigDecimal("520000.00"), new BigDecimal("1000"),
                 new BigDecimal("520.00"), LocalDate.parse("2026-11-10"), "medium");
         var building = new PriceDivergenceDTO.Benchmark("BUILDING", PriceDivergenceDTO.UNAVAILABLE, "900",
-                PriceDivergenceDTO.BASIS, 3, null, null, null, null, null, null,
+                PriceDivergenceDTO.BASIS, 3, null, null, null, null, null, null, null,
                 "Only 3 other valued properties in this group (minimum 5)");
         var community = new PriceDivergenceDTO.Benchmark("COMMUNITY", PriceDivergenceDTO.AVAILABLE, "CORAL GARDENS SUB",
-                PriceDivergenceDTO.BASIS, 12, new BigDecimal("480000.00"), new BigDecimal("455.10"),
-                new BigDecimal("40000.00"), new BigDecimal("8.33"), LocalDate.parse("2026-10-01"),
-                LocalDate.parse("2026-11-10"), null);
+                PriceDivergenceDTO.BASIS, 12, new BigDecimal("480000.00"), new BigDecimal("495000.00"),
+                new BigDecimal("455.10"), new BigDecimal("40000.00"), new BigDecimal("8.33"),
+                LocalDate.parse("2026-10-01"), LocalDate.parse("2026-11-10"), null);
         var drivers = new PriceDivergenceDTO.Drivers(PriceDivergenceDTO.AVAILABLE, PriceDivergenceDTO.DRIVER_SOURCE,
-                "COMMUNITY", 12, List.of(new PriceDivergenceDTO.DriverFactor("living_area", "Living area",
+                "COMMUNITY", 12, new BigDecimal("495000.00"), new BigDecimal("25000.00"),
+                List.of(new PriceDivergenceDTO.DriverFactor("living_area", "Living area",
                 new BigDecimal("60000.00"), new BigDecimal("45000.00"), new BigDecimal("15000.00"))),
                 new BigDecimal("15000.00"), null);
         return new PriceDivergenceDTO(1542L, "0141390012345", Instant.parse("2026-11-18T10:00:00Z"), subject,
                 List.of(building, community), "COMMUNITY", drivers,
-                new PriceDivergenceDTO.Residual(PriceDivergenceDTO.AVAILABLE, "COMMUNITY", new BigDecimal("25000.00"), null),
+                new PriceDivergenceDTO.Residual(PriceDivergenceDTO.AVAILABLE, "COMMUNITY", new BigDecimal("10000.00"), null),
                 new PriceDivergenceDTO.Confidence("MEDIUM", "COMMUNITY benchmark from 12 valued properties"),
                 new PriceDivergenceDTO.AskingPriceComparison(PriceDivergenceDTO.UNAVAILABLE, null, null,
                         "No asking-price data is recorded"),
@@ -76,11 +77,14 @@ public class PriceDivergenceControllerTest {
                     .andExpect(jsonPath("$.benchmarks[0].medianValue").doesNotExist())
                     .andExpect(jsonPath("$.benchmarks[0].reason").value("Only 3 other valued properties in this group (minimum 5)"))
                     .andExpect(jsonPath("$.benchmarks[1].divergencePct").value(8.33))
+                    .andExpect(jsonPath("$.benchmarks[1].averageValue").value(495000.00))
                     .andExpect(jsonPath("$.benchmarks[1].valuationsFrom").value("2026-10-01"))
                     .andExpect(jsonPath("$.primaryBenchmark").value("COMMUNITY"))
+                    .andExpect(jsonPath("$.drivers.groupAverageValue").value(495000.00))
+                    .andExpect(jsonPath("$.drivers.divergenceFromAverageUsd").value(25000.00))
                     .andExpect(jsonPath("$.drivers.factors[0].differenceUsd").value(15000.00))
                     .andExpect(jsonPath("$.drivers.factors[0].pct").doesNotExist())
-                    .andExpect(jsonPath("$.unexplainedResidual.usd").value(25000.00))
+                    .andExpect(jsonPath("$.unexplainedResidual.usd").value(10000.00))
                     .andExpect(jsonPath("$.askingPriceComparison.status").value("UNAVAILABLE"));
             verify(priceDivergenceService).getDivergence(1542L);
         }

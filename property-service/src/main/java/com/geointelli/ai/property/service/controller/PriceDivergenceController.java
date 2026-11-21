@@ -32,8 +32,10 @@ public class PriceDivergenceController {
     @Operation(summary = "Price divergence of a property", description = "Benchmarks are the median stored ZentraValue "
             + "estimates of the other properties of the same building (parent property), community (subdivision) and "
             + "micro-market (neighborhood), with at least 5 valued properties. primaryBenchmark is the most specific "
-            + "available level. drivers compare the property's valuation factors with the group's average factors; "
-            + "unexplainedResidual is the part of the divergence they do not cover. No percentage is estimated. "
+            + "available level; each benchmark also shows the group's averageValue. drivers compare the property's "
+            + "valuation factors with the group's average factors and explain divergenceFromAverageUsd (estimate minus "
+            + "the average estimate of the same members); unexplainedResidual is the part of that gap no single factor "
+            + "accounts for, because the model multiplies its factors. No percentage is estimated. "
             + "askingPriceComparison is separate and UNAVAILABLE because no asking price is recorded.")
     public PriceDivergenceDTO priceDivergence(@PathVariable Long id) {
         return priceDivergenceService.getDivergence(id);

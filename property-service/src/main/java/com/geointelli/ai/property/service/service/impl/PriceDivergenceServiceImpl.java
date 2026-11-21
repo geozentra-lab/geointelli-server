@@ -17,6 +17,7 @@ import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader.GroupValuations;
 import com.geointelli.ai.property.service.repository.PriceDivergenceReader.Level;
+import com.geointelli.ai.property.service.repository.PriceDivergenceReader.MemberFactors;
 import com.geointelli.ai.property.service.service.PriceDivergenceService;
 import com.geointelli.ai.property.service.service.ValuationService;
 import lombok.RequiredArgsConstructor;
@@ -35,8 +36,9 @@ import java.util.Map;
 
 /**
  * Benchmarks are medians of the other properties' stored estimates; drivers are differences between the property's
- * valuation factors and the group's average factors. Nothing is estimated: a value without evidence is null with a
- * reason.
+ * valuation factors and the group's average factors, and explain the gap from the group's average estimate over the
+ * same members. The residual is the part of that gap the factors' dollar amounts do not add up to, because the model
+ * multiplies its factors. Nothing is estimated: a value without evidence is null with a reason.
  */
 @Service
 @RequiredArgsConstructor
@@ -92,12 +94,12 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
         String key = groupKey(level, property);
         if (key == null) {
             return new Benchmark(level.name(), PriceDivergenceDTO.UNAVAILABLE, null, PriceDivergenceDTO.BASIS, 0,
-                    null, null, null, null, null, null, missingKeyReason(level));
+                    null, null, null, null, null, null, null, missingKeyReason(level));
         }
         GroupValuations group = reader.groupValuations(level, property);
         if (group.sampleSize() < MIN_SAMPLE) {
             return new Benchmark(level.name(), PriceDivergenceDTO.UNAVAILABLE, key, PriceDivergenceDTO.BASIS,
-                    group.sampleSize(), null, null, null, null, group.valuationsFrom(), group.valuationsTo(),
+                    group.sampleSize(), null, null, null, null, null, group.valuationsFrom(), group.valuationsTo(),
                     "Only " + group.sampleSize() + " other valued properties in this group (minimum " + MIN_SAMPLE + ")");
         }
         BigDecimal median = scale(group.medianValue());
@@ -105,8 +107,8 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
         BigDecimal percent = divergence == null ? null
                 : divergence.multiply(HUNDRED).divide(median, 2, RoundingMode.HALF_UP);
         return new Benchmark(level.name(), PriceDivergenceDTO.AVAILABLE, key, PriceDivergenceDTO.BASIS,
-                group.sampleSize(), median, scale(group.medianPricePerSqft()), divergence, percent,
-                group.valuationsFrom(), group.valuationsTo(),
+                group.sampleSize(), median, scale(group.averageValue()), scale(group.medianPricePerSqft()),
+                divergence, percent, group.valuationsFrom(), group.valuationsTo(),
                 estimate == null ? "The property has no estimate to compare" : null);
     }
 
@@ -126,7 +128,10 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
         };
     }
 
-    /** Property factors minus the average factors of the primary group, largest difference first. */
+    /**
+     * Property factors minus the average factors of the primary group, largest difference first, with the gap from
+     * the average estimate of the same members.
+     */
     private Drivers drivers(Benchmark primary, PriceDivergenceReader.Subject property, ValuationResponse valuation) {
         if (primary == null) {
             return unavailableDrivers(null, 0, "No benchmark has enough evidence");
@@ -150,10 +155,14 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
 
         Level level = Level.valueOf(primary.level());
         List<Map<String, BigDecimal>> group = new ArrayList<>();
-        for (String text : reader.groupValuationFactors(level, property)) {
-            Map<String, BigDecimal> factors = parseFactors(text);
+        // the average estimate is taken over the same members as the average factors, so the residual holds no
+        // difference between two samples
+        BigDecimal groupEstimates = BigDecimal.ZERO;
+        for (MemberFactors member : reader.groupValuationFactors(level, property)) {
+            Map<String, BigDecimal> factors = member.estimate() == null ? null : parseFactors(member.factors());
             if (factors != null) {
                 group.add(factors);
+                groupEstimates = groupEstimates.add(member.estimate());
             }
         }
         if (group.size() < MIN_SAMPLE) {
@@ -180,13 +189,15 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
                     subjectUsd, average, difference));
         }
         factors.sort(Comparator.comparing((DriverFactor f) -> f.differenceUsd().abs()).reversed());
+        BigDecimal groupAverage = groupEstimates.divide(count, 2, RoundingMode.HALF_UP);
         return new Drivers(PriceDivergenceDTO.AVAILABLE, PriceDivergenceDTO.DRIVER_SOURCE, primary.level(),
-                group.size(), List.copyOf(factors), explained, null);
+                group.size(), groupAverage, scale(valuation.estimate().value()).subtract(groupAverage),
+                List.copyOf(factors), explained, null);
     }
 
     private static Drivers unavailableDrivers(String level, long sampleSize, String reason) {
         return new Drivers(PriceDivergenceDTO.UNAVAILABLE, PriceDivergenceDTO.DRIVER_SOURCE, level, sampleSize,
-                List.of(), null, reason);
+                null, null, List.of(), null, reason);
     }
 
     /**
@@ -216,7 +227,10 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
         return factors;
     }
 
-    /** Primary divergence minus the explained amount. */
+    /**
+     * Gap from the group average minus the explained amount: what the factors' dollar amounts do not add up to. It is
+     * not measured from the median, so a group skewed by a few high or low estimates does not enter it.
+     */
     private static Residual residual(Benchmark primary, Drivers drivers) {
         if (primary == null) {
             return new Residual(PriceDivergenceDTO.UNAVAILABLE, null, null, "No benchmark has enough evidence");
@@ -226,7 +240,7 @@ public class PriceDivergenceServiceImpl implements PriceDivergenceService {
                     "Drivers are unavailable: " + drivers.reason());
         }
         return new Residual(PriceDivergenceDTO.AVAILABLE, primary.level(),
-                primary.divergenceUsd().subtract(drivers.explainedUsd()), null);
+                drivers.divergenceFromAverageUsd().subtract(drivers.explainedUsd()), null);
     }
 
     /** The stored valuation confidence, shown with the benchmark sample it is compared with. */
