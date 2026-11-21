@@ -6,6 +6,7 @@ import com.geointelli.ai.property.service.dto.PortfolioGeographyDTO;
 import com.geointelli.ai.property.service.dto.PortfolioMetricDTO;
 import com.geointelli.ai.property.service.entity.HoldingOccupancyStatus;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
+import com.geointelli.ai.property.service.service.InvestorOpportunitiesService;
 import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +42,10 @@ public class InvestorDashboardControllerTest {
 
     @MockBean
     InvestorValueEquityDebtService investorValueEquityDebtService;
+
+    /** Needed to build the controller since SCRUM-106; the opportunities card is verified manually. */
+    @MockBean
+    InvestorOpportunitiesService investorOpportunitiesService;
 
     private static final String URL = "/api/dashboards/investor/occupancy-exposure";
 
