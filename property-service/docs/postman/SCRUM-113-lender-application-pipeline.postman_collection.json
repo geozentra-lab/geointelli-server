@@ -1,0 +1,869 @@
+{
+  "info": {
+    "name": "SCRUM-113 Lender dashboard: application pipeline card",
+    "description": "Manual checks for GET /api/dashboards/lender/application-pipeline. See docs/lender-application-pipeline-card.md. Run the folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc) and two users: A creates a new organization and its applications; B is not a member. Both users must have logged in to GeoZentra once so they have a local user record. Every run creates a new organization, so the collection can be repeated. Passwords are left empty: set them in your local environment and never commit them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8091"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": ""
+    },
+    {
+      "key": "clientIdKc",
+      "value": ""
+    },
+    {
+      "key": "userA",
+      "value": ""
+    },
+    {
+      "key": "passwordA",
+      "value": ""
+    },
+    {
+      "key": "userB",
+      "value": ""
+    },
+    {
+      "key": "passwordB",
+      "value": ""
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "organizationId",
+      "value": ""
+    },
+    {
+      "key": "applicationId",
+      "value": ""
+    },
+    {
+      "key": "unknownOrganizationId",
+      "value": "999999999"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Tokens",
+      "item": [
+        {
+          "name": "Token for user A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userA}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordA}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token for user B (not a member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userB}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordB}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Empty data",
+      "item": [
+        {
+          "name": "A creates a new organization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('organizationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/organizations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "organizations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"SCRUM-113 Postman organization\"}"
+            }
+          }
+        },
+        {
+          "name": "Organization without applications: 200 EMPTY, every stage 0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('status EMPTY', () => pm.expect(d.status).to.eql('EMPTY'));",
+                  "pm.test('organization and no error', () => { pm.expect(d.organizationId).to.eql(Number(pm.collectionVariables.get('organizationId'))); pm.expect(d.error).to.eql(null); });",
+                  "pm.test('every supported stage, in pipeline order', () => pm.expect(d.stages.map(s => s.stage)).to.eql(['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'FUNDED', 'REJECTED', 'WITHDRAWN']));",
+                  "pm.test('expected counts', () => { const expected = {}; d.stages.forEach(s => pm.expect(s.count, s.stage).to.eql(expected[s.stage] || 0)); });",
+                  "pm.test('total is the sum of the stages', () => pm.expect(d.totalApplications).to.eql(d.stages.reduce((t, s) => t + s.count, 0)));",
+                  "pm.test('reporting period is a current-status snapshot at generatedAt', () => { pm.expect(d.reportingPeriod.type).to.eql('CURRENT_STATUS'); pm.expect(d.reportingPeriod.asOf).to.eql(d.generatedAt); pm.expect(d.reportingPeriod.description).to.be.a('string'); });",
+                  "pm.test('note explains the figures', () => pm.expect(d.note).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Setup: applications in several stages",
+      "item": [
+        {
+          "name": "Create application 1 (DRAFT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('applicationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"Postman Applicant One\",\"requestedAmount\":250000,\"currency\":\"USD\",\"loanType\":\"FHA\"}"
+            }
+          }
+        },
+        {
+          "name": "Move application 1 to SUBMITTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('SUBMITTED', () => pm.expect(pm.response.json().stage).to.eql('SUBMITTED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{applicationId}}"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"stage\":\"SUBMITTED\"}"
+            }
+          }
+        },
+        {
+          "name": "Create application 2 (DRAFT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('applicationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"Postman Applicant Two\",\"requestedAmount\":180000,\"currency\":\"USD\",\"loanType\":\"FHA\"}"
+            }
+          }
+        },
+        {
+          "name": "Create application 3 (DRAFT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('applicationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"Postman Applicant Three\",\"requestedAmount\":320000,\"currency\":\"USD\",\"loanType\":\"FHA\"}"
+            }
+          }
+        },
+        {
+          "name": "Withdraw application 3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('WITHDRAWN', () => pm.expect(pm.response.json().stage).to.eql('WITHDRAWN'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{applicationId}}?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{applicationId}}"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"stage\":\"WITHDRAWN\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Success",
+      "item": [
+        {
+          "name": "Organization with applications: 200 OK, each application once in its current stage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('status OK', () => pm.expect(d.status).to.eql('OK'));",
+                  "pm.test('organization and no error', () => { pm.expect(d.organizationId).to.eql(Number(pm.collectionVariables.get('organizationId'))); pm.expect(d.error).to.eql(null); });",
+                  "pm.test('every supported stage, in pipeline order', () => pm.expect(d.stages.map(s => s.stage)).to.eql(['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'FUNDED', 'REJECTED', 'WITHDRAWN']));",
+                  "pm.test('expected counts', () => { const expected = {\"DRAFT\":1,\"SUBMITTED\":1,\"WITHDRAWN\":1}; d.stages.forEach(s => pm.expect(s.count, s.stage).to.eql(expected[s.stage] || 0)); });",
+                  "pm.test('total is the sum of the stages', () => pm.expect(d.totalApplications).to.eql(d.stages.reduce((t, s) => t + s.count, 0)));",
+                  "pm.test('reporting period is a current-status snapshot at generatedAt', () => { pm.expect(d.reportingPeriod.type).to.eql('CURRENT_STATUS'); pm.expect(d.reportingPeriod.asOf).to.eql(d.generatedAt); pm.expect(d.reportingPeriod.description).to.be.a('string'); });",
+                  "pm.test('note explains the figures', () => pm.expect(d.note).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Invalid input",
+      "item": [
+        {
+          "name": "organizationId missing: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('organizationId is required'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ]
+            }
+          }
+        },
+        {
+          "name": "organizationId 0: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('organizationId must be positive'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "organizationId negative: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('organizationId must be positive'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId=-1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "-1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "organizationId not a number: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('organizationId: invalid value'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "abc"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Ownership",
+      "item": [
+        {
+          "name": "No token: 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "User B is not a member: 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown organization: 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/lender/application-pipeline?organizationId={{unknownOrganizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "lender",
+                "application-pipeline"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{unknownOrganizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

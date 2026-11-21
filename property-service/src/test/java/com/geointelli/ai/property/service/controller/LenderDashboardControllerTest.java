@@ -4,6 +4,7 @@ import com.geointelli.ai.property.service.dto.*;
 import com.geointelli.ai.property.service.entity.LenderLoanType;
 import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.LenderApplicationPipelineCardService;
 import com.geointelli.ai.property.service.service.LenderApprovedFundedService;
 import com.geointelli.ai.property.service.service.LenderDashboardMortgageContextService;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +43,9 @@ public class LenderDashboardControllerTest {
 
     @MockBean
     LenderApprovedFundedService approvedFundedService;
+
+    @MockBean
+    LenderApplicationPipelineCardService applicationPipelineService;
 
     @MockBean
     CurrentUserService currentUserService;
