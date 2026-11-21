@@ -2,11 +2,13 @@ package com.geointelli.ai.property.service.service.impl;
 
 import com.geointelli.ai.property.service.dto.DataQualityIssueDTO;
 import com.geointelli.ai.property.service.dto.DataQualityReportDTO;
+import com.geointelli.ai.property.service.dto.DataQualityReviewEventDTO;
 import com.geointelli.ai.property.service.dto.DataQualityRuleSummaryDTO;
 import com.geointelli.ai.property.service.dto.PageResponse;
 import com.geointelli.ai.property.service.enums.DataQualityRule;
 import com.geointelli.ai.property.service.repository.DataQualityIssueRow;
 import com.geointelli.ai.property.service.repository.DataQualityRepository;
+import com.geointelli.ai.property.service.service.DataQualityReviewService;
 import com.geointelli.ai.property.service.service.DataQualityService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +26,8 @@ import java.util.Map;
 /**
  * Computes the data-quality report from read-only SQL rules. Counting every rule scans the large tables, so the
  * counts are reused for {@code data-quality.summary-cache-seconds} and only one request at a time recalculates
- * them; the issue page of a rule is always read on request.
+ * them; the issue page of a rule is always read on request. Each issue of a page carries its current review
+ * state, read from the review log of SCRUM-190 in one query.
  */
 @Service
 @Transactional(readOnly = true)
@@ -33,6 +36,7 @@ public class DataQualityServiceImpl implements DataQualityService {
     static final int MAX_PAGE_SIZE = 100;
 
     private final DataQualityRepository dataQualityRepository;
+    private final DataQualityReviewService reviewService;
     private final Duration countsReuse;
     private final Clock clock;
     private final String note;
@@ -47,16 +51,18 @@ public class DataQualityServiceImpl implements DataQualityService {
      * @param summaryCacheSeconds how long rule counts are reused; 0 recalculates them on each request
      */
     @Autowired
-    public DataQualityServiceImpl(DataQualityRepository dataQualityRepository,
+    public DataQualityServiceImpl(DataQualityRepository dataQualityRepository, DataQualityReviewService reviewService,
                                   @Value("${data-quality.summary-cache-seconds:600}") long summaryCacheSeconds) {
-        this(dataQualityRepository, summaryCacheSeconds, Clock.systemUTC());
+        this(dataQualityRepository, reviewService, summaryCacheSeconds, Clock.systemUTC());
     }
 
-    DataQualityServiceImpl(DataQualityRepository dataQualityRepository, long summaryCacheSeconds, Clock clock) {
+    DataQualityServiceImpl(DataQualityRepository dataQualityRepository, DataQualityReviewService reviewService,
+                           long summaryCacheSeconds, Clock clock) {
         if (summaryCacheSeconds < 0) {
             throw new IllegalArgumentException("data-quality.summary-cache-seconds must be 0 or greater");
         }
         this.dataQualityRepository = dataQualityRepository;
+        this.reviewService = reviewService;
         this.countsReuse = Duration.ofSeconds(summaryCacheSeconds);
         this.clock = clock;
         this.note = note(summaryCacheSeconds);
@@ -100,6 +106,18 @@ public class DataQualityServiceImpl implements DataQualityService {
             List<DataQualityIssueDTO> issues = find(rule, size, (long) page * size).stream()
                     .map(row -> toIssue(rule, row))
                     .toList();
+            // review state of the whole page in one query (SCRUM-190); issues never reviewed stay OPEN
+            Map<String, DataQualityReviewEventDTO> reviews = reviewService.latestByReference(
+                    issues.stream().map(DataQualityIssueDTO::getReference).toList());
+            for (DataQualityIssueDTO issue : issues) {
+                DataQualityReviewEventDTO latest = reviews.get(issue.getReference());
+                if (latest != null) {
+                    issue.setReviewStatus(latest.toStatus());
+                    issue.setReviewedByUserId(latest.reviewedByUserId());
+                    issue.setReviewedAt(latest.reviewedAt());
+                    issue.setReviewReason(latest.reason());
+                }
+            }
             long totalPages = (selectedRuleCount + size - 1) / size;
             report.setRule(rule);
             report.setIssues(new PageResponse<>(issues, page, size, selectedRuleCount, totalPages,
