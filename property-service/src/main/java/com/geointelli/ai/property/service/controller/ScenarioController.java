@@ -1,9 +1,11 @@
 package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.PageResponse;
+import com.geointelli.ai.property.service.dto.ScenarioCalculationDTO;
 import com.geointelli.ai.property.service.dto.ScenarioCreateRequest;
 import com.geointelli.ai.property.service.dto.ScenarioDTO;
 import com.geointelli.ai.property.service.dto.ScenarioUpdateRequest;
+import com.geointelli.ai.property.service.service.ScenarioCalculationService;
 import com.geointelli.ai.property.service.service.ScenarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,6 +36,7 @@ import java.net.URI;
 public class ScenarioController {
 
     private final ScenarioService scenarioService;
+    private final ScenarioCalculationService scenarioCalculationService;
 
     /**
      * Saves a scenario for the current user.
@@ -105,5 +108,20 @@ public class ScenarioController {
         return ResponseEntity.noContent().build();
     }
 
-
+    /**
+     * Recalculates one of the current user's scenarios from its saved assumptions.
+     *
+     * @param id scenario ID
+     * @return 200 with saved assumptions, current facts, input changes and result; 400 if the ID or the saved
+     *         assumptions are invalid; 401 without a token; 404 if the scenario is missing or another user's
+     */
+    @PostMapping("/{id}/calculate")
+    @Operation(summary = "Recalculate a saved scenario", description = "No body. Runs the shared investment "
+            + "calculation (same as POST /api/calculations/investment) on the saved assumptions only. currentFacts "
+            + "shows the linked property's current valuation for comparison; inputChanges lists saved inputs that "
+            + "differ from it or cannot be compared (purchase price vs current estimated value, deleted property, "
+            + "no valuation). Nothing is stored.")
+    public ScenarioCalculationDTO calculate(@PathVariable Long id) {
+        return scenarioCalculationService.calculate(id);
+    }
 }
