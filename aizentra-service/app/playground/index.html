@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AiZentra Playground</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #15202b; --muted: #5b6875; --border: #d9dee4;
+    --accent: #0f766e; --accent-text: #ffffff; --user: #e3f2ef; --error: #b42318; --error-bg: #fdecea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1419; --panel: #172029; --text: #e6edf3; --muted: #93a1ad; --border: #2b3742;
+      --accent: #2dd4bf; --accent-text: #062a26; --user: #123a36; --error: #f97066; --error-bg: #3a1714;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  .app { max-width: 880px; margin: 0 auto; height: 100vh; display: flex; flex-direction: column; padding: 16px; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .settings { display: grid; grid-template-columns: 130px 1fr 1fr auto; gap: 8px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, textarea, button { font: inherit; color: inherit; }
+  input, textarea { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  button { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button:disabled { opacity: .6; cursor: default; }
+  #log { flex: 1; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+         padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .empty { margin: auto; color: var(--muted); text-align: center; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--user); }
+  .msg.assistant { align-self: flex-start; border: 1px solid var(--border); }
+  .msg.error { align-self: stretch; max-width: none; background: var(--error-bg); color: var(--error); }
+  .meta { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: normal; }
+  details { margin-top: 8px; font-size: 13px; white-space: normal; }
+  summary { cursor: pointer; color: var(--muted); }
+  table { border-collapse: collapse; margin: 6px 0; }
+  td { padding: 3px 12px 3px 0; border-top: 1px solid var(--border); vertical-align: top; }
+  td:first-child { color: var(--muted); }
+  .composer { display: flex; gap: 8px; }
+  .composer textarea { flex: 1; height: 52px; resize: none; }
+  @media (max-width: 640px) { .settings { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>AiZentra playground</h1>
+    <p>Temporary test page. It calls <code>/v1/chat</code> the same way Spring will.</p>
+  </header>
+
+  <div class="settings">
+    <label>Property ID <input id="propertyId" type="number" min="1" placeholder="e.g. 123"></label>
+    <label>Internal token <input id="internalToken" type="password" placeholder="INTERNAL_TOKEN from .env"></label>
+    <label>User JWT (optional) <input id="userJwt" type="password" placeholder="Keycloak access token"></label>
+    <button id="reset" type="button">New conversation</button>
+  </div>
+
+  <div id="log"></div>
+
+  <form class="composer" id="composer">
+    <textarea id="question" required
+              placeholder="Ask about the property (Enter to send, Shift+Enter for a new line)"></textarea>
+    <button class="primary" id="send" type="submit">Send</button>
+  </form>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = $("log");
+  const EMPTY = '<p class="empty">Enter a property ID and the internal token, then ask a question.</p>';
+  let history = [];
+
+  // Remember the fields in this browser: the property ID across visits, the token for this tab only.
+  const remembered = { propertyId: localStorage, internalToken: sessionStorage };
+  for (const [id, store] of Object.entries(remembered)) {
+    try { $(id).value = store.getItem("aizentra." + id) || ""; } catch {}
+    $(id).addEventListener("change", () => { try { store.setItem("aizentra." + id, $(id).value); } catch {} });
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // Model output is escaped first; only **bold** is turned back into markup.
+  function renderAnswer(text) {
+    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function renderEvidence(evidence) {
+    if (!evidence.length) return "";
+    const items = evidence.map((item) => {
+      const rows = Object.entries(item.data).map(([key, value]) => {
+        const shown = typeof value === "object" ? JSON.stringify(value) : value;
+        return `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(shown)}</td></tr>`;
+      }).join("");
+      return `<div><strong>${escapeHtml(item.tool)}</strong><table>${rows}</table></div>`;
+    }).join("");
+    return `<details><summary>Evidence: data the tools returned (${evidence.length})</summary>${items}</details>`;
+  }
+
+  function errorText(status, body) {
+    if (status === 401) return "Wrong or missing internal token. Use INTERNAL_TOKEN from aizentra-service/.env.";
+    if (status === 503) return "The model server is unavailable. Is Ollama running, and is LLM_MODEL pulled?";
+    if (status === 422) return "Invalid request: " + JSON.stringify(body.detail);
+    return body.detail ? JSON.stringify(body.detail) : "Unexpected error.";
+  }
+
+  function addMessage(kind, html) {
+    log.querySelector(".empty")?.remove();
+    const div = document.createElement("div");
+    div.className = "msg " + kind;
+    div.innerHTML = html;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+
+  function setBusy(busy) {
+    $("send").disabled = busy;
+    $("question").disabled = busy;
+    if (!busy) $("question").focus();
+  }
+
+  async function ask(question) {
+    const propertyId = $("propertyId").value ? Number($("propertyId").value) : null;
+    addMessage("user", escapeHtml(question));
+    setBusy(true);
+
+    const started = Date.now();
+    const elapsed = () => Math.round((Date.now() - started) / 1000);
+    const pending = addMessage("assistant", '<span class="meta">Thinking… 0s</span>');
+    const timer = setInterval(() => { pending.innerHTML = `<span class="meta">Thinking… ${elapsed()}s</span>`; }, 1000);
+
+    const headers = { "Content-Type": "application/json", "X-Internal-Token": $("internalToken").value };
+    const jwt = $("userJwt").value.trim();
+    if (jwt) headers.Authorization = "Bearer " + jwt;
+
+    try {
+      const response = await fetch("/v1/chat", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          turnId: "playground-" + Date.now(),
+          message: question,
+          context: { propertyId },
+          history: history.slice(-20),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      clearInterval(timer);
+      if (!response.ok) {
+        pending.remove();
+        addMessage("error", escapeHtml(`HTTP ${response.status}: ${errorText(response.status, body)}`));
+        return;
+      }
+      const usage = body.usage ? ` · ${body.usage.inputTokens} in / ${body.usage.outputTokens} out tokens` : "";
+      pending.innerHTML = renderAnswer(body.answer)
+        + `<div class="meta">${escapeHtml(body.status)} · ${elapsed()}s${usage}</div>`
+        + renderEvidence(body.evidence || []);
+      history.push({ role: "user", text: question }, { role: "assistant", text: body.answer });
+    } catch (error) {
+      clearInterval(timer);
+      pending.remove();
+      addMessage("error", escapeHtml("Could not reach the service: " + error.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  $("composer").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const question = $("question").value.trim();
+    if (!question) return;
+    $("question").value = "";
+    ask(question);
+  });
+
+  $("question").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      $("composer").requestSubmit();
+    }
+  });
+
+  $("reset").addEventListener("click", () => {
+    history = [];
+    log.innerHTML = EMPTY;
+  });
+
+  log.innerHTML = EMPTY;
+</script>
+</body>
+</html>

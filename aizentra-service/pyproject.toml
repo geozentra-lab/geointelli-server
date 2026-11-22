@@ -1,0 +1,41 @@
+[project]
+name = "aizentra-service"
+version = "0.1.0"
+description = "AiZentra: GeoZentra's AI assistant service (FastAPI + LangGraph)."
+requires-python = ">=3.12"
+# Pinned: LangChain/LangGraph upgrades are deliberate, tested changes.
+dependencies = [
+    "fastapi==0.165.0",
+    "uvicorn[standard]==0.54.0",
+    "pydantic==2.14.4",
+    "pydantic-settings==2.16.3",
+    "httpx==0.28.1",
+    "langchain-core==1.8.4",
+    "langchain-openai==1.8.5",
+    "langgraph==1.2.24",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "respx==0.23.1",
+    "ruff==0.17.6",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
