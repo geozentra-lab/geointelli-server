@@ -34,6 +34,15 @@ public interface PortfolioHoldingRepository extends JpaRepository<PortfolioHoldi
     List<PortfolioHoldingCount> countForPortfolios(@Param("ids") List<Long> ids);
 
     /**
+     * Which of the given properties are held in one of the given portfolios (investor dashboard opportunities card,
+     * SCRUM-106). The portfolios must already be ownership-checked. One query for a whole card.
+     */
+    @Query("SELECT DISTINCT h.property.id FROM PortfolioHolding h "
+        + "WHERE h.portfolio.id IN :portfolioIds AND h.property.id IN :propertyIds")
+    List<Long> findHeldPropertyIds(@Param("portfolioIds") List<Long> portfolioIds,
+                                   @Param("propertyIds") List<Long> propertyIds);
+
+    /**
      * Rent, purchase-price and date facts of the holdings of the given portfolios, checked again against the owner
      * (investor income, expenses and returns card).
      */

@@ -1,0 +1,684 @@
+{
+  "info": {
+    "name": "SCRUM-106 Investor dashboard opportunities card",
+    "description": "GET /api/dashboards/investor/opportunities: bounded list of the best stored opportunity scores (shared service of SCRUM-76) with their ranking explanation and evidence coverage, flagged when already held. Variables: baseUrl, user_a_token (investor with portfolios), admin_token (any user without portfolios), portfolioId (one of user A's portfolios), heldPropertyId (a scored property held in that portfolio), otherUsersPortfolioId, countyId and countyName (a county with scored properties). Run in order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{user_a_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "user_a_token",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "portfolioId",
+      "value": "1"
+    },
+    {
+      "key": "heldPropertyId",
+      "value": "1"
+    },
+    {
+      "key": "otherUsersPortfolioId",
+      "value": "3"
+    },
+    {
+      "key": "countyId",
+      "value": "2"
+    },
+    {
+      "key": "countyName",
+      "value": "Broward"
+    },
+    {
+      "key": "bestPropertyId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Card without token (401)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Card, all my portfolios (default limit 5)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Needs at least one SCORED row in property_opportunity_scores (run the SCRUM-76 refresh, or seed scores locally)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('OK card of the shared browse', () => { pm.expect(c.scope).to.eql('ALL_PORTFOLIOS'); pm.expect(c.portfolioId).to.eql(null); pm.expect(c.status).to.eql('OK'); pm.expect(c.candidateStatus).to.eql('OK'); pm.expect(c.scoreVersion).to.eql('opportunity-v1'); pm.expect(c.limit).to.eql(5); pm.expect(c.items.length).to.be.at.most(5); pm.expect(c.totalCandidates).to.be.at.least(c.items.length); pm.expect(c.notes).to.be.an('array').that.is.not.empty; pm.expect(c.generatedAt).to.be.a('string'); });",
+              "pm.test('best first', () => { for (let k = 1; k < c.items.length; k++) pm.expect(c.items[k-1].score).to.be.at.least(c.items[k].score); });",
+              "pm.test('items keep the shared explanation and coverage', () => c.items.forEach(i => { pm.expect(i.score).to.be.a('number'); pm.expect(i.maxScore).to.eql(100); pm.expect(i.coveragePercent).to.be.a('number'); pm.expect(i.factors.length).to.eql(7); pm.expect(i.factors[0]).to.have.all.keys('code','label','category','weight','status','signal','signalUnit','subscore','points','explanation'); pm.expect(i).to.have.property('alreadyHeld'); }));",
+              "pm.collectionVariables.set('bestPropertyId', c.items[0].propertyId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 alreadyHeld flags my holdings",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "Variable heldPropertyId: a property held in one of user A's portfolios that is also among the best scores."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('held properties are flagged, others not', () => { const held = c.items.filter(i => i.alreadyHeld).map(i => i.propertyId); pm.expect(held).to.include(Number(pm.collectionVariables.get('heldPropertyId'))); pm.expect(c.items.filter(i => !i.alreadyHeld).length).to.be.above(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Card of one of my portfolios (PORTFOLIO scope)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?portfolioId={{portfolioId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "portfolioId",
+              "value": "{{portfolioId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('scope PORTFOLIO, held flag limited to that portfolio', () => { pm.expect(c.scope).to.eql('PORTFOLIO'); pm.expect(c.portfolioId).to.eql(Number(pm.collectionVariables.get('portfolioId'))); pm.expect(c.portfolioCount).to.eql(1); pm.expect(c.items.filter(i => i.alreadyHeld).map(i => i.propertyId)).to.eql([Number(pm.collectionVariables.get('heldPropertyId'))]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Portfolio of another user (404, same as missing)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?portfolioId={{otherUsersPortfolioId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "portfolioId",
+              "value": "{{otherUsersPortfolioId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Unknown portfolio (404)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?portfolioId=999999",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "portfolioId",
+              "value": "999999"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 limit bounds the list",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?limit=2",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "2"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('exactly 2 items, total unchanged', () => { pm.expect(c.limit).to.eql(2); pm.expect(c.items.length).to.eql(2); pm.expect(c.totalCandidates).to.be.above(2); pm.expect(c.items[0].propertyId).to.eql(Number(pm.collectionVariables.get('bestPropertyId'))); });",
+              "pm.test('best first', () => { for (let k = 1; k < c.items.length; k++) pm.expect(c.items[k-1].score).to.be.at.least(c.items[k].score); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 limit 0 (400)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?limit=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "0"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names limit', () => pm.expect(JSON.stringify(pm.response.json())).to.include('limit'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 limit 21 (400)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?limit=21",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "21"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 limit not a number (400)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?limit=abc",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "abc"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 countyId 0 (400)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?countyId=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "countyId",
+              "value": "0"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 portfolioId -1 (400)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?portfolioId=-1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "portfolioId",
+              "value": "-1"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 County filter passed to the shared service",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?countyId={{countyId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "countyId",
+              "value": "{{countyId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('only that county, filter echoed', () => { pm.expect(c.countyId).to.eql(Number(pm.collectionVariables.get('countyId'))); pm.expect(c.status).to.eql('OK'); pm.expect(c.items.length).to.be.above(0); c.items.forEach(i => pm.expect(i.countyName).to.eql(pm.collectionVariables.get('countyName'))); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Empty candidate set: NO_MATCHES, nothing invented",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities?countyId=999999",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ],
+          "query": [
+            {
+              "key": "countyId",
+              "value": "999999"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "description": "A county with no scored property. With no stored score at all the card answers candidateStatus NOT_SCORED instead; with stored scores that are all UNAVAILABLE, NO_ELIGIBLE_OPPORTUNITIES."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('EMPTY with the shared reason and no items', () => { pm.expect(c.status).to.eql('EMPTY'); pm.expect(c.candidateStatus).to.eql('NO_MATCHES'); pm.expect(c.items).to.eql([]); pm.expect(c.totalCandidates).to.eql(0); pm.expect(c.scoreVersion).to.eql('opportunity-v1'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 User without portfolios still gets the public list",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/dashboards/investor/opportunities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "dashboards",
+            "investor",
+            "opportunities"
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{admin_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "admin_token belongs to a user with no portfolio; the scores are public, so the list is the same, only the flags differ."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const c = pm.response.json();",
+              "pm.test('OK, portfolioCount 0, nothing held', () => { pm.expect(c.status).to.eql('OK'); pm.expect(c.portfolioCount).to.eql(0); pm.expect(c.items.every(i => i.alreadyHeld === false)).to.eql(true); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
