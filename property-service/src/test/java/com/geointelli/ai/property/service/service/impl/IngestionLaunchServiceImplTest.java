@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +34,7 @@ import com.geointelli.ai.property.service.service.IngestionInputStore.StoredInpu
 import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService.InputSource;
+import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
 
 class IngestionLaunchServiceImplTest {
     private static final String ADDRESS_HEADER = "property_id,address,building_number,city,house_number_suffix,message,"
@@ -46,6 +48,7 @@ class IngestionLaunchServiceImplTest {
     private IngestionProperties properties;
     private IngestionLaunchServiceImpl service;
     private County county;
+    private ReferenceDataScopeService scopes;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -64,8 +67,11 @@ class IngestionLaunchServiceImplTest {
         when(countyService.miamiDade()).thenReturn(county);
         properties = new IngestionProperties();
         properties.getInput().setStagingDirectory(staging.toString());
+        scopes = mock(ReferenceDataScopeService.class);
+        when(scopes.countyFips(1L)).thenReturn(Optional.of("12003"));
+        when(scopes.stateFips("FL")).thenReturn(Optional.of("12"));
         service = new IngestionLaunchServiceImpl(jobService, store, workerService, new IngestionJobMapper(jobService, store),
-            countyService, properties, new ObjectMapper());
+            countyService, properties, new ObjectMapper(), scopes);
     }
 
     private InputSource addresses(String content) {
@@ -342,6 +348,27 @@ class IngestionLaunchServiceImplTest {
         }
 
         @Test
+        @DisplayName("SCRUM-201: when a reference job is retried, then the same stored file and vintage are reloaded from the start")
+        void whenReferenceJobRetried_thenReloadedFromStart() {
+            IngestionJob failed = previous(ImportJobType.REFERENCE_DATA_IMPORT, IngestionDataset.FLOOD_ZONES, "FAILED");
+            failed.setInputStorage("S3");
+            failed.setInputLocation("ingestion/inputs/old");
+            failed.setParametersJson("{\"inputs\":[{\"name\":\"12003_baker.csv\",\"size\":10,\"etag\":\"e1\"}],"
+                + "\"downloadedOn\":\"2026-11-14\"}");
+            when(store.describe("ingestion/inputs/old", "12003_baker.csv")).thenReturn(Optional.of(new StoredInput(10, "e1")));
+
+            service.retry(failed.getId(), "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.REFERENCE_DATA_IMPORT, job.getJobType());
+            assertEquals("ingestion/inputs/old", job.getInputLocation());
+            assertEquals(failed.getParametersJson(), job.getParametersJson());
+            assertNull(job.getCheckpointJson(), "a load replaces its county, so it starts again");
+            assertEquals(0, job.getSucceeded());
+            assertEquals(2, job.getAttempt());
+        }
+
+        @Test
         @DisplayName("When a job is read, then its failed and skipped records are included")
         void whenJobRead_thenItemsIncluded() {
             IngestionJob failed = previous(ImportJobType.CSV_IMPORT, IngestionDataset.ADDRESSES, "FAILED");
@@ -355,6 +382,91 @@ class IngestionLaunchServiceImplTest {
             assertEquals(Boolean.TRUE, dto.getRetryable());
             assertEquals(4, dto.getCompleted());
             assertEquals(1, dto.getFailed());
+        }
+    }
+
+    @Nested
+    @DisplayName("Starting environmental reference loads (SCRUM-201)")
+    class StartReference {
+        private static final String FLOOD_HEADER = "fips5,DFIRM_ID,FLD_AR_ID,FLD_ZONE,ZONE_SUBTY,SFHA_TF,STATIC_BFE,DEPTH,"
+            + "V_DATUM,LEN_UNIT,VELOCITY,VEL_UNIT,DUAL_ZONE,STUDY_TYP,VERSION_ID,SOURCE_CIT,geom_wkt\n";
+        private static final String TRACT_HEADER = "fips5,tract_fips,name,land_area_m2,water_area_m2,geom_wkt\n";
+        private static final LocalDate DOWNLOADED = LocalDate.of(2026, 11, 14);
+
+        private InputSource staged(String name, String content) throws Exception {
+            Files.createDirectories(staging.resolve("fema_flood_zones"));
+            Files.writeString(staging.resolve(name), content);
+            return service.staged(name, Path.of(name).getFileName().toString());
+        }
+
+        @Test
+        @DisplayName("When a county flood file is valid, then it is stored under its own name with the download date")
+        void whenFloodFileValid_thenQueuedWithVintage() throws Exception {
+            InputSource input = staged("fema_flood_zones/12003_baker.csv",
+                FLOOD_HEADER + "12003,12003C,A1,AE,,T,7,-9999,,,-9999,,,NP,1,x,\"POLYGON((0 0,1 0,1 1,0 0))\"\n");
+
+            service.startReference(IngestionDataset.FLOOD_ZONES, "Baker", "FL", input, DOWNLOADED, "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.REFERENCE_DATA_IMPORT, job.getJobType());
+            assertEquals(IngestionDataset.FLOOD_ZONES, job.getDataset());
+            assertSame(county, job.getCounty());
+            assertTrue(job.getParametersJson().contains("\"name\":\"12003_baker.csv\""));
+            assertTrue(job.getParametersJson().contains("\"downloadedOn\":\"2026-11-14\""));
+            verify(store).store(any(), eq("12003_baker.csv"), any(), anyLong());
+            verify(workerService).poll();
+        }
+
+        @Test
+        @DisplayName("When the first row belongs to another county, then it is rejected before anything is stored")
+        void whenFileOfAnotherCounty_thenRejected() throws Exception {
+            InputSource input = staged("fema_flood_zones/12086_miami-dade.csv",
+                FLOOD_HEADER + "12086,12086C,A1,AE,,T,7,-9999,,,-9999,,,NP,1,x,\"POLYGON((0 0,1 0,1 1,0 0))\"\n");
+
+            var error = assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.FLOOD_ZONES, "Baker", "FL", input, DOWNLOADED, null));
+            assertTrue(error.getMessage().contains("12086"));
+            verify(store, never()).store(any(), any(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("When county, downloadedOn or a column is wrong for the dataset, then the request is rejected")
+        void whenRequestInvalid_thenRejected() throws Exception {
+            InputSource flood = staged("fema_flood_zones/12003_baker.csv",
+                FLOOD_HEADER + "12003,12003C,A1,AE,,T,7,-9999,,,-9999,,,NP,1,x,\"POLYGON((0 0,1 0,1 1,0 0))\"\n");
+            InputSource tracts = staged("tracts.csv", TRACT_HEADER + "12003,12003000100,T1,1,0,\"POLYGON((0 0,1 0,1 1,0 0))\"\n");
+            InputSource noColumn = staged("broken.csv", "fips5,tract_fips\n12003,12003000100\n");
+
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.FLOOD_ZONES, null, "FL", flood, DOWNLOADED, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.CENSUS_TRACTS, "Baker", "FL", tracts, DOWNLOADED, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.CENSUS_TRACTS, null, "FL", tracts, null, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.CENSUS_TRACTS, null, "FL", tracts, LocalDate.now().plusDays(1), null));
+            var missing = assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.CENSUS_TRACTS, null, "FL", noColumn, DOWNLOADED, null));
+            assertTrue(missing.getMessage().contains("geom_wkt"));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.ADDRESSES, null, "FL", tracts, DOWNLOADED, null));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When a statewide dataset is already loading, or migration V42 is missing, then the request is refused with 409")
+        void whenConflict_thenRefused() throws Exception {
+            InputSource tracts = staged("tracts.csv", TRACT_HEADER + "12003,12003000100,T1,1,0,\"POLYGON((0 0,1 0,1 1,0 0))\"\n");
+            when(jobService.hasActive(IngestionDataset.CENSUS_TRACTS)).thenReturn(true);
+            var active = assertThrows(ResponseStatusException.class,
+                () -> service.startReference(IngestionDataset.CENSUS_TRACTS, null, "FL", tracts, DOWNLOADED, null));
+            assertEquals(HttpStatus.CONFLICT, active.getStatusCode());
+
+            when(scopes.stateFips("FL")).thenThrow(new IllegalStateException("counties.fips_code is missing: apply migration V42 first"));
+            var migration = assertThrows(ResponseStatusException.class,
+                () -> service.startReference(IngestionDataset.NRI_TRACTS, null, "FL", tracts, DOWNLOADED, null));
+            assertEquals(HttpStatus.CONFLICT, migration.getStatusCode());
+            verify(jobService, never()).create(any());
         }
     }
 }

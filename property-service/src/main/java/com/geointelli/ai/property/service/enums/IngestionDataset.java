@@ -64,7 +64,26 @@ public enum IngestionDataset {
     API_BUILDINGS(ImportJobType.PROPERTY_INGESTION, "ingestbuildings", null, List.of()),
     API_EXTRA_FEATURES(ImportJobType.PROPERTY_INGESTION, "ingest_extrafeatures", null, List.of()),
     API_SALES(ImportJobType.PROPERTY_INGESTION, "ingest_sales", null, List.of()),
-    API_ADDRESSES(ImportJobType.PROPERTY_INGESTION, "ingestaddresses", null, List.of());
+    API_ADDRESSES(ImportJobType.PROPERTY_INGESTION, "ingestaddresses", null, List.of()),
+
+    /** Census TIGER/Line tract boundaries of one state ({@code census_tracts}); replaces the state's tracts. */
+    CENSUS_TRACTS(ImportJobType.REFERENCE_DATA_IMPORT, "census-tracts", null, List.of(
+        "fips5", "tract_fips", "name", "land_area_m2", "water_area_m2", "geom_wkt")),
+    /** FEMA National Risk Index per census tract of one state ({@code nri_tract_risk}); replaces the state's rows. */
+    NRI_TRACTS(ImportJobType.REFERENCE_DATA_IMPORT, "nri-tracts", null, List.of(
+        "TRACTFIPS", "NRI_VER", "RISK_SCORE", "RISK_RATNG", "HRCN_RISKS", "HRCN_RISKR", "IFLD_RISKS", "IFLD_RISKR",
+        "CFLD_RISKS", "CFLD_RISKR", "TRND_RISKS", "TRND_RISKR", "WFIR_RISKS", "WFIR_RISKR", "SWND_RISKS",
+        "SWND_RISKR", "LTNG_RISKS", "LTNG_RISKR", "HWAV_RISKS", "HWAV_RISKR")),
+    /** FEMA NFHL flood hazard zones of ONE county file ({@code flood_zones}); replaces that county's zones. */
+    FLOOD_ZONES(ImportJobType.REFERENCE_DATA_IMPORT, "flood-zones", null, List.of(
+        "fips5", "DFIRM_ID", "FLD_AR_ID", "FLD_ZONE", "ZONE_SUBTY", "SFHA_TF", "STATIC_BFE", "DEPTH", "V_DATUM",
+        "LEN_UNIT", "VELOCITY", "VEL_UNIT", "DUAL_ZONE", "STUDY_TYP", "VERSION_ID", "SOURCE_CIT", "geom_wkt")),
+    /** NOAA NCEI Storm Events of one state ({@code storm_events}); replaces the state's events. */
+    STORM_EVENTS(ImportJobType.REFERENCE_DATA_IMPORT, "storm-events", null, List.of(
+        "fips5", "BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME", "END_YEARMONTH", "END_DAY", "END_TIME",
+        "EPISODE_ID", "EVENT_ID", "STATE_FIPS", "EVENT_TYPE", "CZ_TYPE", "CZ_FIPS", "CZ_NAME", "CZ_TIMEZONE",
+        "INJURIES_DIRECT", "INJURIES_INDIRECT", "DEATHS_DIRECT", "DEATHS_INDIRECT", "DAMAGE_PROPERTY",
+        "DAMAGE_CROPS", "MAGNITUDE", "MAGNITUDE_TYPE", "FLOOD_CAUSE", "TOR_F_SCALE", "BEGIN_LAT", "BEGIN_LON"));
 
     /** Columns read from property_owner.csv, the second file of the {@link #OWNERS} dataset. */
     public static final List<String> PROPERTY_OWNER_HEADERS = List.of("property_id", "owner_id");
@@ -99,6 +118,19 @@ public enum IngestionDataset {
     /** Whether this is one CSV file (or the owners pair) that a job reads row by row. */
     public boolean isSingleCsv() {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
+    }
+
+    /** Whether this is an environmental reference dataset loaded with COPY (SCRUM-201). */
+    public boolean isReferenceData() {
+        return jobType == ImportJobType.REFERENCE_DATA_IMPORT;
+    }
+
+    /** Resolves a reference dataset from its endpoint path segment ({@code flood-zones} and so on). */
+    public static Optional<IngestionDataset> referenceFromPathSegment(String segment) {
+        for (IngestionDataset dataset : values()) {
+            if (dataset.isReferenceData() && dataset.pathSegment.equals(segment)) return Optional.of(dataset);
+        }
+        return Optional.empty();
     }
 
     /** Resolves a single-file CSV dataset from its endpoint path segment ({@code extra-features} and so on). */
