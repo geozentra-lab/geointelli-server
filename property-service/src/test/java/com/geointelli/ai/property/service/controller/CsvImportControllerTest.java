@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -167,5 +168,38 @@ class CsvImportControllerTest {
         when(launchService.get(missing)).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Ingestion job not found"));
         mockMvc.perform(get("/api/ingestion/jobs/" + missing)).andExpect(status().isNotFound());
         mockMvc.perform(get("/api/ingestion/jobs/not-a-uuid")).andExpect(status().isBadRequest());
+    }
+    @Test
+    @DisplayName("SCRUM-201: a staged reference file keeps its own name and starts a reference job with its download date")
+    void whenReferenceDatasetStaged_thenStartReference() throws Exception {
+        ImportJobDTO job = queued(IngestionDataset.FLOOD_ZONES);
+        job.setJobType(ImportJobType.REFERENCE_DATA_IMPORT);
+        when(launchService.startReference(IngestionDataset.FLOOD_ZONES, "Miami-Dade", "FL", source,
+            LocalDate.of(2026, 11, 14), null)).thenReturn(job);
+
+        mockMvc.perform(post("/api/ingestion/import/flood-zones")
+                .param("stagedFile", "fema_flood_zones/12086_miami-dade.csv").param("county", "Miami-Dade")
+                .param("sourceState", "FL").param("downloadedOn", "2026-11-14"))
+            .andExpect(status().isAccepted())
+            .andExpect(header().string("Location", "/api/ingestion/jobs/" + JOB_ID))
+            .andExpect(jsonPath("$.jobType").value("REFERENCE_DATA_IMPORT"));
+        verify(launchService).staged("fema_flood_zones/12086_miami-dade.csv", "12086_miami-dade.csv");
+        verify(launchService, never()).startCsv(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("SCRUM-201: statewide datasets need no county; a malformed downloadedOn is 400")
+    void whenStatewideReference_thenNoCounty() throws Exception {
+        when(launchService.startReference(eq(IngestionDataset.STORM_EVENTS), isNull(), eq("FL"), any(), any(), any()))
+            .thenReturn(queued(IngestionDataset.STORM_EVENTS));
+
+        mockMvc.perform(post("/api/ingestion/import/storm-events")
+                .param("stagedFile", "florida_location/noaa_storm_events/florida_all.csv")
+                .param("sourceState", "FL").param("downloadedOn", "2026-11-11"))
+            .andExpect(status().isAccepted());
+        mockMvc.perform(post("/api/ingestion/import/storm-events").param("stagedFile", "x.csv")
+                .param("sourceState", "FL").param("downloadedOn", "11/11/2026"))
+            .andExpect(status().isBadRequest());
+        verify(launchService, times(1)).startReference(any(), any(), any(), any(), any(), any());
     }
 }

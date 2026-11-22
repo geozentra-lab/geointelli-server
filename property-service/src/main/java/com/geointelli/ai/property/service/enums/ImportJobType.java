@@ -16,6 +16,8 @@ public enum ImportJobType {
     CSV_IMPORT(true, "Background CSV import persisted in ingestion_jobs"),
     /** Miami-Dade API ingestion ({@code /api/ingestion/run}, {@code /api/ingestion/ingest_*}); UUID job IDs. */
     PROPERTY_INGESTION(true, "Background Miami-Dade property ingestion persisted in ingestion_jobs"),
+    /** Environmental reference data ({@code /api/ingestion/import/flood-zones} ...), loaded with PostgreSQL COPY. */
+    REFERENCE_DATA_IMPORT(true, "Background environmental reference data import (PostgreSQL COPY) persisted in ingestion_jobs"),
     /** Legacy address-matched image loader ({@code /api/images/import/*}); runs without a job record. */
     PROPERTY_IMAGE_CSV_IMPORT(false, "Legacy image CSV loader started without a job ID; no job record is persisted");
 
