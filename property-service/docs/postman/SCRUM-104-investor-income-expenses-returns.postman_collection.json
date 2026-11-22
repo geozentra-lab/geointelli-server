@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SCRUM-104 Investor dashboard: income, expenses and returns card",
-    "description": "Manual checks for GET /api/dashboards/investor/income-expenses-returns. See docs/investor-income-expenses-returns-card.md. Run the folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc), two users (A owns the data, B is another investor; both must have logged in to GeoZentra once) and two existing property IDs (propertyIdA, propertyIdB). Folder 1 creates a new portfolio for A and folder 6 deletes it with its holdings and records, so the collection can be repeated. Passwords are left empty: set them in your local environment and never commit them.",
+    "description": "Manual checks for GET /api/dashboards/investor/income-expenses-returns. See docs/investor-income-expenses-returns-card.md. Run the folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc), two users (A owns the data, B is another investor; both must have logged in to GeoZentra once) and three existing property IDs (propertyIdA, propertyIdB, propertyIdC; holding C is bought and leased on 2026-03-16 to check that projected rent counts only the time a holding was held). Folder 1 creates a new portfolio for A and folder 6 deletes it with its holdings and records, so the collection can be repeated. Passwords are left empty: set them in your local environment and never commit them.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -50,6 +50,10 @@
       "value": ""
     },
     {
+      "key": "propertyIdC",
+      "value": ""
+    },
+    {
       "key": "portfolioId",
       "value": ""
     },
@@ -59,6 +63,10 @@
     },
     {
       "key": "holdingIdB",
+      "value": ""
+    },
+    {
+      "key": "holdingIdC",
       "value": ""
     },
     {
@@ -293,7 +301,7 @@
       ]
     },
     {
-      "name": "2. Setup: two rented holdings and their records",
+      "name": "2. Setup: three rented holdings (one bought during the period) and their records",
       "item": [
         {
           "name": "Holding A: rented 1500/month, bought 200000",
@@ -380,6 +388,50 @@
             "body": {
               "mode": "raw",
               "raw": "{\"propertyId\":{{propertyIdB}},\"purchasePrice\":300000,\"ownershipSharePercent\":100,\"occupancy\":{\"status\":\"RENTED\",\"monthlyRent\":2000}}"
+            }
+          }
+        },
+        {
+          "name": "Holding C: rented 1000/month, bought and leased on 2026-03-16 for 150000",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('holdingIdC', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"propertyId\":{{propertyIdC}},\"purchasePrice\":150000,\"ownershipSharePercent\":100,\"acquisitionDate\":\"2026-03-16\",\"occupancy\":{\"status\":\"RENTED\",\"monthlyRent\":1000,\"leaseStartDate\":\"2026-03-16\"}}"
             }
           }
         },
@@ -580,23 +632,27 @@
                   "const d = pm.response.json();",
                   "pm.test('scope of my portfolio, no error', () => { pm.expect(d.scope).to.eql('PORTFOLIO'); pm.expect(d.portfolioId).to.eql(Number(pm.collectionVariables.get('portfolioId'))); pm.expect(d.error).to.eql(null); pm.expect(d.currency).to.eql('USD'); });",
                   "pm.test('actual and projected are separate sections', () => { pm.expect(d.actual.basis).to.eql('ACTUAL_RECORDED_CASH'); pm.expect(d.projected.basis).to.eql('CONTRACT_RENT_INVESTMENT_CALCULATION'); pm.expect(d.note).to.be.a('string'); });",
-                  "pm.test('status OK with 2 holdings', () => { pm.expect(d.status).to.eql('OK'); pm.expect(d.totalHoldings).to.eql(2); });",
+                  "pm.test('status OK with 3 holdings', () => { pm.expect(d.status).to.eql('OK'); pm.expect(d.totalHoldings).to.eql(3); });",
                   "pm.test('period is the 3 requested months', () => pm.expect(d.period).to.eql({ fromMonth: '2026-01', toMonth: '2026-03', fromDate: '2026-01-01', toDate: '2026-03-31', months: 3, timeZone: 'UTC' }));",
                   "pm.test('actual: only records inside the period', () => {",
                   "  pm.expect(d.actual.status).to.eql('RECORDED'); pm.expect(d.actual.income).to.eql(3500); pm.expect(d.actual.expenses).to.eql(300);",
                   "  pm.expect(d.actual.cashFlow).to.eql(3200); pm.expect(d.actual.recordCount).to.eql(3);",
-                  "  pm.expect(d.actual.holdingsWithRecords).to.eql(2); pm.expect(d.actual.holdingsWithoutRecords).to.eql(0);",
+                  "  pm.expect(d.actual.holdingsWithRecords).to.eql(2); pm.expect(d.actual.holdingsWithoutRecords).to.eql(1);",
                   "});",
                   "pm.test('actual: categories and missing costs', () => {",
                   "  pm.expect(d.actual.categories.map(c => c.category)).to.eql(['RENT', 'REPAIRS']);",
                   "  pm.expect(d.actual.expenseCategoriesWithoutRecords).to.not.include('REPAIRS');",
                   "  pm.expect(d.actual.expenseCategoriesWithoutRecords).to.include.members(['INSURANCE', 'PROPERTY_TAX']);",
                   "});",
-                  "pm.test('projected: contract rent over the same 3 months and gross yield', () => {",
-                  "  pm.expect(d.projected.status).to.eql('AVAILABLE'); pm.expect(d.projected.rentedHoldings).to.eql(2); pm.expect(d.projected.holdingsWithRent).to.eql(2);",
-                  "  pm.expect(d.projected.monthlyGrossRent).to.eql(3500); pm.expect(d.projected.annualGrossRent).to.eql(42000);",
-                  "  pm.expect(d.projected.periodGrossRent).to.eql(d.projected.monthlyGrossRent * d.period.months);",
-                  "  pm.expect(d.projected.grossYieldPercent).to.eql(8.4);",
+                  "pm.test('projected: current contract rent and gross yield', () => {",
+                  "  pm.expect(d.projected.status).to.eql('AVAILABLE'); pm.expect(d.projected.rentedHoldings).to.eql(3); pm.expect(d.projected.holdingsWithRent).to.eql(3);",
+                  "  pm.expect(d.projected.monthlyGrossRent).to.eql(4500); pm.expect(d.projected.annualGrossRent).to.eql(54000);",
+                  "  pm.expect(d.projected.grossYieldPercent).to.eql(8.31);",
+                  "});",
+                  "pm.test('projected: period rent only while each holding was held (C from 2026-03-16: 16 of 31 March days)', () => {",
+                  "  pm.expect(d.projected.periodGrossRent).to.eql(11016.13);",
+                  "  pm.expect(d.projected.periodGrossRent).to.be.below(d.projected.monthlyGrossRent * d.period.months);",
+                  "  pm.expect(d.projected.missingInputs).to.include('2 rented holding(s) without an acquisition date or lease start date: rent counted for the whole period.');",
                   "});",
                   "pm.test('projected: no NOI and missing inputs disclosed', () => {",
                   "  pm.expect(d.projected.netOperatingIncome).to.eql(null);",
@@ -659,7 +715,14 @@
                   "const first = new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth() - 11, 1));",
                   "const ym = x => x.getUTCFullYear() + '-' + String(x.getUTCMonth() + 1).padStart(2, '0');",
                   "pm.test('12 months ending with the previous month', () => { pm.expect(d.period.months).to.eql(12); pm.expect(d.period.toMonth).to.eql(ym(last)); pm.expect(d.period.fromMonth).to.eql(ym(first)); });",
-                  "pm.test('projected rent covers the same 12 months', () => pm.expect(d.projected.periodGrossRent).to.eql(d.projected.monthlyGrossRent * 12));"
+                  "// A and B have no dates: every month; C only from 2026-03-16 (a partly covered month in proportion to its days)",
+                  "const cStart = Date.UTC(2026, 2, 16); let c = 0;",
+                  "for (let m = 0; m < 12; m++) {",
+                  "  const monthStart = Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + m, 1), next = Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + m + 1, 1);",
+                  "  const days = (next - monthStart) / 86400000, held = Math.max(0, (next - Math.max(monthStart, cStart)) / 86400000);",
+                  "  c += 1000 * held / days;",
+                  "}",
+                  "pm.test('projected rent covers the same 12 months, C only while held', () => pm.expect(d.projected.periodGrossRent).to.eql(Math.round((3500 * 12 + c) * 100) / 100));"
                 ]
               }
             }

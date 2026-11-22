@@ -87,8 +87,10 @@ public class InvestorDashboardController {
     @Operation(summary = "Income, expenses and returns card of my investor dashboard", description = "actual = the "
             + "SCRUM-74 financial summaries of all my portfolios, or of portfolioId, over whole months: recorded "
             + "income, expenses and cash flow after ownership share, with the expense categories that have no "
-            + "record (missing costs, not 0). projected = the monthly contract rent of the rented holdings x the "
-            + "same months and the gross yield, from the SCRUM-64 investment calculation; projected NOI is not "
+            + "record (missing costs, not 0). projected = the contract rent of the rented holdings for the same "
+            + "months, each holding only from its acquisition date and lease start to its lease end (a partly "
+            + "covered month in proportion to its days), and today's gross yield, from the SCRUM-64 investment "
+            + "calculation; projected NOI is not "
             + "calculated because holdings store no operating costs. The sections are never added together. "
             + "Without months: the last 12 complete months (UTC).")
     public ResponseEntity<InvestorIncomeExpensesReturnsCardDTO> incomeExpensesReturns(

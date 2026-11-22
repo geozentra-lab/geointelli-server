@@ -9,7 +9,8 @@ investment calculations (SCRUM-64).
 The card has two separate sections over the **same whole months**:
 
 - `actual`: the recorded cash (financial records) of the period;
-- `projected`: the monthly contract rent of the rented holdings for the same months, and the gross yield.
+- `projected`: the contract rent of the rented holdings for the same months (each only while it was held and
+  leased), and the gross yield.
 
 The two sections are never added together. The card is read-only.
 
@@ -53,21 +54,37 @@ The SCRUM-74 financial summary of each included portfolio (`PortfolioFinancialSu
 ## Projected (`projected`)
 
 The contract rent of the holdings reported as `RENTED` with a monthly rent, run through the SCRUM-64 investment
-calculation (`InvestmentAnalysisService`). No other formula is used.
+calculation (`InvestmentAnalysisService`).
+
+Today's contract figures (they describe the holdings as they are now):
 
 - `monthlyGrossRent`: sum of the monthly rents × current ownership share;
 - `annualGrossRent`: from the calculation (monthly × 12);
-- `periodGrossRent` = `monthlyGrossRent` × `period.months`. This is the figure to compare with `actual.income`;
 - `grossYieldPercent` = annual gross rent ÷ purchase price × 100 (SCRUM-64). It is `null` when a rented holding has no
-  purchase price;
+  purchase price.
+
+The figure of the period, to compare with `actual.income`:
+
+- `periodGrossRent`: the contract rent of each rented holding (× ownership share) **only for the part of the period
+  it was held and leased**: from the later of its `acquisitionDate` and `leaseStartDate` to its `leaseEndDate`. A
+  month fully inside counts the whole monthly rent; a month only partly inside counts in proportion to its days. A
+  date that is not recorded does not limit the holding.
+
+  Example, period 2025-11 to 2026-10: a holding rented 2,000/month since 2020 counts 12 × 2,000 = 24,000; a holding
+  rented 1,500/month at 50 % ownership, bought and leased on 2026-08-01, counts only August to October:
+  3 × 750 = 2,250. `periodGrossRent` = 26,250, not 2,750 × 12 = 33,000, which would include 9 months before the
+  second holding was bought.
+
+Other fields:
+
 - `netOperatingIncome` is always `null`: holdings store no vacancy rate, tax, insurance or other operating cost, so a
   projected NOI would only repeat the rent. Recorded costs are not used, to keep actual and projected apart;
-- `missingInputs`: every input the projection lacks: rented holdings without rent or purchase price, and the notes
-  of the SCRUM-64 calculation (vacancy, maintenance, management, tax, insurance, HOA, other costs);
+- `missingInputs`: every input the projection lacks: rented holdings without rent or purchase price, rented holdings
+  without an acquisition date or lease start date (their rent is counted for the whole period), rented holdings not
+  held or leased during the period (no rent counted for them), and the notes of the SCRUM-64 calculation (vacancy,
+  maintenance, management, tax, insurance, HOA, other costs);
 - `status`: `AVAILABLE`, or `UNAVAILABLE` with a `reason` when no rented holding has a rent ("No holdings" or
   "No rented holding has a monthly contract rent").
-
-The projection uses the holdings as they are today; lease dates do not change it.
 
 ## Response
 
@@ -112,6 +129,7 @@ The projection uses the holdings as they are today; lease dates do not change it
     "grossYieldPercent": 8.40,
     "netOperatingIncome": null,
     "missingInputs": [
+      "2 rented holding(s) without an acquisition date or lease start date: rent counted for the whole period.",
       "Holdings store no vacancy rate or operating costs: projected net operating income is not calculated.",
       "Vacancy rate not provided: no vacancy deducted, income may be overstated.",
       "Property tax not provided: not included in expenses, NOI may be overstated.",
@@ -131,6 +149,9 @@ The projection uses the holdings as they are today; lease dates do not change it
 | holdings but no record in the period | 200, `actual.status: NO_RECORDS`, amounts 0, every expense category listed as missing |
 | no rented holding with a rent | 200, `projected.status: UNAVAILABLE` ("No rented holding has a monthly contract rent") |
 | a rented holding without purchase price | 200, `grossYieldPercent: null`, reason in `missingInputs` |
+| a rented holding bought or leased during the period | 200, its rent counted only from that date in `periodGrossRent` |
+| a rented holding without acquisition or lease start date | 200, its rent counted for the whole period, disclosed in `missingInputs` |
+| a period before every lease (for example 2020) | 200, `periodGrossRent: 0.00`, the holdings listed in `missingInputs` as not held or leased during the period |
 
 `status` is `ERROR` only in the composed dashboard (SCRUM-107), when this card could not be loaded.
 
@@ -155,5 +176,6 @@ Errors use the shared `ApiError` body:
 
 Postman collection: `docs/postman/SCRUM-104-investor-income-expenses-returns.postman_collection.json`. Run the
 folders in order with the Collection Runner. It needs a running service, a Keycloak realm, two users (A owns the
-data, B is another investor) and two existing property IDs. Each run creates its own portfolio and deletes it at the
-end, so it can be repeated.
+data, B is another investor) and three existing property IDs. Holding C is bought and leased on 2026-03-16, so the
+checks show that `periodGrossRent` counts it only from that date (16 of the 31 March days, then whole months). Each
+run creates its own portfolio and deletes it at the end, so it can be repeated.

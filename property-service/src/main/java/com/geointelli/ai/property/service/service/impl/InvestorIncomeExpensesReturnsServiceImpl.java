@@ -36,8 +36,9 @@ import java.util.*;
 
 /**
  * Actual figures: the SCRUM-74 financial summary of each included portfolio, added up. Projected figures: one
- * SCRUM-64 investment calculation on the contract rent and purchase price of the rented holdings, scaled to the
- * same months. The two sections are never mixed: recorded costs are not used in the projection.
+ * SCRUM-64 investment calculation on the current contract rent and purchase price of the rented holdings, and the
+ * contract rent of the same months, each holding counted only while it was held and leased. The two sections are
+ * never mixed: recorded costs are not used in the projection.
  */
 @Service
 public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeExpensesReturnsService {
@@ -50,8 +51,9 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
             + "income is not calculated.";
     static final String NOTE = "actual = recorded cash of the period (SCRUM-74 financial summaries), after the "
             + "current ownership share; a category without records is a missing cost, not a cost of 0. "
-            + "projected = monthly contract rent of the rented holdings x the same months, through the SCRUM-64 "
-            + "investment calculation. The two sections are never added together.";
+            + "projected = contract rent of the rented holdings for the same months, each holding only while it was "
+            + "held and leased, through the SCRUM-64 investment calculation. The two sections are never added "
+            + "together.";
 
     private final CurrentUserService currentUserService;
     private final PortfolioRepository portfolioRepository;
@@ -108,7 +110,7 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
         // Projected: contract rent of the rented holdings over the same months
         List<HoldingRentFacts> holdings = portfolioIds.isEmpty()
                 ? List.of() : portfolioHoldingRepository.rentFacts(portfolioIds, userId);
-        Projected projected = projected(holdings, period.months());
+        Projected projected = projected(holdings, period);
 
         InvestorIncomeExpensesReturnsCardDTO card = new InvestorIncomeExpensesReturnsCardDTO();
         card.setScope(portfolioId == null ? InvestorIncomeExpensesReturnsCardDTO.SCOPE_ALL_PORTFOLIOS
@@ -194,13 +196,19 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
                 List.copyOf(missingCosts), updatedAt);
     }
 
-    /** One SCRUM-64 calculation on the summed contract rent (and purchase price when every rented holding has one). */
-    private Projected projected(List<HoldingRentFacts> holdings, int months) {
+    /**
+     * One SCRUM-64 calculation on the summed current contract rent (and purchase price when every rented holding has
+     * one). The period rent counts each holding only for the days of the period it was held and leased.
+     */
+    private Projected projected(List<HoldingRentFacts> holdings, Period period) {
         long rented = 0;
         long withRent = 0;
         long withoutPrice = 0;
+        long withoutStart = 0;
+        long outsidePeriod = 0;
         BigDecimal monthlyRent = BigDecimal.ZERO;
         BigDecimal purchasePrice = BigDecimal.ZERO;
+        BigDecimal periodRent = BigDecimal.ZERO;
         for (HoldingRentFacts holding : holdings) {
             if (holding.occupancy() != HoldingOccupancyStatus.RENTED) {
                 continue;
@@ -210,7 +218,17 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
                 continue;
             }
             withRent++;
-            monthlyRent = monthlyRent.add(money(byShare(holding.monthlyRent(), holding.share())));
+            BigDecimal rent = money(byShare(holding.monthlyRent(), holding.share()));
+            monthlyRent = monthlyRent.add(rent);
+            if (holding.acquisitionDate() == null && holding.leaseStartDate() == null) {
+                withoutStart++;
+            }
+            BigDecimal heldRent = periodRent(rent, holding.acquisitionDate(), holding.leaseStartDate(),
+                    holding.leaseEndDate(), period.fromDate(), period.toDate());
+            if (heldRent.signum() == 0) {
+                outsidePeriod++;
+            }
+            periodRent = periodRent.add(heldRent);
             if (holding.purchasePrice() == null || holding.purchasePrice().signum() <= 0) {
                 withoutPrice++;
             } else {
@@ -231,6 +249,14 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
         if (withoutPrice > 0) {
             missing.add(withoutPrice + " rented holding(s) without a purchase price: gross yield unavailable.");
         }
+        if (withoutStart > 0) {
+            missing.add(withoutStart + " rented holding(s) without an acquisition date or lease start date: rent "
+                    + "counted for the whole period.");
+        }
+        if (outsidePeriod > 0) {
+            missing.add(outsidePeriod + " rented holding(s) not held or leased during the period: no rent counted "
+                    + "for them.");
+        }
         missing.add(NOI_INPUTS);
 
         // Canonical calculation (SCRUM-64): only the inputs the holdings really have
@@ -243,8 +269,38 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
         BigDecimal monthly = money(analysis.operating().monthlyGrossRent());
         return new Projected(InvestorIncomeExpensesReturnsCardDTO.PROJECTED_BASIS,
                 InvestorIncomeExpensesReturnsCardDTO.AVAILABLE, rented, withRent, monthly,
-                money(analysis.operating().annualGrossRent()), money(monthly.multiply(BigDecimal.valueOf(months))),
+                money(analysis.operating().annualGrossRent()), money(periodRent),
                 withoutPrice == 0 ? analysis.grossYieldPercent() : null, null, List.copyOf(missing), null);
+    }
+
+    /**
+     * Contract rent of one holding for the days of [from, to] on or after its acquisition date and inside its lease
+     * (a missing date does not limit it). A fully covered month counts the whole monthly rent, a partly covered month
+     * in proportion to its days.
+     */
+    static BigDecimal periodRent(BigDecimal monthlyRent, LocalDate acquisitionDate, LocalDate leaseStartDate,
+                                 LocalDate leaseEndDate, LocalDate from, LocalDate to) {
+        LocalDate start = from;
+        if (acquisitionDate != null && acquisitionDate.isAfter(start)) {
+            start = acquisitionDate;
+        }
+        if (leaseStartDate != null && leaseStartDate.isAfter(start)) {
+            start = leaseStartDate;
+        }
+        LocalDate end = leaseEndDate != null && leaseEndDate.isBefore(to) ? leaseEndDate : to;
+        BigDecimal total = BigDecimal.ZERO;
+        if (start.isAfter(end)) {
+            return total;
+        }
+        for (YearMonth month = YearMonth.from(start); !month.isAfter(YearMonth.from(end)); month = month.plusMonths(1)) {
+            LocalDate first = start.isAfter(month.atDay(1)) ? start : month.atDay(1);
+            LocalDate last = end.isBefore(month.atEndOfMonth()) ? end : month.atEndOfMonth();
+            long days = ChronoUnit.DAYS.between(first, last) + 1;
+            total = total.add(days == month.lengthOfMonth() ? monthlyRent
+                    : monthlyRent.multiply(BigDecimal.valueOf(days))
+                            .divide(BigDecimal.valueOf(month.lengthOfMonth()), 10, RoundingMode.HALF_UP));
+        }
+        return total;
     }
 
     /** Full-property amount x ownership share %. */

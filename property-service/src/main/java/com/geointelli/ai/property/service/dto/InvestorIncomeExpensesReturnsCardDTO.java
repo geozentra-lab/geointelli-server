@@ -104,20 +104,25 @@ public class InvestorIncomeExpensesReturnsCardDTO {
             @Schema(description = "Latest change of an included record")
             @JsonFormat(shape = JsonFormat.Shape.STRING) LocalDateTime recordsUpdatedAt) {}
 
-    /** Contract rent of the rented holdings run through the SCRUM-64 investment calculation. */
+    /**
+     * Contract rent of the rented holdings run through the SCRUM-64 investment calculation. monthlyGrossRent,
+     * annualGrossRent and grossYieldPercent are today's contract figures; periodGrossRent counts each holding only
+     * for the part of the period it was held and leased.
+     */
     public record Projected(
             @Schema(description = "Where the figures come from", example = PROJECTED_BASIS) String basis,
             @Schema(description = "AVAILABLE when at least one rented holding has a contract rent, UNAVAILABLE "
                     + "otherwise", example = AVAILABLE) String status,
             @Schema(description = "Holdings reported as RENTED", example = "2") long rentedHoldings,
             @Schema(description = "Rented holdings with a monthly contract rent", example = "2") long holdingsWithRent,
-            @Schema(description = "Monthly contract rent after ownership share", example = "3500.00")
+            @Schema(description = "Current monthly contract rent after ownership share", example = "3500.00")
             BigDecimal monthlyGrossRent,
-            @Schema(description = "monthlyGrossRent x 12", example = "42000.00") BigDecimal annualGrossRent,
-            @Schema(description = "monthlyGrossRent x period months, comparable with actual.income",
-                    example = "42000.00") BigDecimal periodGrossRent,
-            @Schema(description = "annualGrossRent / purchase price x 100; null when a purchase price is missing",
-                    example = "8.40") BigDecimal grossYieldPercent,
+            @Schema(description = "monthlyGrossRent x 12 (current)", example = "42000.00") BigDecimal annualGrossRent,
+            @Schema(description = "Contract rent of the period: each holding only from its acquisition date and "
+                    + "lease start to its lease end, a partly covered month in proportion to its days; comparable "
+                    + "with actual.income", example = "42000.00") BigDecimal periodGrossRent,
+            @Schema(description = "annualGrossRent / purchase price x 100 (current); null when a purchase price is "
+                    + "missing", example = "8.40") BigDecimal grossYieldPercent,
             @Schema(description = "Always null: holdings store no operating costs, so NOI cannot be projected")
             BigDecimal netOperatingIncome,
             @Schema(description = "Inputs the projection does not have") List<String> missingInputs,
