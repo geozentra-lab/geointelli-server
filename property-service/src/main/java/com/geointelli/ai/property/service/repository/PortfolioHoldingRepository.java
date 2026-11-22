@@ -42,6 +42,16 @@ public interface PortfolioHoldingRepository extends JpaRepository<PortfolioHoldi
     List<Long> findHeldPropertyIds(@Param("portfolioIds") List<Long> portfolioIds,
                                    @Param("propertyIds") List<Long> propertyIds);
 
+    /**
+     * Rent, purchase-price and date facts of the holdings of the given portfolios, checked again against the owner
+     * (investor income, expenses and returns card).
+     */
+    @Query("SELECT new com.geointelli.ai.property.service.repository.HoldingRentFacts("
+            + "h.id, h.occupancyStatus, h.monthlyRent, h.purchasePrice, h.ownershipSharePercent, "
+            + "h.acquisitionDate, h.leaseStartDate, h.leaseEndDate) "
+            + "FROM PortfolioHolding h WHERE h.portfolio.id IN :ids AND h.portfolio.user.id = :userId ORDER BY h.id")
+    List<HoldingRentFacts> rentFacts(@Param("ids") List<Long> ids, @Param("userId") Long userId);
+
     @Modifying
     @Query("DELETE FROM PortfolioHolding h WHERE h.portfolio.id = :portfolioId")
     void deleteForPortfolio(@Param("portfolioId") Long portfolioId);
