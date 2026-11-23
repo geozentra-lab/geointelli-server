@@ -132,8 +132,8 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setJobType(ImportJobType.CSV_IMPORT);
         job.setDataset(dataset);
         job.setStatus(IngestionJobStatus.QUEUED);
-        job.setSourceCounty(county.trim());
-        job.setSourceState(state.trim());
+        job.setSourceCounty(trimToNull(county));
+        job.setSourceState(trimToNull(state));
         job.setCounty(resolved);
         job.setCreatedBy(createdBy);
         storeInputs(job, inputs, null);
@@ -265,9 +265,16 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         return dto;
     }
 
-    /** Properties and folder imports may create the county; the related files need it to exist already. */
+    /**
+     * Properties and folder imports may create the county; the related files need it to exist already. A
+     * dataset that does not belong to one county (market evidence) runs without one and returns null.
+     */
     private County resolveCounty(IngestionDataset dataset, String county, String state) {
-        if (county == null || county.isBlank() || state == null || state.isBlank()) {
+        boolean given = county != null && !county.isBlank() && state != null && !state.isBlank();
+        if (!dataset.requiresCounty()) {
+            return given ? countyService.resolve(county, state) : null;
+        }
+        if (!given) {
             throw new IllegalArgumentException("county and sourceState are required");
         }
         if (dataset == IngestionDataset.PROPERTIES || dataset == IngestionDataset.FOLDER) {
@@ -466,6 +473,10 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
             @Override public long size() { return size; }
             @Override public InputStream open() throws IOException { return Files.newInputStream(file); }
         };
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static Set<String> folderFileNames() {
