@@ -1,9 +1,11 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.InvestorDashboardDTO;
 import com.geointelli.ai.property.service.dto.InvestorIncomeExpensesReturnsCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorOpportunitiesCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
+import com.geointelli.ai.property.service.service.InvestorDashboardService;
 import com.geointelli.ai.property.service.service.InvestorIncomeExpensesReturnsService;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
 import com.geointelli.ai.property.service.service.InvestorOpportunitiesService;
@@ -22,8 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.YearMonth;
 
 /**
- * Investor dashboard (SCRUM-85). Each card has its own endpoint so it can be verified alone;
- * the composed {@code GET /api/dashboards/investor} is added by SCRUM-107.
+ * Investor dashboard (SCRUM-85). Each card has its own endpoint so it can be verified alone, and
+ * {@code GET /api/dashboards/investor} returns the four cards together (SCRUM-107).
  */
 @RestController
 @RequestMapping("/api/dashboards/investor")
@@ -37,6 +39,7 @@ public class InvestorDashboardController {
     private final InvestorValueEquityDebtService investorValueEquityDebtService;
     private final InvestorOpportunitiesService investorOpportunitiesService;
     private final InvestorIncomeExpensesReturnsService investorIncomeExpensesReturnsService;
+    private final InvestorDashboardService investorDashboardService;
 
     /**
      * Occupancy and exposure card: occupancy counts, rental occupancy, state and county exposure and their coverage.
@@ -129,4 +132,28 @@ public class InvestorDashboardController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth) {
         return ResponseEntity.ok(investorIncomeExpensesReturnsService.getCard(portfolioId, fromMonth, toMonth));
     }
+
+    /**
+     * Composed investor dashboard: the four cards for the same portfolio scope in one response.
+     *
+     * @param portfolioId optional portfolio of the current user; all portfolios when omitted
+     * @param fromMonth   first month of the income card (yyyy-MM, included); give both months or none for the last
+     *                    12 complete months
+     * @param toMonth     last month of the income card (yyyy-MM, included); must be before the current month
+     * @return 200 with the dashboard (OK, EMPTY, PARTIAL or ERROR); 400 if portfolioId or the period is invalid;
+     *         401 without a bearer token; 404 if the portfolio is missing or belongs to another user
+     */
+    @GetMapping
+    @Operation(summary = "My investor dashboard", description = "The value-equity-debt, income-expenses-returns, "
+            + "occupancy-exposure and opportunities cards for all my portfolios, or for portfolioId. The scope and the "
+            + "period are checked first: an invalid value fails the whole request. Only the income card uses the "
+            + "period (whole months; the last 12 complete months by default). A card that cannot be loaded gets "
+            + "status ERROR and is listed in failedCards; the other cards are kept (status PARTIAL).")
+    public ResponseEntity<InvestorDashboardDTO> dashboard(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth) {
+        return ResponseEntity.ok(investorDashboardService.getDashboard(portfolioId, fromMonth, toMonth));
+    }
+
 }

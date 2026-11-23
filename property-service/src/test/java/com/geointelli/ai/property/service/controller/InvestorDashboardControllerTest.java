@@ -1,10 +1,14 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.InvestorDashboardDTO;
+import com.geointelli.ai.property.service.dto.InvestorIncomeExpensesReturnsCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
+import com.geointelli.ai.property.service.dto.InvestorOpportunitiesCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
 import com.geointelli.ai.property.service.dto.PortfolioGeographyDTO;
 import com.geointelli.ai.property.service.dto.PortfolioMetricDTO;
 import com.geointelli.ai.property.service.entity.HoldingOccupancyStatus;
+import com.geointelli.ai.property.service.service.InvestorDashboardService;
 import com.geointelli.ai.property.service.service.InvestorIncomeExpensesReturnsService;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
 import com.geointelli.ai.property.service.service.InvestorOpportunitiesService;
@@ -23,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +55,9 @@ public class InvestorDashboardControllerTest {
 
     @MockBean
     InvestorIncomeExpensesReturnsService investorIncomeExpensesReturnsService;
+
+    @MockBean
+    InvestorDashboardService investorDashboardService;
 
     private static final String URL = "/api/dashboards/investor/occupancy-exposure";
 
@@ -239,6 +247,107 @@ public class InvestorDashboardControllerTest {
 
             // Act & Assert
             mockMvc.perform(get(VALUE_URL).param("portfolioId", "9"))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Portfolio not found"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Test Composed Dashboard Endpoint")
+    class DashboardTest {
+
+        private static final String DASHBOARD_URL = "/api/dashboards/investor";
+
+        private InvestorDashboardDTO dashboard(String status, List<String> failedCards) {
+            InvestorDashboardDTO dashboard = new InvestorDashboardDTO();
+            dashboard.setScope(InvestorDashboardDTO.SCOPE_PORTFOLIO);
+            dashboard.setPortfolioId(5L);
+            dashboard.setPortfolioCount(1);
+            dashboard.setStatus(status);
+            dashboard.setFailedCards(failedCards);
+            dashboard.setGeneratedAt(Instant.parse("2026-11-23T10:00:00Z"));
+            dashboard.setPeriod(new InvestorIncomeExpensesReturnsCardDTO.Period(YearMonth.of(2026, 1),
+                    YearMonth.of(2026, 3), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31), 3, "UTC"));
+            dashboard.setValueEquityDebt(new InvestorValueEquityDebtCardDTO());
+            dashboard.setIncomeExpensesReturns(new InvestorIncomeExpensesReturnsCardDTO());
+            dashboard.setOccupancyExposure(card(InvestorOccupancyExposureCardDTO.SCOPE_PORTFOLIO, 5L, 2));
+            InvestorOpportunitiesCardDTO opportunities = new InvestorOpportunitiesCardDTO();
+            opportunities.setStatus(InvestorOpportunitiesCardDTO.STATUS_ERROR);
+            opportunities.setError("This card could not be loaded; the other cards are not affected.");
+            dashboard.setOpportunities(opportunities);
+            return dashboard;
+        }
+
+        @Test
+        @DisplayName("When the parameters are given, then pass them to the service and return the dashboard")
+        void whenParametersGiven_thenReturnDashboard() throws Exception {
+            // Arrange
+            when(investorDashboardService.getDashboard(5L, YearMonth.of(2026, 1), YearMonth.of(2026, 3)))
+                    .thenReturn(dashboard(InvestorDashboardDTO.STATUS_PARTIAL, List.of("opportunities")));
+
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL).param("portfolioId", "5")
+                            .param("fromMonth", "2026-01").param("toMonth", "2026-03"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.scope").value("PORTFOLIO"))
+                    .andExpect(jsonPath("$.portfolioId").value(5))
+                    .andExpect(jsonPath("$.status").value("PARTIAL"))
+                    .andExpect(jsonPath("$.failedCards[0]").value("opportunities"))
+                    .andExpect(jsonPath("$.period.fromMonth").value("2026-01"))
+                    .andExpect(jsonPath("$.period.toMonth").value("2026-03"))
+                    .andExpect(jsonPath("$.period.months").value(3))
+                    .andExpect(jsonPath("$.generatedAt").value("2026-11-23T10:00:00Z"))
+                    .andExpect(jsonPath("$.occupancyExposure.totalHoldings").value(2))
+                    .andExpect(jsonPath("$.opportunities.status").value("ERROR"))
+                    .andExpect(jsonPath("$.opportunities.error").isString());
+        }
+
+        @Test
+        @DisplayName("When no parameter is given, then call the service with nulls")
+        void whenNoParameter_thenPassNulls() throws Exception {
+            // Arrange
+            when(investorDashboardService.getDashboard(null, null, null))
+                    .thenReturn(dashboard(InvestorDashboardDTO.STATUS_OK, List.of()));
+
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.failedCards").isEmpty());
+            verify(investorDashboardService).getDashboard(null, null, null);
+        }
+
+        @Test
+        @DisplayName("When a month is not yyyy-MM, then return 400 without calling the service")
+        void whenMonthInvalid_thenReturn400() throws Exception {
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL).param("fromMonth", "2026-13").param("toMonth", "2026-03"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("fromMonth: invalid value"));
+            verifyNoInteractions(investorDashboardService);
+        }
+
+        @Test
+        @DisplayName("When the service rejects the period, then return 400")
+        void whenServiceRejectsPeriod_thenReturn400() throws Exception {
+            // Arrange
+            when(investorDashboardService.getDashboard(null, YearMonth.of(2026, 1), null))
+                    .thenThrow(new IllegalArgumentException("fromMonth and toMonth must be given together"));
+
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL).param("fromMonth", "2026-01"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("fromMonth and toMonth must be given together"));
+        }
+
+        @Test
+        @DisplayName("When the portfolio is missing or belongs to another user, then return 404")
+        void whenForeignPortfolio_thenReturn404() throws Exception {
+            // Arrange
+            when(investorDashboardService.getDashboard(9L, null, null))
+                    .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Portfolio not found"));
+
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL).param("portfolioId", "9"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Portfolio not found"));
         }
