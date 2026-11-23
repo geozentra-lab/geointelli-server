@@ -1,0 +1,2 @@
+source,evidence_type,geography_level,geography_code,period_start,sale_count,median_sale_price
+SAMPLE_PROVIDER,SALE,ZIP,33139,2026-09-01,42,615000

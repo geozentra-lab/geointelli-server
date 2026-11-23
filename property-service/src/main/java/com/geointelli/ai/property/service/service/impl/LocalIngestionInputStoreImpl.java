@@ -27,7 +27,7 @@ public class LocalIngestionInputStoreImpl implements IngestionInputStore {
 
     public LocalIngestionInputStoreImpl(IngestionProperties properties) {
         this.baseDirectory = Path.of(properties.getInput().getLocalDirectory()).toAbsolutePath().normalize();
-        this.instanceId = properties.getJobs().getInstanceId();
+        this.instanceId = properties.getJobs().resolvedInstanceId();
     }
 
     @Override

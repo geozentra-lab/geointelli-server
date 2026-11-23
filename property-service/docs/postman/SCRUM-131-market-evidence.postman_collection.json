@@ -1,0 +1,1209 @@
+{
+  "info": {
+    "_postman_id": "e20358ee-9a0d-5522-90a9-4b84add837ca",
+    "name": "SCRUM-131 Market evidence ingestion",
+    "description": "Manual checks for POST /api/admin/market-evidence/import and GET /api/market-evidence. Variables: baseUrl (app), keycloakUrl (realm, e.g. http://localhost:8090/realms/geozentra), clientId, adminUser/adminPassword (realm role admin), user/password (no admin role), sampleDir (absolute path of docs/postman/samples/market-evidence). 01-02 fetch tokens. 03 reads the empty market, 04-08 import the six-row sample and read it, 09-11 import it again and check the row count did not change, 12-17 are the invalid-input and invalid-row cases (poll requests must be re-sent while the job is QUEUED or RUNNING), 18-20 invalid reads, 21-23 ownership and the refused generic endpoint.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for the admin (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUser}}"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for a non-admin user",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{user}}"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('userToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Empty market: ZIP 33139 before any import (200, no rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33139",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            }
+          ]
+        },
+        "description": "Run on a database with no SAMPLE_PROVIDER rows: totalElements is 0. On a reused database it records the current count for the idempotency check."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('empty page, not 404', () => { pm.expect(page.content).to.be.an('array'); pm.expect(page.totalElements).to.be.a('number'); });",
+              "pm.collectionVariables.set('rowsBefore', page.totalElements);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Admin imports market_evidence.csv (202, job queued)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for MARKET_EVIDENCE', () => { pm.expect(job.dataset).to.eql('MARKET_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); pm.expect(['QUEUED','RUNNING','COMPLETED']).to.include(job.status); });",
+              "pm.collectionVariables.set('jobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Poll the job (200, COMPLETED, 6 rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{jobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{jobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "if (job.status === 'QUEUED' || job.status === 'RUNNING') { console.log('still ' + job.status + ', send this request again'); }",
+              "pm.test('job is COMPLETED (re-send while QUEUED/RUNNING)', () => pm.expect(job.status).to.eql('COMPLETED'));",
+              "pm.test('6 rows completed, none failed', () => { pm.expect(job.total).to.eql(6); pm.expect(job.completed).to.eql(6); pm.expect(job.failed).to.eql(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Read ZIP 33139 (200, sale and asking rows kept apart)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33139",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('the 4 sample ZIP rows are there', () => pm.expect(page.content.filter(o => o.source === 'SAMPLE_PROVIDER').length).to.eql(4));",
+              "pm.test('newest period first', () => pm.expect(page.content[0].periodStart).to.eql('2026-10-01'));",
+              "pm.test('SALE rows have no asking figures', () => page.content.filter(o => o.evidenceType === 'SALE').forEach(o => { pm.expect(o.saleCount).to.not.be.null; pm.expect(o.medianAskingPrice).to.be.null; pm.expect(o.activeListingCount).to.be.null; }));",
+              "pm.test('ASKING rows have no sale figures', () => page.content.filter(o => o.evidenceType === 'ASKING').forEach(o => { pm.expect(o.activeListingCount).to.not.be.null; pm.expect(o.medianSalePrice).to.be.null; pm.expect(o.saleCount).to.be.null; }));",
+              "pm.test('provenance and freshness present', () => page.content.forEach(o => { pm.expect(o.source).to.eql('SAMPLE_PROVIDER'); pm.expect(o.importedAt).to.be.a('string'); pm.expect(o.importJobId).to.be.a('string'); pm.expect(o.sourceReleaseDate).to.be.a('string'); }));",
+              "pm.test('state linked', () => page.content.forEach(o => pm.expect(o.stateId).to.be.a('number')));",
+              "pm.collectionVariables.set('rowsAfterFirstImport', page.totalElements);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Read ZIP 33139 sales only (200, 2 SALE rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33139&type=SALE&source=sample_provider",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            },
+            {
+              "key": "type",
+              "value": "SALE"
+            },
+            {
+              "key": "source",
+              "value": "sample_provider"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('only SALE rows', () => { pm.expect(page.content.length).to.be.above(0); page.content.forEach(o => pm.expect(o.evidenceType).to.eql('SALE')); });",
+              "pm.test('tolerated $ and comma parsed', () => pm.expect(page.content.find(o => o.periodStart === '2026-10-01').medianSalePrice).to.eql(627500));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Read state FL with a window (200, the October estimate only)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=STATE&code=fl&from=2026-10-15&to=2026-10-20",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "STATE"
+            },
+            {
+              "key": "code",
+              "value": "fl"
+            },
+            {
+              "key": "from",
+              "value": "2026-10-15"
+            },
+            {
+              "key": "to",
+              "value": "2026-10-20"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('lower-case code accepted and one October row', () => { pm.expect(page.content.length).to.be.at.least(1); page.content.forEach(o => { pm.expect(o.geographyCode).to.eql('FL'); pm.expect(o.periodStart).to.eql('2026-10-01'); }); });",
+              "pm.test('marked as ESTIMATE', () => pm.expect(page.content[0].observationKind).to.eql('ESTIMATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Idempotency: admin imports the same file again (202)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for MARKET_EVIDENCE', () => { pm.expect(job.dataset).to.eql('MARKET_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); pm.expect(['QUEUED','RUNNING','COMPLETED']).to.include(job.status); });",
+              "pm.collectionVariables.set('rerunJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Poll the re-import (200, COMPLETED, 6 rows processed)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{rerunJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{rerunJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "if (job.status === 'QUEUED' || job.status === 'RUNNING') { console.log('still ' + job.status + ', send this request again'); }",
+              "pm.test('job is COMPLETED (re-send while QUEUED/RUNNING)', () => pm.expect(job.status).to.eql('COMPLETED'));",
+              "pm.test('6 rows processed again', () => pm.expect(job.completed).to.eql(6));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Read ZIP 33139 again (200, same row count as after the first import)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33139",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const page = pm.response.json();",
+              "pm.test('no duplicates', () => pm.expect(page.totalElements).to.eql(pm.collectionVariables.get('rowsAfterFirstImport')));",
+              "pm.test('rows point at the newest job', () => page.content.forEach(o => pm.expect(o.importJobId).to.eql(pm.collectionVariables.get('rerunJobId'))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Invalid input: file without period_end (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence_missing_column.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('names the missing column', () => pm.expect(pm.response.text()).to.include('period_end'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Invalid input: no file at all (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "county",
+              "value": "Miami-Dade",
+              "type": "text"
+            },
+            {
+              "key": "sourceState",
+              "value": "FL",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Invalid row: negative sale_count on data row 2 (202, job queued)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence_bad_row.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for MARKET_EVIDENCE', () => { pm.expect(job.dataset).to.eql('MARKET_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); pm.expect(['QUEUED','RUNNING','COMPLETED']).to.include(job.status); });",
+              "pm.collectionVariables.set('badRowJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Poll the bad-row job (200, FAILED INVALID_ROW at record 2)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{badRowJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{badRowJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "if (job.status === 'QUEUED' || job.status === 'RUNNING') { console.log('still ' + job.status + ', send this request again'); }",
+              "pm.test('job is FAILED (re-send while QUEUED/RUNNING)', () => pm.expect(job.status).to.eql('FAILED'));",
+              "pm.test('INVALID_ROW naming sale_count on record 2 (data rows count from 1)', () => { pm.expect(job.errorCode).to.eql('INVALID_ROW'); pm.expect(job.errorMessage).to.include('market_evidence.csv:2'); pm.expect(job.errorMessage).to.include('sale_count'); });",
+              "pm.test('the failed row is listed', () => pm.expect(job.items.some(i => i.itemKey === 'market_evidence.csv:2' && i.status === 'FAILED')).to.be.true);",
+              "pm.test('nothing of the failed batch was written', () => { pm.expect(job.completed).to.eql(0); pm.expect(job.failed).to.eql(1); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15b Read ZIP 33140 after the failed job (200, empty: the batch was rolled back)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33140",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33140"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('no row written', () => pm.expect(pm.response.json().totalElements).to.eql(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Invalid row: SALE row carrying median_asking_price (202, job queued)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence_mixed_row.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for MARKET_EVIDENCE', () => { pm.expect(job.dataset).to.eql('MARKET_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); pm.expect(['QUEUED','RUNNING','COMPLETED']).to.include(job.status); });",
+              "pm.collectionVariables.set('mixedJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Poll the mixed-row job (200, FAILED, column must be empty)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{mixedJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{mixedJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "if (job.status === 'QUEUED' || job.status === 'RUNNING') { console.log('still ' + job.status + ', send this request again'); }",
+              "pm.test('job is FAILED (re-send while QUEUED/RUNNING)', () => pm.expect(job.status).to.eql('FAILED'));",
+              "pm.test('sale and asking never mix', () => { pm.expect(job.errorCode).to.eql('INVALID_ROW'); pm.expect(job.errorMessage).to.include('median_asking_price'); pm.expect(job.errorMessage).to.include('must be empty'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Invalid read: level TOWN (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=TOWN&code=33139",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TOWN"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Invalid read: ZIP code with four digits (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=3313",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "3313"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('explains the format', () => pm.expect(pm.response.text()).to.include('five-digit'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Invalid read: size 500 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/market-evidence?level=ZIP&code=33139&size=500",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "market-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            },
+            {
+              "key": "size",
+              "value": "500"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Ownership: non-admin user cannot import (403)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Ownership: no token cannot import (401)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/market-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "market-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Generic import endpoint refuses market-evidence (400, points to the admin endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/import/market-evidence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "import",
+            "market-evidence"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/market_evidence.csv"
+            },
+            {
+              "key": "county",
+              "value": "Miami-Dade",
+              "type": "text"
+            },
+            {
+              "key": "sourceState",
+              "value": "FL",
+              "type": "text"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('redirects to the admin endpoint', () => pm.expect(pm.response.text()).to.include('/api/admin/market-evidence/import'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "adminUser",
+      "value": "lic_admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "user",
+      "value": "lic_user_a"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "sampleDir",
+      "value": "C:/path/to/property-service/docs/postman/samples/market-evidence"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "rerunJobId",
+      "value": ""
+    },
+    {
+      "key": "badRowJobId",
+      "value": ""
+    },
+    {
+      "key": "mixedJobId",
+      "value": ""
+    },
+    {
+      "key": "rowsBefore",
+      "value": ""
+    },
+    {
+      "key": "rowsAfterFirstImport",
+      "value": ""
+    }
+  ]
+}

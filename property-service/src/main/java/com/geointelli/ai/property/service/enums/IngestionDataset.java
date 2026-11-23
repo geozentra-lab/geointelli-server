@@ -57,6 +57,13 @@ public enum IngestionDataset {
         "last_sale_date", "confidence_score", "prediction_date", "model_version")),
     PROPERTY_IMAGES(ImportJobType.CSV_IMPORT, "property-images", "property_images.csv", List.of(
         "property_id", "original_url", "primary_image", "display_order")),
+    /**
+     * Market sale and asking-price observations by geography and period (SCRUM-131). Not a county file: one
+     * file may cover many states, counties and ZIP codes, so the job carries no county. Started from
+     * {@code POST /api/admin/market-evidence/import}, never from the generic county import endpoint.
+     */
+    MARKET_EVIDENCE(ImportJobType.CSV_IMPORT, "market-evidence", "market_evidence.csv", List.of(
+        "source", "evidence_type", "geography_level", "geography_code", "period_start", "period_end")),
     /** All county files in one job, in the order {@code CsvFolderImportService} uses. */
     FOLDER(ImportJobType.CSV_IMPORT, "folder", null, List.of()),
 
@@ -99,6 +106,11 @@ public enum IngestionDataset {
     /** Whether this is one CSV file (or the owners pair) that a job reads row by row. */
     public boolean isSingleCsv() {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
+    }
+
+    /** Whether a job for this dataset must name the county its rows belong to; market files cover many. */
+    public boolean requiresCounty() {
+        return this != MARKET_EVIDENCE;
     }
 
     /** Resolves a single-file CSV dataset from its endpoint path segment ({@code extra-features} and so on). */

@@ -1,0 +1,7 @@
+source,evidence_type,geography_level,geography_code,geography_name,state_code,county_name,period_start,period_end,source_dataset,source_release_date,observation_kind,currency,sale_count,median_sale_price,average_sale_price,median_sale_price_per_sqft,active_listing_count,new_listing_count,median_asking_price,average_asking_price,median_asking_price_per_sqft,median_days_on_market,price_reduced_count
+SAMPLE_PROVIDER,SALE,ZIP,33139,Miami Beach 33139,FL,Miami-Dade,2026-09-01,2026-09-30,zip_monthly_sales,2026-10-15,ACTUAL,USD,42,615000,702350.50,598.20,,,,,,,
+SAMPLE_PROVIDER,ASKING,ZIP,33139,Miami Beach 33139,FL,Miami-Dade,2026-09-01,2026-09-30,zip_monthly_inventory,2026-10-15,ACTUAL,USD,,,,,318,74,689000,815400,642.10,61,55
+SAMPLE_PROVIDER,SALE,ZIP,33139,Miami Beach 33139,FL,Miami-Dade,2026-10-01,2026-10-31,zip_monthly_sales,2026-11-14,ACTUAL,USD,39,"$627,500",698100,605.75,,,,,,,
+SAMPLE_PROVIDER,ASKING,ZIP,33139,Miami Beach 33139,FL,Miami-Dade,2026-10-01,2026-10-31,zip_monthly_inventory,2026-11-14,ACTUAL,USD,,,,,331,69,695000,822900,648.30,64,58
+SAMPLE_PROVIDER,SALE,COUNTY,12086,Miami-Dade,FL,,2026-10-01,2026-10-31,county_monthly_sales,2026-11-14,ACTUAL,USD,2310,520000,641200,412.40,,,,,,,
+SAMPLE_PROVIDER,ASKING,STATE,FL,Florida,,,2026-10-01,2026-10-31,state_monthly_inventory,2026-11-14,ESTIMATE,USD,,,,,168400,41200,419900,512300,268.90,70,39100
