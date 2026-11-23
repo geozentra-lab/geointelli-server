@@ -1,0 +1,609 @@
+{
+  "info": {
+    "_postman_id": "619b55da-1808-561a-ab10-e789edfde2e9",
+    "name": "SCRUM-118 Listing source and field mapping",
+    "description": "Manual checks for GET /api/admin/listing-sources, /{code} and /{code}/fields. Variables: baseUrl (app), keycloakUrl (realm, e.g. http://localhost:8090/realms/geozentra), clientId, adminUser/adminPassword (realm role admin), user/password (no admin role). 01-02 fetch tokens. 03-08 read the seeded REALTOR_COM source and its mapping with filters (success), 09-11 are the invalid-input cases, 12-13 the ownership checks. Nothing has to be imported: migration V45 seeds the rows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for the admin (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUser}}"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for a non-admin user",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{user}}"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('userToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 List listing sources (200, REALTOR_COM pending)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources"
+          ]
+        },
+        "description": "Seeded by migration V45; nothing has to be imported first."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const list = pm.response.json();",
+              "pm.test('REALTOR_COM is listed', () => pm.expect(list.map(s => s.code)).to.include('REALTOR_COM'));",
+              "const s = list.find(x => x.code === 'REALTOR_COM');",
+              "pm.test('awaiting the product owner', () => { pm.expect(s.authorizationStatus).to.eql('PENDING'); pm.expect(s.authorizedAt).to.be.undefined; });",
+              "pm.test('refresh method, coverage and identity documented', () => { pm.expect(s.refreshMethod).to.eql('BATCH_PULL'); pm.expect(s.coverage).to.include('Florida'); pm.expect(s.identityFields).to.include('property_id'); });",
+              "pm.test('field count without the field list', () => { pm.expect(s.fieldCount).to.be.above(50); pm.expect(s.fields).to.be.undefined; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Get REALTOR_COM with its field mapping (200)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const s = pm.response.json();",
+              "pm.test('fields present and counted', () => { pm.expect(s.fields).to.be.an('array').that.is.not.empty; pm.expect(s.fieldCount).to.eql(s.fields.length); });",
+              "pm.test('document order', () => { for (let i = 1; i < s.fields.length; i++) pm.expect(s.fields[i].displayOrder).to.be.above(s.fields[i-1].displayOrder); });",
+              "pm.test('asking-price rows target asking_* or hoa_* columns only', () => s.fields.filter(f => f.fieldGroup === 'ASKING_PRICE').forEach(f => pm.expect(f.targetColumn).to.match(/^(asking_|hoa_)/)));",
+              "pm.test('sale-price rows target last_sold_* columns only', () => { const sale = s.fields.filter(f => f.fieldGroup === 'SALE_PRICE'); pm.expect(sale.length).to.be.above(0); sale.forEach(f => pm.expect(f.targetColumn).to.match(/^last_sold_/)); });",
+              "pm.test('no asking column receives a sale field and vice versa', () => { pm.expect(s.fields.find(f => f.sourceField === 'last_sold_price').targetColumn).to.not.include('asking'); pm.expect(s.fields.find(f => f.sourceField === 'list_price').targetColumn).to.eql('asking_price'); });",
+              "pm.test('mapped rows have a target column, unmapped rows do not', () => s.fields.forEach(f => { if (['AVAILABLE','PARTIAL'].includes(f.availability)) pm.expect(f.targetColumn, f.sourceField).to.be.a('string'); else pm.expect(f.targetColumn, f.sourceField).to.be.null; }));",
+              "pm.test('every row carries the source code', () => s.fields.forEach(f => pm.expect(f.sourceCode).to.eql('REALTOR_COM')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Identifier fields (200, property_id and listing_id)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM/fields?group=IDENTIFIER",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM",
+            "fields"
+          ],
+          "query": [
+            {
+              "key": "group",
+              "value": "IDENTIFIER"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const rows = pm.response.json();",
+              "pm.test('only IDENTIFIER rows', () => { pm.expect(rows.length).to.be.above(0); rows.forEach(f => pm.expect(f.fieldGroup).to.eql('IDENTIFIER')); });",
+              "const names = rows.map(f => f.sourceField);",
+              "pm.test('source ids present', () => { pm.expect(names).to.include('property_id'); pm.expect(names).to.include('listing_id'); pm.expect(names).to.include('source.listing_id'); });",
+              "pm.test('property_id is always available', () => pm.expect(rows.find(f => f.sourceField === 'property_id').availability).to.eql('AVAILABLE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Excluded fields (200, financing and marketing text)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM/fields?availability=EXCLUDED",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM",
+            "fields"
+          ],
+          "query": [
+            {
+              "key": "availability",
+              "value": "EXCLUDED"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const rows = pm.response.json();",
+              "pm.test('only EXCLUDED rows, none with a target column', () => { pm.expect(rows.length).to.be.above(0); rows.forEach(f => { pm.expect(f.availability).to.eql('EXCLUDED'); pm.expect(f.targetColumn).to.be.null; }); });",
+              "pm.test('financing fields are excluded', () => pm.expect(rows.some(f => /mortgage|financing/i.test(f.sourceField))).to.be.true);",
+              "pm.test('broker text is excluded', () => pm.expect(rows.map(f => f.sourceField)).to.include('description.text'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Available timestamps (200, last_update_date)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM/fields?group=timestamp&availability=available",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM",
+            "fields"
+          ],
+          "query": [
+            {
+              "key": "group",
+              "value": "timestamp"
+            },
+            {
+              "key": "availability",
+              "value": "available"
+            }
+          ]
+        },
+        "description": "Filter words are case-insensitive."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const rows = pm.response.json();",
+              "pm.test('both filters applied', () => { pm.expect(rows.length).to.be.above(0); rows.forEach(f => { pm.expect(f.fieldGroup).to.eql('TIMESTAMP'); pm.expect(f.availability).to.eql('AVAILABLE'); }); });",
+              "pm.test('freshness field present', () => pm.expect(rows.map(f => f.sourceField)).to.include('last_update_date'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Lower-case code (200, same source)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/realtor_com",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "realtor_com"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('code resolved case-insensitively', () => pm.expect(pm.response.json().code).to.eql('REALTOR_COM'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Unknown code (404)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/NOT_A_SOURCE",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "NOT_A_SOURCE"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));",
+              "pm.test('message names the code', () => pm.expect(JSON.stringify(pm.response.json())).to.include('NOT_A_SOURCE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Unknown group (400 naming the allowed values)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM/fields?group=PRICE",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM",
+            "fields"
+          ],
+          "query": [
+            {
+              "key": "group",
+              "value": "PRICE"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('allowed values listed', () => { const body = JSON.stringify(pm.response.json()); pm.expect(body).to.include('ASKING_PRICE'); pm.expect(body).to.include('SALE_PRICE'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Unknown availability (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM/fields?availability=MAYBE",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM",
+            "fields"
+          ],
+          "query": [
+            {
+              "key": "availability",
+              "value": "MAYBE"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('allowed values listed', () => pm.expect(JSON.stringify(pm.response.json())).to.include('EXCLUDED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Non-admin user (403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 No token (401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/listing-sources/REALTOR_COM",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "listing-sources",
+            "REALTOR_COM"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "adminUser",
+      "value": "lic_admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "user",
+      "value": "lic_user_a"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    }
+  ]
+}
