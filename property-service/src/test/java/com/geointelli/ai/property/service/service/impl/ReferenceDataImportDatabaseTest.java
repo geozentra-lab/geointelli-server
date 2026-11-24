@@ -32,7 +32,7 @@ import com.geointelli.ai.property.service.service.ReferenceDataImportService.Loa
 import com.geointelli.ai.property.service.service.ReferenceDataImportService.LoadResult;
 
 /**
- * Opt-in checks of migration V42 and the COPY loader on a real PostgreSQL + PostGIS database (H2 has no PostGIS).
+ * Opt-in checks of migrations V42/V47 and the COPY loader on a real PostgreSQL + PostGIS database (H2 has no PostGIS).
  * Runs in a schema of its own on a dedicated local test database only, and drops it afterwards; never the
  * application's database. Fixture: src/test/resources/reference-data.
  */
@@ -74,6 +74,7 @@ class ReferenceDataImportDatabaseTest {
         jdbc.execute("INSERT INTO counties VALUES (1, 1, 'Miami-Dade'), (2, 1, 'Saint Johns'), (3, 1, 'De Soto'), "
             + "(4, 1, 'St. Lucie'), (5, 2, 'Fulton')");
         jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V42__add_environmental_reference_data.sql")));
+        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V47__widen_flood_zones_study_typ.sql")));
         transaction = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         importer = new ReferenceDataImportServiceImpl(dataSource, new ObjectMapper());
     }
@@ -187,6 +188,37 @@ class ReferenceDataImportDatabaseTest {
         assertTrue(jdbc.queryForObject("""
             SELECT abs(ST_Area(ST_Union(geom)) - ST_Area(ST_GeomFromText(?, 4326))) < 1e-9
             FROM flood_zones WHERE fips5 = '12087'""", Boolean.class, ring.toString()));
+    }
+
+    @Test
+    @DisplayName("The longest value of each FEMA text column in the 67 Florida files is stored whole (STUDY_TYP: 28)")
+    void longestFemaValuesFit() throws Exception {
+        String square = "\"POLYGON((-82.30 29.60,-82.29 29.60,-82.29 29.61,-82.30 29.61,-82.30 29.60))\"";
+        // Every STUDY_TYP longer than V42's 20 characters that the FEMA files use.
+        List<String> studyTypes = List.of("SFHAs WITH MEDIUM FLOOD RISK", "SFHAs WITH HIGH FLOOD RISK",
+            "SFHA with BFE and floodway", "SFHAs WITH LOW FLOOD RISK", "SFHA with unpublished BFE",
+            "SFHA with BFE no floodway");
+        StringBuilder csv = new StringBuilder("fips5,DFIRM_ID,FLD_AR_ID,FLD_ZONE,ZONE_SUBTY,SFHA_TF,STATIC_BFE,DEPTH,"
+            + "V_DATUM,LEN_UNIT,VELOCITY,VEL_UNIT,DUAL_ZONE,STUDY_TYP,VERSION_ID,SOURCE_CIT,geom_wkt\n");
+        for (int i = 0; i < studyTypes.size(); i++) {
+            csv.append("12001,12001C,12001C_10833").append(i).append(",OPEN WATER,")
+                .append("0.2 PCT ANNUAL CHANCE FLOOD HAZARD IN COMBINED RIVERINE AND COASTAL ZONE,F,-9999,-9999,NAVD88,")
+                .append("Centimeters,-9999,Feet / Second,F,").append(studyTypes.get(i)).append(",1.1.1.0,12005C_STUDY12,")
+                .append(square).append('\n');
+        }
+        Path file = temp.resolve("12001_alachua.csv");
+        Files.writeString(file, csv, StandardCharsets.UTF_8);
+
+        LoadResult result = load(IngestionDataset.FLOOD_ZONES, file, "12001");
+
+        assertEquals(studyTypes.size(), result.rowsLoaded());
+        assertEquals(studyTypes, jdbc.queryForList(
+            "SELECT study_typ FROM flood_zones WHERE fips5 = '12001' ORDER BY source_row", String.class));
+        Map<String, Object> first = jdbc.queryForMap("SELECT * FROM flood_zones WHERE fips5 = '12001' AND source_row = 1");
+        assertEquals("0.2 PCT ANNUAL CHANCE FLOOD HAZARD IN COMBINED RIVERINE AND COASTAL ZONE", first.get("zone_subty"));
+        assertEquals("Centimeters", first.get("len_unit"));
+        assertEquals("Feet / Second", first.get("vel_unit"));
+        assertEquals("12005C_STUDY12", first.get("source_cit"));
     }
 
     @Test
