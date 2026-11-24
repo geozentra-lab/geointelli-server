@@ -469,4 +469,83 @@ class IngestionLaunchServiceImplTest {
             verify(jobService, never()).create(any());
         }
     }
+
+    @Nested
+    @DisplayName("Starting school reference loads (SCRUM-202)")
+    class StartSchoolReference {
+        private static final LocalDate BUILT = LocalDate.of(2026, 11, 22);
+        private static final String SCHOOL_ROW = "13-0041,13-0041,120039000412,12086,Miami-Dade,CORAL WAY K-8,PUBLIC,"
+            + "ELEMENTARY,REGULAR,-1,8,false,true,1215,64.5,1950 SW 13TH AVE,MIAMI,33145,25.75,-80.21,false,\n";
+        private static final String GRADE_ROW = "13-0041,13,41,CORAL WAY K-8,2026,A,false,Combination,false,true,No,"
+            + "71,68,60,55,72,66,59,61,74,,,,689,10,69,99,58\n";
+
+        private InputSource staged(String name, String content) throws Exception {
+            Files.createDirectories(staging.resolve("schools"));
+            Files.writeString(staging.resolve(name), content);
+            return service.staged(name, Path.of(name).getFileName().toString());
+        }
+
+        private InputSource schools(String row) throws Exception {
+            return staged("schools/schools.csv", SchoolReferenceDataRowsTest.SCHOOLS_HEADER + "\n" + row);
+        }
+
+        @Test
+        @DisplayName("When the statewide schools file is valid, then it is queued without a county, with its build date")
+        void whenSchoolsValid_thenQueued() throws Exception {
+            when(scopes.hasTable("schools")).thenReturn(true);
+
+            service.startReference(IngestionDataset.SCHOOLS, null, "FL", schools(SCHOOL_ROW), BUILT, "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.REFERENCE_DATA_IMPORT, job.getJobType());
+            assertEquals(IngestionDataset.SCHOOLS, job.getDataset());
+            assertNull(job.getCounty(), "the file holds several counties; each one in it is replaced");
+            assertTrue(job.getParametersJson().contains("\"name\":\"schools.csv\""));
+            assertTrue(job.getParametersJson().contains("\"downloadedOn\":\"2026-11-22\""));
+            verify(workerService).poll();
+        }
+
+        @Test
+        @DisplayName("When migration V44 is missing, then the request is refused with 409 before anything is stored")
+        void whenV44Missing_thenConflict() throws Exception {
+            when(scopes.hasTable("schools")).thenReturn(false);
+
+            var missing = assertThrows(ResponseStatusException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, null, "FL", schools(SCHOOL_ROW), BUILT, null));
+
+            assertEquals(HttpStatus.CONFLICT, missing.getStatusCode());
+            assertTrue(missing.getReason().contains("V44"));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When a county is given, the first row is in another state, a column is missing or the grades are not "
+            + "Florida's, then the request is rejected")
+        void whenWrongInput_thenRejected() throws Exception {
+            when(scopes.hasTable(any())).thenReturn(true);
+            when(scopes.stateFips("GA")).thenReturn(Optional.of("13"));
+            InputSource valid = schools(SCHOOL_ROW);
+            InputSource georgia = staged("schools/georgia.csv", SchoolReferenceDataRowsTest.SCHOOLS_HEADER + "\n"
+                + SCHOOL_ROW.replace(",12086,", ",13121,"));
+            InputSource noColumn = staged("schools/zones.csv", "fips5,level\n12086,ELEMENTARY\n");
+            InputSource grades = staged("schools/school_grades.csv", SchoolReferenceDataRowsTest.GRADES_HEADER + "\n" + GRADE_ROW);
+            InputSource notFldoe = staged("schools/other.csv", SchoolReferenceDataRowsTest.GRADES_HEADER + "\n"
+                + GRADE_ROW.replace("13-0041,", "X-1,"));
+
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, "Miami-Dade", "FL", valid, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, null, "FL", georgia, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_ZONES, null, "FL", noColumn, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_GRADES, null, "GA", grades, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_GRADES, null, "FL", notFldoe, BUILT, null));
+            verify(jobService, never()).create(any());
+
+            service.startReference(IngestionDataset.SCHOOL_GRADES, null, "FL", grades, BUILT, null);
+            assertEquals(IngestionDataset.SCHOOL_GRADES, createdJob().getDataset());
+        }
+    }
 }
