@@ -35,6 +35,8 @@ import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService.InputSource;
 import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
+import com.geointelli.ai.property.service.service.SchoolAssignmentService;
+import com.geointelli.ai.property.service.service.SchoolScoreV2Service;
 
 class IngestionLaunchServiceImplTest {
     private static final String ADDRESS_HEADER = "property_id,address,building_number,city,house_number_suffix,message,"
@@ -49,6 +51,8 @@ class IngestionLaunchServiceImplTest {
     private IngestionLaunchServiceImpl service;
     private County county;
     private ReferenceDataScopeService scopes;
+    private SchoolAssignmentService schoolAssignments;
+    private SchoolScoreV2Service schoolScores;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -70,8 +74,10 @@ class IngestionLaunchServiceImplTest {
         scopes = mock(ReferenceDataScopeService.class);
         when(scopes.countyFips(1L)).thenReturn(Optional.of("12003"));
         when(scopes.stateFips("FL")).thenReturn(Optional.of("12"));
+        schoolAssignments = mock(SchoolAssignmentService.class);
+        schoolScores = mock(SchoolScoreV2Service.class);
         service = new IngestionLaunchServiceImpl(jobService, store, workerService, new IngestionJobMapper(jobService, store),
-            countyService, properties, new ObjectMapper(), scopes);
+            countyService, properties, new ObjectMapper(), scopes, schoolAssignments, schoolScores);
     }
 
     private InputSource addresses(String content) {
@@ -546,6 +552,99 @@ class IngestionLaunchServiceImplTest {
 
             service.startReference(IngestionDataset.SCHOOL_GRADES, null, "FL", grades, BUILT, null);
             assertEquals(IngestionDataset.SCHOOL_GRADES, createdJob().getDataset());
+        }
+    }
+
+    @Nested
+    @DisplayName("Starting school scoring jobs (SCRUM-203)")
+    class StartSchoolScoring {
+        private final SchoolAssignmentService.SchoolCounty miamiDade =
+            new SchoolAssignmentService.SchoolCounty(1L, "12086", "Miami-Dade", "FL");
+
+        @BeforeEach
+        void tablesExist() {
+            when(scopes.hasTable(any())).thenReturn(true);
+            when(countyService.resolve("Miami-Dade", "FL")).thenReturn(county);
+        }
+
+        @Test
+        @DisplayName("When the county has attendance zones, then an assignment job without input is queued for it")
+        void whenCountyHasZones_thenAssignmentQueued() {
+            when(schoolAssignments.countiesToAssign("12086")).thenReturn(List.of(miamiDade));
+
+            ImportJobDTO dto = service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, " 12086 ", "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.SCHOOL_SCORING, job.getJobType());
+            assertEquals(IngestionDataset.SCHOOL_ASSIGNMENT, job.getDataset());
+            assertEquals("QUEUED", job.getStatus());
+            assertSame(county, job.getCounty());
+            assertEquals("Miami-Dade", job.getSourceCounty());
+            assertEquals("FL", job.getSourceState());
+            assertEquals("NONE", job.getInputStorage());
+            assertEquals("admin-1", job.getCreatedBy());
+            assertEquals(job.getId().toString(), dto.getId());
+            verify(workerService).poll();
+        }
+
+        @Test
+        @DisplayName("When no county is given, then the score job covers every assigned county")
+        void whenNoCounty_thenEveryCounty() {
+            when(schoolScores.countiesToScore(null)).thenReturn(List.of(miamiDade));
+
+            service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, null, null);
+
+            IngestionJob job = createdJob();
+            assertEquals(IngestionDataset.SCHOOL_SCORE_V2, job.getDataset());
+            assertNull(job.getCounty());
+            verify(schoolAssignments, never()).countiesToAssign(any());
+        }
+
+        @Test
+        @DisplayName("When fips5 is not 5 digits or no county has it, then 400 and nothing is queued")
+        void whenFipsInvalidOrUnknown_thenBadRequest() {
+            when(schoolAssignments.countiesToAssign("99999")).thenReturn(List.of());
+            when(schoolAssignments.countyExists("99999")).thenReturn(false);
+
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "1208", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12O86", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "99999", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOLS, "12086", null));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When V49 is missing, the county has no zones or no assignment, or a job is active, then 409")
+        void whenNothingToDoOrBusy_thenConflict() {
+            when(schoolAssignments.countyExists("12001")).thenReturn(true);
+            when(schoolAssignments.countiesToAssign("12001")).thenReturn(List.of());
+            when(schoolScores.countiesToScore("12001")).thenReturn(List.of());
+
+            var noZones = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12001", null));
+            var noAssignment = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, "12001", null));
+            assertEquals(HttpStatus.CONFLICT, noZones.getStatusCode());
+            assertTrue(noZones.getReason().contains("school-zones"));
+            assertEquals(HttpStatus.CONFLICT, noAssignment.getStatusCode());
+            assertTrue(noAssignment.getReason().contains("/assign"));
+
+            when(schoolAssignments.countiesToAssign("12086")).thenReturn(List.of(miamiDade));
+            when(jobService.hasActive(IngestionDataset.SCHOOL_ASSIGNMENT)).thenReturn(true);
+            var busy = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12086", null));
+            assertEquals(HttpStatus.CONFLICT, busy.getStatusCode());
+
+            when(scopes.hasTable("property_school_scores")).thenReturn(false);
+            var missing = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, "12086", null));
+            assertEquals(HttpStatus.CONFLICT, missing.getStatusCode());
+            assertTrue(missing.getReason().contains("V49"));
+            verify(jobService, never()).create(any());
         }
     }
 }
