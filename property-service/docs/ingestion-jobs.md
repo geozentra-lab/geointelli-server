@@ -18,6 +18,8 @@ under `/api/admin/import-jobs` need the Keycloak realm role `admin`.
 | `POST /api/ingestion/run` | Properties for parcel folios that have none | — |
 | `POST /api/ingestion/ingestbuildings`, `ingest_extrafeatures`, `ingest_sales`, `ingestaddresses` | The dataset for properties that lack it | — |
 | `GET /api/ingestion/jobs/{id}` | The job with its first 1000 failed or skipped records | — |
+| `POST /api/ingestion/import/{dataset}` with `census-tracts`, `nri-tracts`, `flood-zones`, `storm-events` | Environmental reference data (SCRUM-201), job type `REFERENCE_DATA_IMPORT`, loaded with PostgreSQL COPY in one transaction per file; see `environmental-reference-data.md` | `stagedFile` or `file`; `sourceState`; `downloadedOn`; `county` for `flood-zones` only |
+| `POST /api/ingestion/import/{dataset}` with `schools`, `school-grades`, `school-zones` | School reference data (SCRUM-202), same job type and loader; each file replaces the counties or school years it contains; see `school-reference-data.md` | `stagedFile` or `file`; `sourceState`; `downloadedOn`; no `county` |
 
 Server file paths are no longer accepted. A file is either uploaded, or named relative to the directory in
 `INGESTION_STAGING_DIRECTORY` (empty by default, which disables staged inputs). Names that leave that

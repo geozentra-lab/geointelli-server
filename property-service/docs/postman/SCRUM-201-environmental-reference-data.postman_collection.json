@@ -1,0 +1,232 @@
+{
+  "info": {
+    "name": "SCRUM-201 Environmental reference data",
+    "description": "Imports of the environmental reference data (docs/environmental-reference-data.md): census tracts, FEMA National Risk Index per tract, FEMA flood zones (ONE county file per request) and NOAA storm events. Every import is a background job (ingestion jobs, SCRUM-188) loaded with PostgreSQL COPY in one transaction per file; a new import replaces the rows of the same county (flood zones) or state (the others).\n\nSetup: migration V42 applied; the app started with INGESTION_STAGING_DIRECTORY set to the data root folder (the one that holds fema_flood_zones/ and florida_location/), and INGESTION_INPUT_STORAGE=local for a single local instance. Large flood files must be staged (the upload limit is 1 GB). Set access_token when the ingestion routes require a token (an admin token once SCRUM-94 is merged). No secret is stored in this file.\n\nReference data has no user ownership: it is public source data shared by every property. The ownership checks of the ticket template do not apply; the scope checks (a county file cannot replace another county) are in the 'Invalid input' folder.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "access_token", "value": "" },
+    { "key": "state", "value": "FL" },
+    { "key": "floodCounty", "value": "Miami-Dade" },
+    { "key": "floodFile", "value": "fema_flood_zones/12086_miami-dade.csv" },
+    { "key": "floodDownloadedOn", "value": "2026-11-14" },
+    { "key": "tractsFile", "value": "florida_location/census_tracts/florida_all.csv" },
+    { "key": "tractsDownloadedOn", "value": "2026-11-12" },
+    { "key": "nriFile", "value": "florida_location/nri/tracts/florida_all.csv" },
+    { "key": "nriDownloadedOn", "value": "2026-11-11" },
+    { "key": "stormFile", "value": "florida_location/noaa_storm_events/florida_all.csv" },
+    { "key": "stormDownloadedOn", "value": "2026-11-11" },
+    { "key": "jobId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 Imports (success)",
+      "item": [
+        {
+          "name": "1.1 Census tracts (whole state)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('202 queued', () => pm.response.to.have.status(202));",
+            "const job = pm.response.json();",
+            "pm.test('reference data job', () => { pm.expect(job.jobType).to.eql('REFERENCE_DATA_IMPORT'); pm.expect(job.dataset).to.eql('CENSUS_TRACTS'); pm.expect(job.status).to.be.oneOf(['QUEUED', 'RUNNING']); });",
+            "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.eql('/api/ingestion/jobs/' + job.id));",
+            "pm.collectionVariables.set('jobId', job.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/import/census-tracts?stagedFile={{tractsFile}}&sourceState={{state}}&downloadedOn={{tractsDownloadedOn}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "census-tracts"],
+              "query": [
+                { "key": "stagedFile", "value": "{{tractsFile}}" },
+                { "key": "sourceState", "value": "{{state}}" },
+                { "key": "downloadedOn", "value": "{{tractsDownloadedOn}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 Job status (poll until COMPLETED)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const job = pm.response.json();",
+            "pm.test('counters add up', () => pm.expect(job.processed).to.eql(job.completed + job.skipped + job.failed));",
+            "if (job.status === 'COMPLETED') {",
+            "  pm.test('every row loaded', () => { pm.expect(job.completed).to.eql(job.total); pm.expect(job.failed).to.eql(0); });",
+            "} else { console.log('job is ' + job.status + ', send again'); }"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/ingestion/jobs/{{jobId}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "jobs", "{{jobId}}"] }
+          }
+        },
+        {
+          "name": "1.3 NRI tracts (whole state)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('202 queued', () => pm.response.to.have.status(202));",
+            "const job = pm.response.json(); pm.test('NRI job', () => pm.expect(job.dataset).to.eql('NRI_TRACTS'));",
+            "pm.collectionVariables.set('jobId', job.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/import/nri-tracts?stagedFile={{nriFile}}&sourceState={{state}}&downloadedOn={{nriDownloadedOn}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "nri-tracts"],
+              "query": [
+                { "key": "stagedFile", "value": "{{nriFile}}" },
+                { "key": "sourceState", "value": "{{state}}" },
+                { "key": "downloadedOn", "value": "{{nriDownloadedOn}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Flood zones of ONE county",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('202 queued', () => pm.response.to.have.status(202));",
+            "const job = pm.response.json();",
+            "pm.test('flood job of the county', () => { pm.expect(job.dataset).to.eql('FLOOD_ZONES'); pm.expect(job.sourceCounty).to.eql(pm.collectionVariables.get('floodCounty')); });",
+            "pm.collectionVariables.set('jobId', job.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/import/flood-zones?stagedFile={{floodFile}}&county={{floodCounty}}&sourceState={{state}}&downloadedOn={{floodDownloadedOn}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "flood-zones"],
+              "query": [
+                { "key": "stagedFile", "value": "{{floodFile}}" },
+                { "key": "county", "value": "{{floodCounty}}" },
+                { "key": "sourceState", "value": "{{state}}" },
+                { "key": "downloadedOn", "value": "{{floodDownloadedOn}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.5 Storm events (whole state)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('202 queued', () => pm.response.to.have.status(202));",
+            "const job = pm.response.json(); pm.test('storm job', () => pm.expect(job.dataset).to.eql('STORM_EVENTS'));",
+            "pm.collectionVariables.set('jobId', job.id);"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/import/storm-events?stagedFile={{stormFile}}&sourceState={{state}}&downloadedOn={{stormDownloadedOn}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "storm-events"],
+              "query": [
+                { "key": "stagedFile", "value": "{{stormFile}}" },
+                { "key": "sourceState", "value": "{{state}}" },
+                { "key": "downloadedOn", "value": "{{stormDownloadedOn}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.6 Admin listing of reference data jobs",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "pm.test('only reference data jobs', () => pm.response.json().jobs.content.forEach(j => pm.expect(j.jobType).to.eql('REFERENCE_DATA_IMPORT')));"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/import-jobs?type=REFERENCE_DATA_IMPORT&page=0&size=20",
+              "host": ["{{baseUrl}}"], "path": ["api", "admin", "import-jobs"],
+              "query": [{ "key": "type", "value": "REFERENCE_DATA_IMPORT" }, { "key": "page", "value": "0" }, { "key": "size", "value": "20" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 Invalid input (400, nothing stored)",
+      "item": [
+        {
+          "name": "2.1 Flood zones without county",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('names the county', () => pm.expect(pm.response.json().message).to.include('county is required'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/flood-zones?stagedFile={{floodFile}}&sourceState={{state}}&downloadedOn={{floodDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "flood-zones"], "query": [{ "key": "stagedFile", "value": "{{floodFile}}" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{floodDownloadedOn}}" }] } }
+        },
+        {
+          "name": "2.2 County file of another county (Miami-Dade file named as Monroe)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('says which county the file is for', () => pm.expect(pm.response.json().message).to.include('12086'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/flood-zones?stagedFile={{floodFile}}&county=Monroe&sourceState={{state}}&downloadedOn={{floodDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "flood-zones"], "query": [{ "key": "stagedFile", "value": "{{floodFile}}" }, { "key": "county", "value": "Monroe" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{floodDownloadedOn}}" }] } }
+        },
+        {
+          "name": "2.3 Statewide dataset with a county",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('explains', () => pm.expect(pm.response.json().message).to.include('loads a whole state'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/census-tracts?stagedFile={{tractsFile}}&county={{floodCounty}}&sourceState={{state}}&downloadedOn={{tractsDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "census-tracts"], "query": [{ "key": "stagedFile", "value": "{{tractsFile}}" }, { "key": "county", "value": "{{floodCounty}}" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{tractsDownloadedOn}}" }] } }
+        },
+        {
+          "name": "2.4 Missing downloadedOn",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('explains', () => pm.expect(pm.response.json().message).to.include('downloadedOn'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/nri-tracts?stagedFile={{nriFile}}&sourceState={{state}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "nri-tracts"], "query": [{ "key": "stagedFile", "value": "{{nriFile}}" }, { "key": "sourceState", "value": "{{state}}" }] } }
+        },
+        {
+          "name": "2.5 downloadedOn not a date",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/nri-tracts?stagedFile={{nriFile}}&sourceState={{state}}&downloadedOn=11/11/2026", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "nri-tracts"], "query": [{ "key": "stagedFile", "value": "{{nriFile}}" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "11/11/2026" }] } }
+        },
+        {
+          "name": "2.6 Wrong file for the dataset (tracts file as NRI)",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('missing columns', () => pm.expect(pm.response.json().message).to.include('is missing the columns'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/nri-tracts?stagedFile={{tractsFile}}&sourceState={{state}}&downloadedOn={{nriDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "nri-tracts"], "query": [{ "key": "stagedFile", "value": "{{tractsFile}}" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{nriDownloadedOn}}" }] } }
+        },
+        {
+          "name": "2.7 Unknown state",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/storm-events?stagedFile={{stormFile}}&sourceState=ZZ&downloadedOn={{stormDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "storm-events"], "query": [{ "key": "stagedFile", "value": "{{stormFile}}" }, { "key": "sourceState", "value": "ZZ" }, { "key": "downloadedOn", "value": "{{stormDownloadedOn}}" }] } }
+        },
+        {
+          "name": "2.8 Staged name leaving the staging directory",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/storm-events?stagedFile=../secret.csv&sourceState={{state}}&downloadedOn={{stormDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "storm-events"], "query": [{ "key": "stagedFile", "value": "../secret.csv" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{stormDownloadedOn}}" }] } }
+        }
+      ]
+    },
+    {
+      "name": "3 Missing data",
+      "item": [
+        {
+          "name": "3.1 Staged file that does not exist",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('400', () => pm.response.to.have.status(400));",
+            "pm.test('not found', () => pm.expect(pm.response.json().message).to.include('Staged file not found'));"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/ingestion/import/flood-zones?stagedFile=fema_flood_zones/12999_nowhere.csv&county={{floodCounty}}&sourceState={{state}}&downloadedOn={{floodDownloadedOn}}", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "import", "flood-zones"], "query": [{ "key": "stagedFile", "value": "fema_flood_zones/12999_nowhere.csv" }, { "key": "county", "value": "{{floodCounty}}" }, { "key": "sourceState", "value": "{{state}}" }, { "key": "downloadedOn", "value": "{{floodDownloadedOn}}" }] } }
+        },
+        {
+          "name": "3.2 Unknown job",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/ingestion/jobs/00000000-0000-0000-0000-000000000000", "host": ["{{baseUrl}}"], "path": ["api", "ingestion", "jobs", "00000000-0000-0000-0000-000000000000"] } }
+        },
+        {
+          "name": "3.3 Retry of a completed job is refused",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('409 JOB_COMPLETED (or JOB_NOT_FINISHED while it runs)', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().message).to.match(/^(JOB_COMPLETED|JOB_NOT_FINISHED)/); });"
+          ] } }],
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/admin/import-jobs/{{jobId}}/retry", "host": ["{{baseUrl}}"], "path": ["api", "admin", "import-jobs", "{{jobId}}", "retry"] } }
+        }
+      ]
+    }
+  ]
+}

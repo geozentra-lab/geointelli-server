@@ -1,0 +1,97 @@
+{
+  "info": {
+    "name": "SCRUM-60 Property price divergence",
+    "description": "Manual checks for GET /api/properties/id/{id}/price-divergence. See docs/price-divergence.md. Set baseUrl, propertyId (a property with a supported or limited valuation in a subdivision or neighborhood with at least 5 other valued properties) and propertyWithoutValuationId. The endpoint is public: no token is needed. No secret is stored in this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8091" },
+    { "key": "propertyId", "value": "" },
+    { "key": "propertyWithoutValuationId", "value": "" },
+    { "key": "unknownPropertyId", "value": "999999999" }
+  ],
+  "item": [
+    {
+      "name": "1. Success",
+      "item": [
+        {
+          "name": "Property with a valuation",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json();",
+            "pm.test('observation time and subject estimate', () => { pm.expect(d.observedAt).to.be.a('string'); pm.expect(d.subject.estimate).to.be.a('number'); });",
+            "pm.test('three benchmarks, most specific first', () => pm.expect(d.benchmarks.map(b => b.level)).to.eql(['BUILDING', 'COMMUNITY', 'MICRO_MARKET']));",
+            "pm.test('every benchmark is built from ZentraValue estimates', () => d.benchmarks.forEach(b => pm.expect(b.basis).to.eql('ZENTRAVALUE_ESTIMATES')));",
+            "pm.test('unavailable benchmarks have a reason and no invented values', () => d.benchmarks.filter(b => b.status === 'UNAVAILABLE').forEach(b => {",
+            "  pm.expect(b.reason).to.be.a('string'); pm.expect(b.medianValue).to.eql(null); pm.expect(b.averageValue).to.eql(null); pm.expect(b.divergenceUsd).to.eql(null); pm.expect(b.divergencePct).to.eql(null);",
+            "}));",
+            "pm.test('available benchmarks have at least 5 properties, a median, an average and a consistent divergence', () => d.benchmarks.filter(b => b.status === 'AVAILABLE').forEach(b => {",
+            "  pm.expect(b.sampleSize).to.be.at.least(5);",
+            "  pm.expect(b.medianValue).to.be.a('number'); pm.expect(b.averageValue).to.be.a('number');",
+            "  pm.expect(Math.abs(d.subject.estimate - b.medianValue - b.divergenceUsd)).to.be.below(0.011);",
+            "}));",
+            "pm.test('primary benchmark is the first available level', () => {",
+            "  const first = d.benchmarks.find(b => b.status === 'AVAILABLE');",
+            "  pm.expect(d.primaryBenchmark).to.eql(first ? first.level : null);",
+            "});",
+            "pm.test('drivers have no percentage and add up to explainedUsd', () => {",
+            "  if (d.drivers.status !== 'AVAILABLE') { pm.expect(d.drivers.reason).to.be.a('string'); return; }",
+            "  pm.expect(d.drivers.comparedWith).to.eql(d.primaryBenchmark);",
+            "  d.drivers.factors.forEach(f => { pm.expect(f).to.not.have.property('pct'); pm.expect(Math.abs(f.subjectUsd - f.groupAverageUsd - f.differenceUsd)).to.be.below(0.011); });",
+            "  const sum = d.drivers.factors.reduce((t, f) => t + f.differenceUsd, 0);",
+            "  pm.expect(Math.abs(sum - d.drivers.explainedUsd)).to.be.below(0.011);",
+            "});",
+            "pm.test('drivers explain the gap from the group average: gap = explained + residual', () => {",
+            "  if (d.unexplainedResidual.status !== 'AVAILABLE') { pm.expect(d.unexplainedResidual.reason).to.be.a('string'); return; }",
+            "  pm.expect(Math.abs(d.subject.estimate - d.drivers.groupAverageValue - d.drivers.divergenceFromAverageUsd)).to.be.below(0.011);",
+            "  pm.expect(Math.abs(d.drivers.divergenceFromAverageUsd - d.drivers.explainedUsd - d.unexplainedResidual.usd)).to.be.below(0.011);",
+            "});",
+            "pm.test('confidence is explicit', () => { pm.expect(d.confidence.level).to.be.a('string'); pm.expect(d.confidence.reason).to.be.a('string'); });",
+            "pm.test('asking price is separate and unavailable', () => { pm.expect(d.askingPriceComparison.status).to.eql('UNAVAILABLE'); pm.expect(d.askingPriceComparison.askingPrice).to.eql(null); });"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{propertyId}}/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{propertyId}}", "price-divergence"] } }
+        }
+      ]
+    },
+    {
+      "name": "2. Empty or missing data",
+      "item": [
+        {
+          "name": "Property without valuation: 200 with unavailable blocks",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('200', () => pm.response.to.have.status(200));",
+            "const d = pm.response.json();",
+            "pm.test('no estimate', () => pm.expect(d.subject.estimate).to.eql(null));",
+            "pm.test('no divergence is calculated', () => d.benchmarks.forEach(b => pm.expect(b.divergenceUsd).to.eql(null)));",
+            "pm.test('drivers, residual and confidence are unavailable with a reason', () => {",
+            "  pm.expect(d.drivers.status).to.eql('UNAVAILABLE'); pm.expect(d.drivers.reason).to.be.a('string');",
+            "  pm.expect(d.unexplainedResidual.status).to.eql('UNAVAILABLE'); pm.expect(d.unexplainedResidual.usd).to.eql(null);",
+            "  pm.expect(d.confidence.level).to.eql('UNAVAILABLE');",
+            "});"
+          ] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{propertyWithoutValuationId}}/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{propertyWithoutValuationId}}", "price-divergence"] } }
+        }
+      ]
+    },
+    {
+      "name": "3. Invalid input",
+      "item": [
+        {
+          "name": "Unknown property: 404",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));", "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('Property not found: ' + pm.collectionVariables.get('unknownPropertyId')));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{unknownPropertyId}}/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{unknownPropertyId}}", "price-divergence"] } }
+        },
+        {
+          "name": "ID 0: 400",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));", "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('propertyId must be positive'));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/0/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "0", "price-divergence"] } }
+        },
+        {
+          "name": "ID not a number: 400",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/abc/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "abc", "price-divergence"] } }
+        }
+      ]
+    }
+  ]
+}

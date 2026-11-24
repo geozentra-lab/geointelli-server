@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "SCRUM-191 Admin coverage and provider health",
+    "description": "GET /api/admin/coverage-health (docs/admin-coverage-health.md). Set baseUrl, admin_token (Keycloak realm role admin) and user_token (a user without the admin role). Run in order. Quality and coverage are recalculated in the background: right after start-up they are UNAVAILABLE 'Being calculated in the background; try again in a few minutes', so run 04 again a few minutes after 03. The endpoint has no parameters and no user-owned data, so there is no ownership check. No secret is stored in this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "admin_token", "value": "" },
+    { "key": "user_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Without token (401)",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('401', () => pm.response.to.have.status(401));"
+      ] } }],
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/coverage-health", "host": ["{{baseUrl}}"], "path": ["api", "admin", "coverage-health"] }
+      }
+    },
+    {
+      "name": "02 As a user without the admin role (403)",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('403', () => pm.response.to.have.status(403));"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{user_token}}", "type": "string" }] },
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/coverage-health", "host": ["{{baseUrl}}"], "path": ["api", "admin", "coverage-health"] }
+      }
+    },
+    {
+      "name": "03 As admin: answers at once, even before the first calculation",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "pm.test('answers in under 5 seconds (no full-table count in the request)', () => pm.expect(pm.response.responseTime).to.be.below(5000));",
+        "const d = pm.response.json();",
+        "pm.test('observedAt is set', () => pm.expect(d.observedAt).to.be.a('string'));",
+        "for (const block of ['quality', 'coverage']) {",
+        "  pm.test(block + ' is AVAILABLE, or UNAVAILABLE with a reason', () => {",
+        "    pm.expect(['AVAILABLE', 'UNAVAILABLE']).to.include(d[block].status);",
+        "    if (d[block].status === 'UNAVAILABLE') pm.expect(d[block].reason).to.be.a('string').and.not.empty;",
+        "  });",
+        "}",
+        "pm.test('three providers', () => pm.expect(d.providers.map(p => p.provider)).to.eql(['MIAMI_DADE_API', 'CSV_IMPORT', 'MAPILLARY']));"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/coverage-health", "host": ["{{baseUrl}}"], "path": ["api", "admin", "coverage-health"] }
+      }
+    },
+    {
+      "name": "04 As admin after a few minutes: quality and coverage with their times",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const d = pm.response.json();",
+        "pm.test('quality calculated, total = sum of the rules', () => {",
+        "  pm.expect(d.quality.status).to.eql('AVAILABLE');",
+        "  pm.expect(d.quality.generatedAt).to.be.a('string');",
+        "  pm.expect(d.quality.totalIssues).to.eql(d.quality.rules.reduce((t, r) => t + r.issueCount, 0));",
+        "});",
+        "pm.test('coverage counted with its time', () => {",
+        "  pm.expect(d.coverage.status).to.eql('AVAILABLE');",
+        "  pm.expect(d.coverage.countedAt).to.be.a('string');",
+        "  pm.expect(d.coverage.sources.map(s => s.source)).to.eql(['ADDRESSES', 'SALES', 'ASSESSMENTS', 'TAXES', 'IMAGES', 'VALUATIONS']);",
+        "});",
+        "pm.test('percentages honest: 100 only when complete, 0 only when none', () => {",
+        "  for (const s of d.coverage.sources) {",
+        "    pm.expect(s.coveragePercent).to.be.within(0, 100);",
+        "    if (s.coveragePercent === 100) pm.expect(s.propertiesCovered).to.eql(d.coverage.totalProperties);",
+        "    if (s.coveragePercent === 0) pm.expect(s.propertiesCovered).to.eql(0);",
+        "  }",
+        "});"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/coverage-health", "host": ["{{baseUrl}}"], "path": ["api", "admin", "coverage-health"] }
+      }
+    },
+    {
+      "name": "05 As admin: provider health from recorded jobs",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('200', () => pm.response.to.have.status(200));",
+        "const d = pm.response.json();",
+        "for (const p of d.providers) {",
+        "  pm.test(p.provider + ' status is explained', () => {",
+        "    pm.expect(['HEALTHY', 'DEGRADED', 'UNAVAILABLE']).to.include(p.status);",
+        "    if (p.status === 'UNAVAILABLE') pm.expect(p.reason).to.be.a('string').and.not.empty;",
+        "    else { pm.expect(p.lastJobStatus).to.be.a('string'); pm.expect(p.lastJobAt).to.be.a('string'); }",
+        "    if (p.status === 'HEALTHY') pm.expect(p.lastJobStatus).to.eql('COMPLETED');",
+        "    pm.expect(p.activeJobs).to.be.at.least(0);",
+        "  });",
+        "}"
+      ] } }],
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/admin/coverage-health", "host": ["{{baseUrl}}"], "path": ["api", "admin", "coverage-health"] }
+      }
+    }
+  ]
+}
