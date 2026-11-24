@@ -2,6 +2,7 @@ package com.geointelli.ai.property.service.enums;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 
 /**
@@ -83,7 +84,30 @@ public enum IngestionDataset {
         "fips5", "BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME", "END_YEARMONTH", "END_DAY", "END_TIME",
         "EPISODE_ID", "EVENT_ID", "STATE_FIPS", "EVENT_TYPE", "CZ_TYPE", "CZ_FIPS", "CZ_NAME", "CZ_TIMEZONE",
         "INJURIES_DIRECT", "INJURIES_INDIRECT", "DEATHS_DIRECT", "DEATHS_INDIRECT", "DAMAGE_PROPERTY",
-        "DAMAGE_CROPS", "MAGNITUDE", "MAGNITUDE_TYPE", "FLOOD_CAUSE", "TOR_F_SCALE", "BEGIN_LAT", "BEGIN_LON"));
+        "DAMAGE_CROPS", "MAGNITUDE", "MAGNITUDE_TYPE", "FLOOD_CAUSE", "TOR_F_SCALE", "BEGIN_LAT", "BEGIN_LON")),
+    /**
+     * School locations of one state, county by county ({@code schools}, SCRUM-202); every county in the file is
+     * replaced, rows upserted on {@code school_key} so a school keeps its id.
+     */
+    SCHOOLS(ImportJobType.REFERENCE_DATA_IMPORT, "schools", null, List.of(
+        "school_key", "state_school_id", "nces_id", "fips5", "county", "name", "sector", "level", "school_type",
+        "lowest_grade", "highest_grade", "is_virtual", "is_active", "enrollment", "free_reduced_lunch_pct",
+        "address", "city", "zip", "latitude", "longitude", "in_schools_zip", "status_note")),
+    /** FLDOE school grades ({@code school_grades}, SCRUM-202); every school year in the file is replaced. */
+    SCHOOL_GRADES(ImportJobType.REFERENCE_DATA_IMPORT, "school-grades", null, List.of(
+        "state_school_id", "district_number", "school_number", "school_name", "school_year", "letter_grade",
+        "is_baseline", "fldoe_school_type", "is_charter", "is_title_i", "alternative_ese_center",
+        "grade3_ela_achievement", "ela_achievement", "ela_learning_gains", "ela_lowest25_gains", "math_achievement",
+        "math_learning_gains", "math_lowest25_gains", "science_achievement", "social_studies_achievement",
+        "middle_school_acceleration", "graduation_rate", "college_career_acceleration", "total_points_earned",
+        "total_components", "pct_total_points", "pct_tested", "pct_econ_disadvantaged")),
+    /** School attendance zones ({@code school_attendance_zones}, SCRUM-202); every county in the file is replaced. */
+    SCHOOL_ZONES(ImportJobType.REFERENCE_DATA_IMPORT, "school-zones", null, List.of(
+        "fips5", "county", "level", "zone_school_name", "school_key", "school_match", "source_school_id", "source",
+        "source_type", "zone_year", "method_fr", "note_fr", "geom_wkt"));
+
+    /** School reference datasets (SCRUM-202): their scope is the set of counties or years the file contains. */
+    public static final Set<IngestionDataset> SCHOOL_REFERENCE = Set.of(SCHOOLS, SCHOOL_GRADES, SCHOOL_ZONES);
 
     /** Columns read from property_owner.csv, the second file of the {@link #OWNERS} dataset. */
     public static final List<String> PROPERTY_OWNER_HEADERS = List.of("property_id", "owner_id");
@@ -120,9 +144,14 @@ public enum IngestionDataset {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
     }
 
-    /** Whether this is an environmental reference dataset loaded with COPY (SCRUM-201). */
+    /** Whether this is a reference dataset loaded with COPY: environmental (SCRUM-201) or school (SCRUM-202). */
     public boolean isReferenceData() {
         return jobType == ImportJobType.REFERENCE_DATA_IMPORT;
+    }
+
+    /** Whether this is a school reference dataset (SCRUM-202), replaced by the counties or years of its file. */
+    public boolean isSchoolData() {
+        return SCHOOL_REFERENCE.contains(this);
     }
 
     /** Resolves a reference dataset from its endpoint path segment ({@code flood-zones} and so on). */
