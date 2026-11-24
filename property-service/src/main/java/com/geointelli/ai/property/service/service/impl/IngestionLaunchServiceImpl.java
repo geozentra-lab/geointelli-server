@@ -60,6 +60,8 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     static final String DATASET_JOB_ACTIVE = "DATASET_JOB_ACTIVE";
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
     private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
+    /** FLDOE school grades are Florida's: their load must be for this state. */
+    static final String FLORIDA_FIPS = "12";
 
     private final IngestionJobService jobService;
     private final IngestionInputStore inputStore;
@@ -174,6 +176,13 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
             }
         } catch (IllegalStateException unavailable) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, unavailable.getMessage());
+        }
+        if (dataset.isSchoolData() && !referenceScopes.hasTable(ReferenceDataSql.targetTable(dataset))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The table " + ReferenceDataSql.targetTable(dataset) + " is missing: apply migration V44 first");
+        }
+        if (dataset == IngestionDataset.SCHOOL_GRADES && !FLORIDA_FIPS.equals(scope)) {
+            throw new IllegalArgumentException("school-grades loads the FLDOE (Florida) file: use sourceState FL");
         }
         validateReferenceInput(dataset, input, scope);
         if (dataset != IngestionDataset.FLOOD_ZONES) requireNoActiveJob(dataset);
@@ -329,11 +338,20 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         } catch (IOException | java.io.UncheckedIOException | IllegalStateException unreadable) {
             throw new IllegalArgumentException("The file " + input.name() + " is not a readable CSV: " + unreadable.getMessage());
         }
+        if (dataset == IngestionDataset.SCHOOL_GRADES) {
+            // FLDOE ids carry a district, not a state; the state was checked above.
+            if (!first.get("state_school_id").trim().matches("\\d{2}-\\d{4}")) {
+                throw new IllegalArgumentException("The file " + input.name() + " is not an FLDOE school grades file: "
+                    + "state_school_id must be DD-SSSS");
+            }
+            return;
+        }
         String key = switch (dataset) {
             case FLOOD_ZONES -> first.get("fips5");
             case CENSUS_TRACTS -> first.get("tract_fips");
             case NRI_TRACTS -> first.get("TRACTFIPS");
             case STORM_EVENTS -> String.format("%2s", first.get("STATE_FIPS").trim()).replace(' ', '0');
+            case SCHOOLS, SCHOOL_ZONES -> first.get("fips5");
             default -> "";
         };
         boolean matches = dataset == IngestionDataset.FLOOD_ZONES ? scope.equals(key.trim()) : key.trim().startsWith(scope);
