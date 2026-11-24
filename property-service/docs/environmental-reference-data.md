@@ -186,4 +186,39 @@ _To be written and measured on RDS in step 6._
 
 ## Verification log
 
-_Pilot and full load results are recorded here._
+### Full Florida load on RDS (dev), 2026-11-24
+
+Run by SCRUM-127 through `POST /api/ingestion/import/{dataset}` from a laptop (`INGESTION_INPUT_STORAGE=local`,
+`INGESTION_STAGING_DIRECTORY` = the data root), one job at a time, after V42 had been applied by its author as
+`postgres`. Every job ended `COMPLETED` with `completed = total` and `failed = 0`; every row of
+`reference_dataset_loads` has `rows_read = rows_loaded`.
+
+| Dataset | File(s) | Downloaded | Rows read / loaded | Time | Checks on RDS |
+|---|---|---|---|---|---|
+| `census-tracts` | `census_tracts/florida_all.csv` | 2026-11-12 | 5,160 / 5,160 | 39 s | 5,160 distinct `tract_fips`, 67 counties, 0 NULL or invalid geometries, SRID 4326 |
+| `nri-tracts` | `nri/tracts/florida_all.csv` | 2026-11-11 | 5,114 / 5,114 | 25 s | version "December 2025"; "No Rating" stored as NULL (3 overall, 2,413 coastal flood, 1,007 wildfire); every NRI row joins a tract; the 46 tracts without an NRI row are water-only tracts (code 9900) |
+| `storm-events` | `noaa_storm_events/florida_all.csv` | 2026-11-11 | 41,437 / 41,437 | 14 s | 1950-2026; 28,905 with a point; `fips5` NULL for the 7,901 forecast-zone (`cz_type` Z) and 1 marine (`cz_type` M) events, which NOAA assigns to no county |
+| `flood-zones` | 67 county files, 7.9 GB | 2026-11-14 | 594,095 / 594,095 polygons | 7 s (Baker) to 521 s (Citrus) per county, about 2.5 h in total | 3,295,775 parts, max 256 vertices, 0 invalid, 11 parts with `geom` NULL (polygons with no area after repair), `sfha` never NULL, `static_bfe` NULL where FEMA gives none; parts per county match `rows_loaded` of the load record |
+
+Table sizes after the load: `flood_zones` 6,046 MB, `nri_tract_risk` 42 MB, `census_tracts` 22 MB, `storm_events` 17 MB.
+
+Point lookup checked on RDS: three Baker properties resolve through `ST_PointOnSurface(parcels.geom)` to
+"X / AREA OF MINIMAL FLOOD HAZARD, sfha=false, bfe=NULL". A point can fall in two parts of the same FEMA polygon
+(parts share `source_file`, `source_row`), so a lookup must group by those two columns.
+
+Invalid input and missing data (collection folders 2 and 3, plus 1.6) against the same app and RDS: 12 of 12 as
+specified, nothing stored. Note that 3.1 (staged file that does not exist) answers 400, as the collection expects.
+
+Two defects found and fixed during the load, both on the SCRUM-127 branch:
+
+- **V46** `fix_saint_county_fips_codes`: V42 left `counties.fips_code` NULL for "SaintJohns" and "SaintLucie"
+  (names stored without a space; the V42 regex requires one). The V42 guard should have rolled the migration back,
+  so V42 was evidently not run with `-1 -v ON_ERROR_STOP=1`. Fix the regex in V42 (`\s+` -> `\s*`).
+- **V47** `widen_flood_zones_study_typ`: `flood_zones.study_typ VARCHAR(20)` is too short for FEMA `STUDY_TYP`
+  values up to 28 characters ("SFHAs WITH MEDIUM FLOOD RISK"); 43 county files failed with "value too long for
+  type character varying(20)". Widened to VARCHAR(50) on RDS by the table owner; every other text column fits
+  its V42 size (measured over all 67 files).
+
+Operational note: the app polls queued ingestion jobs only when `alerts.enabled=true` (scheduling is enabled in
+`AlertSchedulingConfig`); otherwise a job runs only if its own submission finds the worker idle, so county files
+must be submitted strictly one after the other.
