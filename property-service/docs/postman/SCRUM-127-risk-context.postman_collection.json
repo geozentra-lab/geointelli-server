@@ -39,7 +39,8 @@
               "pm.test('flood zone with SFHA true', () => { pm.expect(r.flood.status).to.eql('AVAILABLE'); pm.expect(r.flood.zone).to.be.a('string'); pm.expect(r.flood.specialFloodHazardArea).to.eql(true); });",
               "pm.test('hazards: tract, version and 8 ratings', () => { pm.expect(r.hazards.status).to.eql('AVAILABLE'); pm.expect(r.hazards.tractFips).to.have.lengthOf(11); pm.expect(r.hazards.ratings).to.have.lengthOf(8); pm.expect(r.hazards.ratings[0].code).to.eql('HRCN'); });",
               "pm.test('storms: counts within radius and county', () => { pm.expect(r.storms.status).to.eql('AVAILABLE'); pm.expect(r.storms.radius).to.eql(10000); pm.expect(r.storms.fromYear).to.eql(1996); pm.expect(r.storms.eventsWithinRadius).to.be.above(0); pm.expect(r.storms.eventsInCounty).to.be.at.least(r.storms.eventsWithinRadius); });",
-              "pm.test('every block has source and dataAsOf', () => ['flood','hazards','storms'].forEach(k => { const b = pm.response.json()[k]; pm.expect(b.source, k).to.be.a('string'); if (b.status !== 'NO_COVERAGE') pm.expect(b.dataAsOf, k).to.match(/^\\d{4}-\\d{2}-\\d{2}$/); }));"
+              "pm.test('every block has source and dataAsOf', () => ['flood','hazards','storms'].forEach(k => { const b = pm.response.json()[k]; pm.expect(b.source, k).to.be.a('string'); if (b.status !== 'NO_COVERAGE') pm.expect(b.dataAsOf, k).to.match(/^\\d{4}-\\d{2}-\\d{2}$/); }));",
+              "pm.test('zone-recorded storm types listed as not counted, never as zero', () => { const s = pm.response.json().storms; pm.expect(s.notCountedEventTypes).to.be.an('array'); if (s.notCountedEventTypes.length) pm.expect(s.note).to.include('not evidence that they did not occur'); });"
             ]
           }
         }
@@ -213,7 +214,8 @@
             "exec": [
               "pm.test('status 200', () => pm.response.to.have.status(200));",
               "const s = pm.response.json().storms;",
-              "pm.test('zero within radius, county count kept', () => { pm.expect(s.status).to.eql('NO_DATA'); pm.expect(s.eventsWithinRadius).to.eql(0); pm.expect(s.byType).to.be.empty; pm.expect(s.eventsInCounty).to.be.above(0); pm.expect(s.note).to.include('county-level events may still exist'); });"
+              "pm.test('zero within radius, county count kept', () => { pm.expect(s.status).to.eql('NO_DATA'); pm.expect(s.eventsWithinRadius).to.eql(0); pm.expect(s.byType).to.be.empty; pm.expect(s.eventsInCounty).to.be.above(0); pm.expect(s.note).to.include('county-level events may still exist'); });",
+              "pm.test('zone-recorded storm types listed as not counted, never as zero', () => { const s = pm.response.json().storms; pm.expect(s.notCountedEventTypes).to.be.an('array'); if (s.notCountedEventTypes.length) pm.expect(s.note).to.include('not evidence that they did not occur'); });"
             ]
           }
         }

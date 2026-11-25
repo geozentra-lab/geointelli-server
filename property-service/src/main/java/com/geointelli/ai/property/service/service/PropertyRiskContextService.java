@@ -13,13 +13,14 @@ public interface PropertyRiskContextService {
      * containing the point, the FEMA National Risk Index ratings of the census tract containing it, and the
      * NOAA storm events recorded within {@link RiskContextDTO#STORM_RADIUS_M} since
      * {@link RiskContextDTO#STORM_FROM_YEAR}. The three blocks are evaluated independently, each with its own
-     * status, source and download date, so a source without data for the location never hides the others.
-     * Missing evidence is reported as NO_DATA or NO_COVERAGE and never as a rating. Nothing is saved.
+     * status, source and download date, so a source without data for the location, or one that cannot be read
+     * (block UNAVAILABLE), never hides the others. Missing evidence is reported as NO_DATA or NO_COVERAGE and
+     * never as a rating. Nothing is saved.
      *
      * @param propertyId internal ID of the property
      * @return the risk context with status AVAILABLE, NO_COVERAGE (the property has no usable parcel polygon)
-     *         or UNAVAILABLE (the reference data could not be read; the error is returned in the section,
-     *         not thrown)
+     *         or UNAVAILABLE (no reference data could be read; the error is returned in the section, not
+     *         thrown)
      * @throws IllegalArgumentException if {@code propertyId} is null or not positive
      * @throws com.geointelli.ai.property.service.exception.PropertyNotFoundException if no property has this ID
      */

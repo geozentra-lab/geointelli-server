@@ -21,7 +21,7 @@ public class RiskContextDTO {
     public static final String STATUS_AVAILABLE = "AVAILABLE";
     /** The property has no parcel polygon, so no block can be evaluated. */
     public static final String STATUS_NO_COVERAGE = "NO_COVERAGE";
-    /** The reference tables could not be read. */
+    /** Section: no source could be read. Block: its source could not be read; the other blocks are kept. */
     public static final String STATUS_UNAVAILABLE = "UNAVAILABLE";
     /** Block status: the source has no row for this location; it is not evidence of low risk. */
     public static final String STATUS_NO_DATA = "NO_DATA";
@@ -40,8 +40,9 @@ public class RiskContextDTO {
     private Long propertyId;
 
     @Schema(description = "AVAILABLE when the parcel point could be evaluated against at least one source; "
-            + "NO_COVERAGE when the property has no parcel polygon; UNAVAILABLE when the reference data could "
-            + "not be read", example = STATUS_AVAILABLE)
+            + "NO_COVERAGE when the property has no parcel polygon; UNAVAILABLE when no reference data could "
+            + "be read (no block is returned). A single source that cannot be read only makes its own block "
+            + "UNAVAILABLE", example = STATUS_AVAILABLE)
     private String status;
 
     @Schema(description = "Unit of every distance in this section", example = DISTANCE_UNIT)
@@ -67,8 +68,8 @@ public class RiskContextDTO {
     @Data
     public static class FloodZoneDTO {
         @Schema(description = "AVAILABLE when a flood zone polygon contains the point; NO_DATA when the county is "
-                + "loaded but no polygon contains the point; NO_COVERAGE when the county's flood map is not loaded",
-                example = STATUS_AVAILABLE)
+                + "loaded but no polygon contains the point; NO_COVERAGE when the county's flood map is not loaded; "
+                + "UNAVAILABLE when the flood zones could not be read", example = STATUS_AVAILABLE)
         private String status;
         @Schema(description = "FEMA zone code: A, AE, AH, AO, V, VE, X, D or OPEN WATER", example = "AE")
         private String zone;
@@ -99,8 +100,8 @@ public class RiskContextDTO {
     @Data
     public static class HazardRatingsDTO {
         @Schema(description = "AVAILABLE when the tract has an NRI row; NO_DATA when the tract is known but has "
-                + "no NRI row (water-only tracts); NO_COVERAGE when no census tract contains the point",
-                example = STATUS_AVAILABLE)
+                + "no NRI row (water-only tracts); NO_COVERAGE when no census tract contains the point; "
+                + "UNAVAILABLE when the tracts or NRI ratings could not be read", example = STATUS_AVAILABLE)
         private String status;
         @Schema(description = "11-digit census tract FIPS code", example = "12086000107")
         private String tractFips;
@@ -142,8 +143,8 @@ public class RiskContextDTO {
     @Data
     public static class StormHistoryDTO {
         @Schema(description = "AVAILABLE when the county is in a loaded storm file; NO_DATA when it is loaded "
-                + "but no event is recorded near the point; NO_COVERAGE when the property's state is not loaded",
-                example = STATUS_AVAILABLE)
+                + "but no event is recorded near the point; NO_COVERAGE when the property's state is not loaded; "
+                + "UNAVAILABLE when the storm events could not be read", example = STATUS_AVAILABLE)
         private String status;
         @Schema(description = "Radius around the parcel point for events with a location", example = "10000")
         private Integer radius;
@@ -157,6 +158,12 @@ public class RiskContextDTO {
         private LocalDate lastEventDate;
         @Schema(description = "Counts per event type within the radius, most frequent first")
         private List<StormTypeCountDTO> byType;
+        @Schema(description = "Event types with records NOAA made by forecast zone in this state since fromYear, "
+                + "most frequent first. Those zone records have no location and no county, so they are counted "
+                + "neither within the radius nor in the county (a type such as Flood can also have county records, "
+                + "which are counted). Not evidence that they did not occur here; empty when the state has none",
+                example = "[\"Tropical Storm\", \"Hurricane (Typhoon)\", \"Storm Surge/Tide\"]")
+        private List<String> notCountedEventTypes;
         @Schema(description = "Where the data comes from", example = SOURCE_STORMS)
         private String source;
         @Schema(description = "Date the storm file was downloaded from NOAA", example = "2026-11-11")

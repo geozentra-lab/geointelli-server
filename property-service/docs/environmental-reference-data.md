@@ -209,15 +209,16 @@ Point lookup checked on RDS: three Baker properties resolve through `ST_PointOnS
 Invalid input and missing data (collection folders 2 and 3, plus 1.6) against the same app and RDS: 12 of 12 as
 specified, nothing stored. Note that 3.1 (staged file that does not exist) answers 400, as the collection expects.
 
-Two defects found and fixed during the load, both on the SCRUM-127 branch:
+Two defects found and fixed during the load:
 
-- **V46** `fix_saint_county_fips_codes`: V42 left `counties.fips_code` NULL for "SaintJohns" and "SaintLucie"
-  (names stored without a space; the V42 regex requires one). The V42 guard should have rolled the migration back,
-  so V42 was evidently not run with `-1 -v ON_ERROR_STOP=1`. Fix the regex in V42 (`\s+` -> `\s*`).
-- **V47** `widen_flood_zones_study_typ`: `flood_zones.study_typ VARCHAR(20)` is too short for FEMA `STUDY_TYP`
-  values up to 28 characters ("SFHAs WITH MEDIUM FLOOD RISK"); 43 county files failed with "value too long for
-  type character varying(20)". Widened to VARCHAR(50) on RDS by the table owner; every other text column fits
-  its V42 size (measured over all 67 files).
+- **V46** `fix_saint_county_fips_codes` (SCRUM-127 branch): V42 left `counties.fips_code` NULL for "SaintJohns"
+  and "SaintLucie" (names stored without a space; the V42 regex requires one). The V42 guard should have rolled the
+  migration back, so V42 was evidently not run with `-1 -v ON_ERROR_STOP=1`. V42 itself is left as it is (it is
+  already applied); V46 sets the two codes with the same rule and the space made optional (`\s+` -> `\s*`).
+- **V47** `widen_flood_zones_study_typ` (on master, #236, and integration-testing, #235):
+  `flood_zones.study_typ VARCHAR(20)` is too short for FEMA `STUDY_TYP` values up to 28 characters ("SFHAs WITH
+  MEDIUM FLOOD RISK"); 43 county files failed with "value too long for type character varying(20)". Widened to
+  VARCHAR(50) on RDS by the table owner; every other text column fits its V42 size (measured over all 67 files).
 
 Operational note: the app polls queued ingestion jobs only when `alerts.enabled=true` (scheduling is enabled in
 `AlertSchedulingConfig`); otherwise a job runs only if its own submission finds the worker idle, so county files

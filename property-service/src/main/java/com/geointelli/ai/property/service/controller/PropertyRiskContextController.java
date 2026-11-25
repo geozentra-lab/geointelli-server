@@ -37,7 +37,9 @@ public class PropertyRiskContextController {
             + "the point, the FEMA National Risk Index ratings of its census tract, and the NOAA storm events within "
             + "10 km since 1996. Each block carries its own status, source and download date; missing evidence is "
             + "NO_DATA or NO_COVERAGE, never a rating. NO_COVERAGE at the top means the property has no parcel "
-            + "polygon; UNAVAILABLE means the reference data could not be read (200, error in the section).")
+            + "polygon; UNAVAILABLE means no reference data could be read (200, error in the section). A single "
+            + "source that cannot be read only makes its own block UNAVAILABLE. Storm event types NOAA records by "
+            + "forecast zone (hurricanes, storm surge, ...) are listed in storms.notCountedEventTypes, not counted.")
     public ResponseEntity<RiskContextDTO> getRiskContext(@PathVariable Long id) {
         return ResponseEntity.ok(propertyRiskContextService.getRiskContext(id));
     }

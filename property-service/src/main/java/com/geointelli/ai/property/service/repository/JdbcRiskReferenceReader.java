@@ -86,6 +86,14 @@ public class JdbcRiskReferenceReader implements RiskReferenceReader {
             SELECT COUNT(*) FROM storm_events WHERE fips5 = ? AND begin_at >= make_date(?, 1, 1)
             """;
 
+    /** Uses idx_storm_events_state; zone events have fips5 NULL, so they are found by state. */
+    private static final String ZONE_EVENT_TYPES = """
+            SELECT event_type FROM storm_events
+            WHERE state_fips = LEFT(?, 2) AND cz_type = 'Z' AND begin_at >= make_date(?, 1, 1)
+            GROUP BY event_type
+            ORDER BY COUNT(*) DESC, event_type
+            """;
+
     private static final String[] HAZARD_CODES = {"HRCN", "CFLD", "IFLD", "TRND", "WFIR", "SWND", "LTNG", "HWAV"};
 
     private final JdbcTemplate jdbc;
@@ -156,6 +164,11 @@ public class JdbcRiskReferenceReader implements RiskReferenceReader {
     public int stormsInCounty(String fips5, int fromYear) {
         Integer count = jdbc.queryForObject(STORMS_IN_COUNTY, Integer.class, fips5, fromYear);
         return count == null ? 0 : count;
+    }
+
+    @Override
+    public List<String> zoneEventTypes(String fips5, int fromYear) {
+        return jdbc.queryForList(ZONE_EVENT_TYPES, String.class, fips5, fromYear);
     }
 
     /** NUMERIC column as a Double, null when the source holds no value. */

@@ -86,4 +86,14 @@ public interface RiskReferenceReader {
 
     /** All NOAA events recorded for the county from the given year on, located or not. */
     int stormsInCounty(String fips5, int fromYear);
+
+    /**
+     * Event types that NOAA records by forecast zone ({@code cz_type} Z) in the state of a county, from the given
+     * year on, most frequent first. Those events have no location and no county, so neither
+     * {@link #stormsNear} nor {@link #stormsInCounty} counts them.
+     *
+     * @param fips5 five-digit county FIPS code; its first two digits are the state
+     * @return empty when the state has no zone event
+     */
+    List<String> zoneEventTypes(String fips5, int fromYear);
 }

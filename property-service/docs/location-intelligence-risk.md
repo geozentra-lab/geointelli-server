@@ -19,9 +19,13 @@ Rules of the ticket, and how the endpoint applies them:
   is `NO_COVERAGE`; a block whose source is loaded but holds nothing at the point is `NO_DATA`; both carry a `note`.
 - **Missing evidence is never a safe rating.** No flood polygon at the point is reported as "not a flood-free
   determination"; a tract without an NRI row is "FEMA publishes no NRI row"; a null hazard rating is "not published
-  by FEMA (insufficient data), not low risk"; zero events within the radius still shows the county-wide count.
-- **Sections stay separate.** The three blocks are evaluated one after the other; a block without data never
-  changes the others. A failure of the reference tables is returned inside the section (`UNAVAILABLE`), not thrown.
+  by FEMA (insufficient data), not low risk"; zero events within the radius still shows the county-wide count; the
+  storm types NOAA records only by forecast zone (hurricanes, tropical storms, storm surge, ...) are listed in
+  `storms.notCountedEventTypes` as not counted, never shown as zero.
+- **Sections stay separate.** The three blocks are evaluated one after the other, each with its own queries and
+  no shared transaction; a block without data never changes the others, and a source that cannot be read makes
+  only its own block `UNAVAILABLE`. Only when no block can be read is the whole section `UNAVAILABLE`. Errors are
+  returned inside the section, not thrown.
 
 Scope decision (2026-11-24): the neighborhood, amenities and crime sections are postponed; SCRUM-127 delivers the
 risk section only.
@@ -42,7 +46,7 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 | Field | Meaning |
 |---|---|
 | `propertyId` | the property |
-| `status` | `AVAILABLE` (point located, blocks evaluated), `NO_COVERAGE` (no parcel polygon), `UNAVAILABLE` (reference tables unreadable; `error` set) |
+| `status` | `AVAILABLE` (point located, at least one block read), `NO_COVERAGE` (no parcel polygon), `UNAVAILABLE` (the parcel point or all three sources unreadable; `error` set, no blocks) |
 | `distanceUnit` | `m`, unit of `storms.radius` |
 | `flood` | see below; absent when the top status is not `AVAILABLE` |
 | `hazards` | see below |
@@ -54,7 +58,7 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 
 | Field | Meaning |
 |---|---|
-| `status` | `AVAILABLE` polygon found; `NO_DATA` county loaded, no polygon at the point; `NO_COVERAGE` county map not loaded |
+| `status` | `AVAILABLE` polygon found; `NO_DATA` county loaded, no polygon at the point; `NO_COVERAGE` county map not loaded; `UNAVAILABLE` flood zones unreadable |
 | `zone` | FEMA `FLD_ZONE`: A, AE, AH, AO, V, VE, X, D, OPEN WATER |
 | `zoneSubtype` | FEMA `ZONE_SUBTY`, e.g. `FLOODWAY`, `0.2 PCT ANNUAL CHANCE FLOOD HAZARD`, `AREA OF MINIMAL FLOOD HAZARD`; null when FEMA gives none |
 | `specialFloodHazardArea` | FEMA `SFHA_TF`: true inside the 1 %-annual-chance area |
@@ -67,7 +71,7 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 
 | Field | Meaning |
 |---|---|
-| `status` | `AVAILABLE` tract has an NRI row; `NO_DATA` tract without NRI row (water-only tracts, code 9900); `NO_COVERAGE` no tract polygon contains the point |
+| `status` | `AVAILABLE` tract has an NRI row; `NO_DATA` tract without NRI row (water-only tracts, code 9900); `NO_COVERAGE` no tract polygon contains the point; `UNAVAILABLE` tracts or NRI unreadable |
 | `tractFips`, `tractName` | the census tract (TIGER 2024, 2020 tracts) |
 | `nriVersion` | e.g. `December 2025` |
 | `overallScore`, `overallRating` | NRI composite over the 18 hazards; rating in Very Low, Relatively Low, Relatively Moderate, Relatively High, Very High; null = not published |
@@ -78,13 +82,14 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 
 | Field | Meaning |
 |---|---|
-| `status` | `AVAILABLE` events within the radius; `NO_DATA` state loaded, none within the radius; `NO_COVERAGE` state not loaded |
+| `status` | `AVAILABLE` events within the radius; `NO_DATA` state loaded, none within the radius; `NO_COVERAGE` state not loaded; `UNAVAILABLE` storm events unreadable |
 | `radius`, `fromYear` | 10 000 m and 1996 (NOAA records every event type only from 1996) |
 | `eventsWithinRadius` | located events (NOAA point) within the radius since `fromYear` |
-| `eventsInCounty` | all events of the property's county since `fromYear`, located or not (zone-level events have no point) |
+| `eventsInCounty` | events NOAA records for the property's county (`cz_type` C) since `fromYear`, located or not |
 | `lastEventDate` | most recent located event within the radius |
 | `byType[]` | `eventType`, `count`, `lastEventDate`, `propertyDamageUsd` (sum of NOAA's reported property damage; null when none reported), most frequent first |
-| `source`, `dataAsOf`, `note` | provenance; the note recalls that only located events are counted within the radius |
+| `notCountedEventTypes[]` | event types with records NOAA made by forecast zone (`cz_type` Z) in the property's state since `fromYear`, most frequent first: in Florida 27 types, `Drought`, `Tropical Storm`, `Frost/Freeze`, `Dense Fog`, `Rip Current`, `Hurricane (Typhoon)`, `Coastal Flood`, `Storm Surge/Tide`, ... Those records have no point and no county (`fips5` NULL), so they are in neither count. A type can also have county records, which are counted (`Flood`: 1,416 county and 166 zone records in Florida). Linking a zone to a county needs the NWS zone-county correlation file, which is not loaded |
+| `source`, `dataAsOf`, `note` | provenance; the note recalls that only located events are counted within the radius and, when `notCountedEventTypes` is not empty, that those types are not counted, which is not evidence that they did not occur |
 
 ### Errors
 
@@ -92,7 +97,10 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 |---|---|---|
 | `id` not positive | 400 | `id must be a positive number` |
 | unknown property | 404 | `No property found with id: {id}` |
-| reference tables unreadable | 200 | `status: UNAVAILABLE`, `error: Environmental reference data unavailable` |
+| one source unreadable | 200 | top `AVAILABLE`; that block `status: UNAVAILABLE`, `note: This source could not be read; the other blocks are not affected`; the other blocks as usual |
+| parcel point or all three sources unreadable | 200 | `status: UNAVAILABLE`, `error: Environmental reference data unavailable`, no blocks |
+
+The technical cause is written to the service log, never sent to the client.
 
 ## Example (property on an AE zone, Miami-Dade)
 
@@ -109,8 +117,9 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
   "storms": { "status": "AVAILABLE", "radius": 10000, "fromYear": 1996, "eventsWithinRadius": 39, "eventsInCounty": 1025,
               "lastEventDate": "2026-06-26",
               "byType": [ { "eventType": "Thunderstorm Wind", "count": 13, "lastEventDate": "2026-06-26", "propertyDamageUsd": 46000 }, "..." ],
+              "notCountedEventTypes": [ "Tropical Storm", "Hurricane (Typhoon)", "Storm Surge/Tide", "..." ],
               "source": "NOAA NCEI Storm Events Database", "dataAsOf": "2026-11-11",
-              "note": "Only events with coordinates are counted within the radius; county-wide events include those without" },
+              "note": "Only events with coordinates are counted within the radius; eventsInCounty also counts the county's events without coordinates. Events NOAA records by forecast zone (the types in notCountedEventTypes, such as hurricanes, tropical storms and storm surge) have no location and no county, so neither count includes them; this is not evidence that they did not occur here" },
   "note": null, "error": null
 }
 ```
@@ -120,10 +129,10 @@ GET /api/properties/id/{id}/location-intelligence/risk        no token required 
 | Layer | File |
 |---|---|
 | Controller | `controller/PropertyRiskContextController.java` |
-| Service | `service/PropertyRiskContextService.java`, `service/impl/PropertyRiskContextServiceImpl.java` (one read-only transaction; the note texts are its constants) |
+| Service | `service/PropertyRiskContextService.java`, `service/impl/PropertyRiskContextServiceImpl.java` (not transactional, so one failing source cannot abort the queries of the other blocks; the note texts are its constants) |
 | Repository | `repository/RiskReferenceReader.java`, `repository/JdbcRiskReferenceReader.java` (native SQL on the V42 tables: `ST_Intersects` on the GIST indexes, `ST_DWithin` on the geography index; parts of one FEMA polygon merged by `(source_file, source_row)`) |
 | DTO | `dto/RiskContextDTO.java` with nested `FloodZoneDTO`, `HazardRatingsDTO`, `HazardRatingDTO`, `StormHistoryDTO`, `StormTypeCountDTO` |
-| Migrations | `V46__fix_saint_county_fips_codes.sql`, `V47__widen_flood_zones_study_typ.sql` (defects of V42 found while loading, see the SCRUM-201 doc) |
+| Migrations | `V46__fix_saint_county_fips_codes.sql` (a defect of V42 found while loading, see the SCRUM-201 doc). The second one, `V47__widen_flood_zones_study_typ.sql`, is on master since #236 and no longer part of this branch |
 
 No automated tests (ticket). Ownership checks: not applicable, the endpoint reads public property data without a
 token, like the schools and transport sections.
@@ -168,3 +177,17 @@ endpoint with the real Florida files: census tracts 5,160, NRI 5,114, storm even
 
 The same SQL was exercised on RDS (dev) for Baker property 597416 before the endpoint existed: "X / AREA OF MINIMAL
 FLOOD HAZARD, sfha=false, bfe=NULL". A run of the collection against RDS is pending (the laptop's VPN blocks RDS).
+
+### 2026-11-25, review fixes
+
+Local scratch database with the Florida tracts, NRI and storm files and the Miami-Dade flood map. A source failure
+was caused by renaming a table for one call, then renaming it back.
+
+- Storms near a Miami-Dade property: before, `byType` held no hurricane, tropical storm or storm surge and the
+  note said county-wide counts included events without coordinates, though NOAA's 2,247 Florida hurricane,
+  tropical and surge records have no point and no county. Now `notCountedEventTypes` lists them and the note says
+  they are not counted.
+- `nri_tract_risk` renamed: before, the whole section `UNAVAILABLE` with the three blocks null; now `hazards`
+  `UNAVAILABLE` and `flood` and `storms` still `AVAILABLE`.
+- `flood_zones`, `census_tracts` and `storm_events` renamed together: section `UNAVAILABLE`, no blocks, no SQL text.
+- SFHA, zone X, no parcel, 400 and 404 unchanged.

@@ -20,17 +20,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Builds the risk section from the SCRUM-201 reference tables through {@link RiskReferenceReader}. Every
  * block is filled from raw source values: no score, label or default is derived here, and a block without
- * evidence says so in its status and note. One read-only transaction per call.
+ * evidence says so in its status and note.
+ *
+ * <p>Not transactional on purpose: each query runs on its own, so a source that cannot be read (in PostgreSQL a
+ * failed query aborts the rest of its transaction) only marks its own block {@code UNAVAILABLE} and the other
+ * blocks are still returned. The reference tables are replaced by whole loads, so the blocks need no common
+ * snapshot.
  */
 @Slf4j
 @Service
@@ -40,6 +45,7 @@ public class PropertyRiskContextServiceImpl implements PropertyRiskContextServic
     static final String NO_COVERAGE_NOTE = "No parcel polygon for this property: the location cannot be evaluated";
     static final String NO_COUNTY_NOTE = "The property's county has no FIPS code; county-based sources cannot be evaluated";
     static final String UNAVAILABLE_ERROR = "Environmental reference data unavailable";
+    static final String BLOCK_UNAVAILABLE_NOTE = "This source could not be read; the other blocks are not affected";
     static final String FLOOD_NOT_LOADED_NOTE = "FEMA flood map of this county not loaded";
     static final String FLOOD_NO_POLYGON_NOTE = "No FEMA flood zone polygon at this point; this is not a flood-free determination";
     static final String FLOOD_OVERLAP_NOTE = "Point lies in %d overlapping FEMA polygons; the Special Flood Hazard Area one is shown";
@@ -48,7 +54,10 @@ public class PropertyRiskContextServiceImpl implements PropertyRiskContextServic
     static final String RATING_UNKNOWN_NOTE = "Ratings left null are not published by FEMA for this tract (insufficient data), not low risk";
     static final String STORMS_NOT_LOADED_NOTE = "NOAA storm events of this state not loaded";
     static final String STORMS_NONE_NOTE = "No located NOAA event within the radius; county-level events may still exist";
-    static final String STORMS_PARTIAL_NOTE = "Only events with coordinates are counted within the radius; county-wide events include those without";
+    static final String STORMS_PARTIAL_NOTE = "Only events with coordinates are counted within the radius; eventsInCounty also counts the county's events without coordinates";
+    static final String STORMS_ZONE_NOTE = "Events NOAA records by forecast zone (the types in notCountedEventTypes, "
+            + "such as hurricanes, tropical storms and storm surge) have no location and no county, so neither count "
+            + "includes them; this is not evidence that they did not occur here";
 
     private static final Map<String, String> HAZARD_NAMES = Map.of(
             "HRCN", "Hurricane", "CFLD", "Coastal flooding", "IFLD", "Inland (riverine) flooding",
@@ -58,7 +67,6 @@ public class PropertyRiskContextServiceImpl implements PropertyRiskContextServic
     private final RiskReferenceReader reader;
 
     @Override
-    @Transactional(readOnly = true)
     public RiskContextDTO getRiskContext(Long propertyId) {
         // invalid ID -> 400, unknown property -> 404
         if (propertyId == null || propertyId <= 0) {
@@ -73,29 +81,75 @@ public class PropertyRiskContextServiceImpl implements PropertyRiskContextServic
         context.setDistanceUnit(RiskContextDTO.DISTANCE_UNIT);
 
         // the reference tables are read only; a failure is returned in the section, not thrown
+        Optional<ParcelPoint> located;
         try {
-            Optional<ParcelPoint> located = reader.parcelPoint(propertyId);
-            if (located.isEmpty()) {
-                context.setStatus(RiskContextDTO.STATUS_NO_COVERAGE);
-                context.setNote(NO_COVERAGE_NOTE);
-                return context;
-            }
-            ParcelPoint point = located.get();
-            context.setFlood(flood(point));
-            context.setHazards(hazards(point));
-            context.setStorms(storms(point));
-            context.setStatus(RiskContextDTO.STATUS_AVAILABLE);
-            if (point.fips5() == null) {
-                context.setNote(NO_COUNTY_NOTE);
-            }
+            located = reader.parcelPoint(propertyId);
         } catch (DataAccessException e) {
-            log.warn("Risk context unavailable for property {}", propertyId, e);
-            context.setStatus(RiskContextDTO.STATUS_UNAVAILABLE);
-            context.setError(UNAVAILABLE_ERROR);
-            context.setFlood(null);
-            context.setHazards(null);
-            context.setStorms(null);
+            log.warn("Risk context unavailable for property {}: parcel point", propertyId, e);
+            return unavailable(context);
         }
+        if (located.isEmpty()) {
+            context.setStatus(RiskContextDTO.STATUS_NO_COVERAGE);
+            context.setNote(NO_COVERAGE_NOTE);
+            return context;
+        }
+        ParcelPoint point = located.get();
+
+        // each block on its own: a source that cannot be read marks only its block UNAVAILABLE
+        context.setFlood(block("flood", propertyId, () -> flood(point), () -> {
+            FloodZoneDTO flood = new FloodZoneDTO();
+            flood.setSource(RiskContextDTO.SOURCE_FLOOD);
+            flood.setStatus(RiskContextDTO.STATUS_UNAVAILABLE);
+            flood.setNote(BLOCK_UNAVAILABLE_NOTE);
+            return flood;
+        }));
+        context.setHazards(block("hazards", propertyId, () -> hazards(point), () -> {
+            HazardRatingsDTO hazards = new HazardRatingsDTO();
+            hazards.setSource(RiskContextDTO.SOURCE_HAZARDS);
+            hazards.setStatus(RiskContextDTO.STATUS_UNAVAILABLE);
+            hazards.setNote(BLOCK_UNAVAILABLE_NOTE);
+            return hazards;
+        }));
+        context.setStorms(block("storms", propertyId, () -> storms(point), () -> {
+            StormHistoryDTO storms = new StormHistoryDTO();
+            storms.setSource(RiskContextDTO.SOURCE_STORMS);
+            storms.setRadius(RiskContextDTO.STORM_RADIUS_M);
+            storms.setFromYear(RiskContextDTO.STORM_FROM_YEAR);
+            storms.setStatus(RiskContextDTO.STATUS_UNAVAILABLE);
+            storms.setNote(BLOCK_UNAVAILABLE_NOTE);
+            return storms;
+        }));
+
+        boolean allUnavailable = RiskContextDTO.STATUS_UNAVAILABLE.equals(context.getFlood().getStatus())
+                && RiskContextDTO.STATUS_UNAVAILABLE.equals(context.getHazards().getStatus())
+                && RiskContextDTO.STATUS_UNAVAILABLE.equals(context.getStorms().getStatus());
+        if (allUnavailable) {
+            return unavailable(context);
+        }
+        context.setStatus(RiskContextDTO.STATUS_AVAILABLE);
+        if (point.fips5() == null) {
+            context.setNote(NO_COUNTY_NOTE);
+        }
+        return context;
+    }
+
+    /** Loads one block; a database error gives the block's UNAVAILABLE form instead of failing the section. */
+    private <T> T block(String name, Long propertyId, Supplier<T> load, Supplier<T> unavailable) {
+        try {
+            return load.get();
+        } catch (DataAccessException e) {
+            log.warn("Risk context block {} unavailable for property {}", name, propertyId, e);
+            return unavailable.get();
+        }
+    }
+
+    /** The whole section could not be read: no block is returned. */
+    private static RiskContextDTO unavailable(RiskContextDTO context) {
+        context.setStatus(RiskContextDTO.STATUS_UNAVAILABLE);
+        context.setError(UNAVAILABLE_ERROR);
+        context.setFlood(null);
+        context.setHazards(null);
+        context.setStorms(null);
         return context;
     }
 
@@ -204,13 +258,17 @@ public class PropertyRiskContextServiceImpl implements PropertyRiskContextServic
         }
         storms.setByType(byType);
         storms.setEventsWithinRadius(total);
+        List<String> notCounted = reader.zoneEventTypes(point.fips5(), RiskContextDTO.STORM_FROM_YEAR);
+        storms.setNotCountedEventTypes(notCounted);
+        String note;
         if (total == 0) {
             storms.setStatus(RiskContextDTO.STATUS_NO_DATA);
-            storms.setNote(STORMS_NONE_NOTE);
+            note = STORMS_NONE_NOTE;
         } else {
             storms.setStatus(RiskContextDTO.STATUS_AVAILABLE);
-            storms.setNote(STORMS_PARTIAL_NOTE);
+            note = STORMS_PARTIAL_NOTE;
         }
+        storms.setNote(notCounted.isEmpty() ? note : note + ". " + STORMS_ZONE_NOTE);
         return storms;
     }
 }
