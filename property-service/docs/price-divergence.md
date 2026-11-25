@@ -90,8 +90,9 @@ it is always `UNAVAILABLE` with the reason "No asking-price data is recorded".
 
 ## Access
 
-Public, like `GET /api/properties/id/{id}/valuation`: no token is needed and no ownership applies (property data is
-public county data).
+Any signed-in user, like `GET /api/properties/id/{id}/valuation`: a bearer token is required (SCRUM-94 baseline
+property reads, no realm role needed; 401 without a token). No ownership applies: property data is public county
+data.
 
 | Response | When |
 |---|---|
@@ -167,4 +168,4 @@ Errors use the shared `ApiError` body:
 ## Manual checks
 
 Postman collection: `docs/postman/SCRUM-60-price-divergence.postman_collection.json` (success, property without a
-valuation, unknown property, invalid IDs). No token is needed.
+valuation, unknown property, invalid IDs, no token). Set `access_token` to any user's token.

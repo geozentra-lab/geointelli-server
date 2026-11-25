@@ -177,7 +177,7 @@ Every county runs in its own transactions, and a retry simply runs again (only c
 |---|---|---|
 | `POST /api/property-school-analysis/assign?fips5=12086` | `SCHOOL_ASSIGNMENT` | assigns the county's schools (one transaction), then computes its score v2 (a second one). Without `fips5`: every county with attendance zones and properties |
 | `POST /api/property-school-analysis/calculate-all?version=2&fips5=12086` | `SCHOOL_SCORE_V2` | score v2 only, from the stored assignments: run it after a new FLDOE grades load. Without `fips5`: every assigned county |
-| `POST /api/property-school-analysis/calculate-all` (or `version=1`) | none | the v1 score of `property_school_analysis`, unchanged: synchronous, `204`, no role required |
+| `POST /api/property-school-analysis/calculate-all` (or `version=1`) | none | the v1 score of `property_school_analysis`, unchanged: synchronous, `204`; admin role since SCRUM-94, like every `calculate-all` |
 
 Job counters:
 
@@ -193,7 +193,7 @@ Refused before anything is queued:
 
 - `400`: `fips5` not 5 digits, no county with that FIPS code, `version` not 1 or 2, `recalculateExisting` with
   version 2, or `fips5` with version 1.
-- `401` / `403`: no token, or no admin role. Any `version` other than exactly `1` needs the role.
+- `401` / `403`: no token, or no admin role. Every request above needs the role, v1 included (SCRUM-94).
 - `409`: V49 missing; the county has no attendance zones or no properties (assign), or no assignment (score); a job
   of the same dataset is already queued or running.
 

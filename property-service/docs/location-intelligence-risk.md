@@ -40,7 +40,7 @@ The county comes from `properties.county_id` → `counties.fips_code` (set by V4
 ## Response
 
 ```
-GET /api/properties/id/{id}/location-intelligence/risk        no token required (public property data)
+GET /api/properties/id/{id}/location-intelligence/risk        bearer token required, no role (SCRUM-94 baseline)
 ```
 
 | Field | Meaning |
@@ -134,8 +134,9 @@ The technical cause is written to the service log, never sent to the client.
 | DTO | `dto/RiskContextDTO.java` with nested `FloodZoneDTO`, `HazardRatingsDTO`, `HazardRatingDTO`, `StormHistoryDTO`, `StormTypeCountDTO` |
 | Migrations | `V46__fix_saint_county_fips_codes.sql` (a defect of V42 found while loading, see the SCRUM-201 doc). The second one, `V47__widen_flood_zones_study_typ.sql`, is on master since #236 and no longer part of this branch |
 
-No automated tests (ticket). Ownership checks: not applicable, the endpoint reads public property data without a
-token, like the schools and transport sections.
+No automated tests (ticket). Access: any signed-in user, like the schools and transport sections (SCRUM-94
+baseline property reads; 401 without a token). Ownership checks: not applicable, the endpoint reads public property
+data.
 
 ## Manual checks (Postman)
 

@@ -7,6 +7,7 @@ import com.geointelli.ai.property.service.service.OpportunityBrowseService;
 import com.geointelli.ai.property.service.service.OpportunityScoringService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,12 +17,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 
 /**
- * Investment opportunity scores (SCRUM-76): the live, explained score of one property (SCRUM-167) and a paginated
- * browse of the stored scores (SCRUM-168). Property data is public, like the valuation endpoint, so no token is
- * required and no ownership applies.
+ * Investment opportunity scores (SCRUM-76): the live, explained score of one
+ * property (SCRUM-167) and a paginated
+ * browse of the stored scores (SCRUM-168). Requires an investor or admin realm
+ * role;
+ * shared property scores have no user ownership.
  */
 @RestController
 @RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
 @Tag(name = "Opportunities", description = "Versioned, explained opportunity scores built from the stored ZentraValue "
         + "valuation and forecasts. Unavailable evidence adds no points; without essential evidence a score is "
         + "unavailable. Invalid input 400; unknown property 404.")
@@ -31,11 +35,15 @@ public class OpportunityController {
     private final OpportunityBrowseService opportunityBrowseService;
 
     /**
-     * Calculates the opportunity score of one property from its current stored valuation.
+     * Calculates the opportunity score of one property from its current stored
+     * valuation.
      *
-     * @param id property ID
-     * @return 200 with the score, every factor and the coverage (status UNAVAILABLE with reasons when essential
-     *         evidence is missing); 400 if the ID is invalid; 404 if the property does not exist
+     * @param id
+     *               property ID
+     * @return 200 with the score, every factor and the coverage (status UNAVAILABLE
+     *         with reasons when essential
+     *         evidence is missing); 400 if the ID is invalid; 404 if the property
+     *         does not exist
      */
     @GetMapping("/api/properties/id/{id}/opportunity-score")
     @Operation(summary = "Opportunity score of a property", description = "Scores the property now from its stored "
@@ -49,7 +57,8 @@ public class OpportunityController {
     /**
      * Lists scored properties, best first by default.
      *
-     * @return 200 with one page; an empty page has status NO_MATCHES, NO_ELIGIBLE_OPPORTUNITIES or NOT_SCORED;
+     * @return 200 with one page; an empty page has status NO_MATCHES,
+     *         NO_ELIGIBLE_OPPORTUNITIES or NOT_SCORED;
      *         400 if a parameter is out of range or the sort is not supported
      */
     @GetMapping("/api/opportunities")

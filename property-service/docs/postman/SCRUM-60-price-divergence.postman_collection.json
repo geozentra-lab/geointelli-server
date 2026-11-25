@@ -8,8 +8,10 @@
     { "key": "baseUrl", "value": "http://localhost:8091" },
     { "key": "propertyId", "value": "" },
     { "key": "propertyWithoutValuationId", "value": "" },
-    { "key": "unknownPropertyId", "value": "999999999" }
+    { "key": "unknownPropertyId", "value": "999999999" },
+    { "key": "access_token", "value": "", "description": "Access token of any user (no realm role needed): SCRUM-94 baseline property reads" }
   ],
+  "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }] },
   "item": [
     {
       "name": "1. Success",
@@ -90,6 +92,11 @@
           "name": "ID not a number: 400",
           "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/abc/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "abc", "price-divergence"] } }
+        },
+        {
+          "name": "No bearer token: 401",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => pm.response.to.have.status(401));"] } }],
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": { "raw": "{{baseUrl}}/api/properties/id/{{propertyId}}/price-divergence", "host": ["{{baseUrl}}"], "path": ["api", "properties", "id", "{{propertyId}}", "price-divergence"] } }
         }
       ]
     }
