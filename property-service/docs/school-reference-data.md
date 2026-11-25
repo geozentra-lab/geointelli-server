@@ -168,6 +168,12 @@ Measured on the local rehearsal (2026-11-22): schools 2 s, grades 4-6 s, zones 1
 
 Every load adds a row to `reference_dataset_loads`; older rows stay as history.
 
+After a load, refresh the school assignments and school score v2 (SCRUM-203, `school-score-v2.md`): new grades
+need `POST /api/property-school-analysis/calculate-all?version=2`; reloaded schools or zones need
+`POST /api/property-school-analysis/assign?fips5=…` for each county. A zones reload clears the stored `zone_id` of
+the county's assignments, and a schools reload deletes the assignments of the schools it deletes, until the county
+is assigned again.
+
 ## Data vintage
 
 | Data | Vintage |

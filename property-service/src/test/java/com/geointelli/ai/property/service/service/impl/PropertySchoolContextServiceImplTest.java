@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.service.impl;
 
+import com.geointelli.ai.property.service.dto.AssignedSchoolDTO;
 import com.geointelli.ai.property.service.dto.SchoolAnalysisDTO;
 import com.geointelli.ai.property.service.dto.SchoolContextDTO;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -256,5 +258,161 @@ public class PropertySchoolContextServiceImplTest {
     @DisplayName("Score labels follow the 80 / 60 / 40 boundaries")
     void labelBoundaries(int score, String label) {
         assertEquals(label, PropertySchoolContextServiceImpl.label(score));
+    }
+
+    @Nested
+    @DisplayName("School Score V2 Tests (SCRUM-203)")
+    class ScoreV2 {
+
+        private AssignedSchoolDTO assigned(String level, String method, Integer percentile) {
+            AssignedSchoolDTO school = new AssignedSchoolDTO();
+            school.setLevel(level);
+            school.setName(level + " SCHOOL");
+            school.setAssignmentMethod(method);
+            school.setStatewidePercentile(percentile);
+            school.setGradeYear(2026);
+            school.setDistanceMeters(900.0);
+            return school;
+        }
+
+        private SchoolAnalysisDTO withScoreV2(SchoolAnalysisDTO analysis, List<AssignedSchoolDTO> schools) {
+            analysis.setAssignedSchools(schools);
+            analysis.setQualityScore(71.43);
+            analysis.setAccessScore(77.5);
+            analysis.setChoiceScore(24.0);
+            analysis.setSchoolScoreV2(65.83);
+            analysis.setSchoolScoreV2Label(SchoolContextDTO.LABEL_GOOD);
+            analysis.setGradeYear(2026);
+            analysis.setScoreVersion(2);
+            return analysis;
+        }
+
+        private SchoolAnalysisDTO v2Only(List<AssignedSchoolDTO> schools) {
+            SchoolAnalysisDTO analysis = new SchoolAnalysisDTO();
+            analysis.setPropertyId(PROPERTY_ID);
+            return withScoreV2(analysis, schools);
+        }
+
+        @Test
+        @DisplayName("When the property has assigned schools but no v1 row, then return AVAILABLE with the v2 score")
+        void whenOnlyV2_thenAvailableWithScoreV2() {
+            // Arrange
+            List<AssignedSchoolDTO> schools = List.of(assigned("ELEMENTARY", "ZONE", 80),
+                    assigned("MIDDLE", "ZONE", 60), assigned("HIGH", "ZONE", 40));
+            givenStoredAnalysis(v2Only(schools));
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertEquals(schools, context.getAssignedSchools());
+            assertEquals(66, context.getSchoolScoreV2());
+            assertEquals(SchoolContextDTO.LABEL_GOOD, context.getSchoolScoreV2Label());
+            assertEquals(71, context.getQualityScore());
+            assertEquals(78, context.getAccessScore());
+            assertEquals(24, context.getChoiceScore());
+            assertEquals(2026, context.getGradeYear());
+            assertEquals(2, context.getScoreVersion());
+            assertEquals("FLDOE School Grades 2026, " + SchoolContextDTO.SOURCE_V2, context.getSource());
+            assertNull(context.getSchoolScore());
+            assertNull(context.getNearestPublicSchoolDistance());
+            assertNull(context.getNote());
+        }
+
+        @Test
+        @DisplayName("When v1 finds no school within 1 km but schools are assigned, then AVAILABLE and the v1 note is marked")
+        void whenV1HasNoNearbySchool_thenAssignedSchoolsDecide() {
+            // Arrange
+            SchoolAnalysisDTO analysis = withScoreV2(analysis(1500.0, 2500.0, 0, 50.0, 0.0, 0.0),
+                    List.of(assigned("ELEMENTARY", "ZONE", 80), assigned("MIDDLE", "ZONE", 60),
+                            assigned("HIGH", "ZONE", 40)));
+            givenStoredAnalysis(analysis);
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert: the v1 fields are still filled for one release
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertEquals(0, context.getSchoolsWithin1km());
+            assertEquals(66, context.getSchoolScoreV2());
+            assertEquals(PropertySchoolContextServiceImpl.V1_NOTE_PREFIX + PropertySchoolContextServiceImpl.NO_NEARBY_NOTE,
+                    context.getNote());
+        }
+
+        @Test
+        @DisplayName("When a level has no school or only the nearest one, and the score is pending, then the notes say so")
+        void whenLevelsMissingOrNearest_thenNotes() {
+            // Arrange: no middle school, the high school is the nearest one, no score yet
+            SchoolAnalysisDTO analysis = new SchoolAnalysisDTO();
+            analysis.setPropertyId(PROPERTY_ID);
+            analysis.setAssignedSchools(List.of(assigned("ELEMENTARY", "ZONE", 80), assigned("HIGH", "NEAREST", null)));
+            givenStoredAnalysis(analysis);
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertNull(context.getSchoolScoreV2());
+            assertEquals(2026, context.getGradeYear(), "the year of the assigned schools' grades");
+            assertEquals(PropertySchoolContextServiceImpl.NO_ASSIGNED_SCHOOL_NOTE + "MIDDLE. "
+                    + PropertySchoolContextServiceImpl.NEAREST_NOTE + "HIGH. "
+                    + PropertySchoolContextServiceImpl.SCORE_V2_PENDING_NOTE, context.getNote());
+        }
+
+        @Test
+        @DisplayName("When a level's zoned school is not in the school data, then the note says it is left out")
+        void whenZonedSchoolUnmatched_thenNote() {
+            // Arrange: elementary UNMATCHED_ZONE, the other levels zoned; quality and access come from them
+            SchoolAnalysisDTO analysis = v2Only(List.of(assigned("ELEMENTARY", "UNMATCHED_ZONE", null),
+                    assigned("MIDDLE", "ZONE", 60), assigned("HIGH", "ZONE", 40)));
+            givenStoredAnalysis(analysis);
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertEquals(SchoolContextDTO.STATUS_AVAILABLE, context.getStatus());
+            assertEquals(PropertySchoolContextServiceImpl.UNMATCHED_ZONE_NOTE + "ELEMENTARY", context.getNote());
+        }
+
+        @Test
+        @DisplayName("When the stored v2 row has no score (no level has a school), then the note says it is unavailable")
+        void whenNoSchoolKnown_thenUnavailable() {
+            // Arrange: every level UNMATCHED_ZONE; the row exists (scoreVersion 2) with only the choice part
+            SchoolAnalysisDTO analysis = v2Only(List.of(assigned("ELEMENTARY", "UNMATCHED_ZONE", null),
+                    assigned("MIDDLE", "UNMATCHED_ZONE", null), assigned("HIGH", "UNMATCHED_ZONE", null)));
+            analysis.setQualityScore(null);
+            analysis.setAccessScore(null);
+            analysis.setSchoolScoreV2(null);
+            analysis.setSchoolScoreV2Label(null);
+            givenStoredAnalysis(analysis);
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertNull(context.getSchoolScoreV2());
+            assertEquals(PropertySchoolContextServiceImpl.UNMATCHED_ZONE_NOTE + "ELEMENTARY, MIDDLE, HIGH. "
+                    + PropertySchoolContextServiceImpl.SCORE_V2_UNAVAILABLE_NOTE, context.getNote());
+        }
+
+        @Test
+        @DisplayName("When a part of the v2 score is unknown, then the note names it")
+        void whenPartUnknown_thenNote() {
+            // Arrange: none of the assigned schools is graded
+            SchoolAnalysisDTO analysis = v2Only(List.of(assigned("ELEMENTARY", "ZONE", null),
+                    assigned("MIDDLE", "ZONE", null), assigned("HIGH", "ZONE", null)));
+            analysis.setQualityScore(null);
+            givenStoredAnalysis(analysis);
+
+            // Act
+            SchoolContextDTO context = schoolContextService.getSchoolContext(PROPERTY_ID);
+
+            // Assert
+            assertNull(context.getQualityScore());
+            assertEquals("School score v2 based on known parts only, unknown parts: qualityScore", context.getNote());
+        }
     }
 }

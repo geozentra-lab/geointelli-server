@@ -68,6 +68,19 @@ public interface IngestionLaunchService {
     ImportJobDTO startApi(IngestionDataset dataset, String createdBy);
 
     /**
+     * Queues a school scoring job (SCRUM-203): {@link IngestionDataset#SCHOOL_ASSIGNMENT} assigns the schools of the
+     * county, then computes its school score v2; {@link IngestionDataset#SCHOOL_SCORE_V2} computes the score v2 from
+     * the stored assignments. Without {@code fips5}, the job covers every county with attendance zones (assignment)
+     * or with stored assignments (score), one county per transaction.
+     *
+     * @param fips5 5-digit FIPS code of the county, or null for every county
+     * @throws IllegalArgumentException if fips5 is not 5 digits or no county has it
+     * @throws org.springframework.web.server.ResponseStatusException 409 if migration V49 is missing, the county has
+     *         no attendance zones (assignment) or no assignment (score), or a job for the dataset is already active
+     */
+    ImportJobDTO startSchoolScoring(IngestionDataset dataset, String fips5, String createdBy);
+
+    /**
      * Queues a new job that resumes a finished one from its checkpoint, on the same stored inputs.
      * @throws org.springframework.web.server.ResponseStatusException 404 if unknown; 409 with a reason code when refused
      */

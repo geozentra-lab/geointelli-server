@@ -111,7 +111,15 @@ public enum IngestionDataset {
     /** School attendance zones ({@code school_attendance_zones}, SCRUM-202); every county in the file is replaced. */
     SCHOOL_ZONES(ImportJobType.REFERENCE_DATA_IMPORT, "school-zones", null, List.of(
         "fips5", "county", "level", "zone_school_name", "school_key", "school_match", "source_school_id", "source",
-        "source_type", "zone_year", "method_fr", "note_fr", "geom_wkt"));
+        "source_type", "zone_year", "method_fr", "note_fr", "geom_wkt")),
+
+    /**
+     * School assignment of a county ({@code property_school_assignments}, SCRUM-203), then school score v2 of the
+     * same county ({@code property_school_scores}); computed from the school reference data, no input file.
+     */
+    SCHOOL_ASSIGNMENT(ImportJobType.SCHOOL_SCORING, "assign", null, List.of()),
+    /** School score v2 of a county from its stored assignments ({@code property_school_scores}, SCRUM-203). */
+    SCHOOL_SCORE_V2(ImportJobType.SCHOOL_SCORING, "calculate-all", null, List.of());
 
     /** School reference datasets (SCRUM-202): their scope is the set of counties or years the file contains. */
     public static final Set<IngestionDataset> SCHOOL_REFERENCE = Set.of(SCHOOLS, SCHOOL_GRADES, SCHOOL_ZONES);
@@ -164,6 +172,11 @@ public enum IngestionDataset {
     /** Whether this is a school reference dataset (SCRUM-202), replaced by the counties or years of its file. */
     public boolean isSchoolData() {
         return SCHOOL_REFERENCE.contains(this);
+    }
+
+    /** Whether this is a school assignment or school score v2 job (SCRUM-203), computed without an input file. */
+    public boolean isSchoolScoring() {
+        return jobType == ImportJobType.SCHOOL_SCORING;
     }
 
     /** Resolves a reference dataset from its endpoint path segment ({@code flood-zones} and so on). */
