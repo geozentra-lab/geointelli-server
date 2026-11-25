@@ -1,0 +1,1590 @@
+{
+  "info": {
+    "name": "SCRUM-133 Economic indicators",
+    "description": "Import and read county economic indicators (docs/economic-indicators.md). Set baseUrl, admin_token (Keycloak realm role admin) and user_token (a user without the admin role). Needs migration V50 and internet access to api.bls.gov and www2.census.gov. Run folders 1 to 4 in order; folder 5 is optional. The data is public and owned by no user, so access is checked on the admin role instead of ownership. No secret is stored in this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "user_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1 Access (admin role)",
+      "item": [
+        {
+          "name": "01 Import without token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "02 Import as a user without the admin role (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "03 Read without token: public reference data (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Imports need the admin realm role. The indicators are public data owned by no user: there is no ownership check."
+    },
+    {
+      "name": "2 Empty and missing data",
+      "item": [
+        {
+          "name": "04 List indicators: 7 definitions with unit, frequency, geography and source",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('7 indicators', () => pm.expect(d.map(i => i.code)).to.have.members(['LABOR_FORCE', 'EMPLOYMENT', 'UNEMPLOYMENT_RATE', 'POPULATION', 'NET_MIGRATION', 'NET_DOMESTIC_MIGRATION', 'NET_INTERNATIONAL_MIGRATION']));",
+                  "pm.test('every definition is complete', () => d.forEach(i => {",
+                  "  pm.expect(['PERSONS', 'PERCENT']).to.include(i.unit);",
+                  "  pm.expect(['MONTHLY', 'ANNUAL']).to.include(i.frequency);",
+                  "  pm.expect(i.geographyLevel).to.eql('COUNTY');",
+                  "  pm.expect(i.sourceUrl).to.match(/^https:/);",
+                  "  pm.expect(i.coverage.counties).to.be.at.least(0);",
+                  "}));",
+                  "pm.test('BLS is monthly, Census annual: never mixed', () => d.forEach(i => pm.expect(i.frequency).to.eql(i.source === 'BLS_LAUS' ? 'MONTHLY' : 'ANNUAL')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators"
+              ]
+            }
+          }
+        },
+        {
+          "name": "05 Values of a county without data: EMPTY, not zeros",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('status EMPTY', () => pm.expect(d.status).to.eql('EMPTY'));",
+                  "pm.test('no values', () => pm.expect(d.observations).to.eql([]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/POPULATION/observations?fips=12999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "POPULATION",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12999"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 Invalid input (400, 404)",
+      "item": [
+        {
+          "name": "06 BLS without state",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?fips=12086",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "07 BLS unknown state",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"ZZ\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=ZZ",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "ZZ"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "08 BLS fips not 5 digits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"5-digit\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=123",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "123"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "09 BLS county of another state (Fulton, GA)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"not a county of FL\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=13121",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "13121"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "10 BLS fromYear after toYear",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"fromYear must not be after toYear\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=2026&toYear=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2026"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "11 BLS more than 10 years",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"10 years\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=2010&toYear=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2010"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "12 BLS year not a number",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "abc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "13 BLS toYear in the future",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('nextYear', new Date().getUTCFullYear() + 1);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"toYear must not be after\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&toYear={{nextYear}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "toYear",
+                  "value": "{{nextYear}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "14 BLS fromYear before 1990",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"1990\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=1989&toYear=1990",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "1989"
+                },
+                {
+                  "key": "toYear",
+                  "value": "1990"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "15 Census vintage before 2021",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"vintage must be between\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2019",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2019"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "16 Census vintage not published yet (current year)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('thisYear', new Date().getUTCFullYear());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"has not published\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage={{thisYear}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "{{thisYear}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "17 Read: unknown indicator (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"Unknown economic indicator\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/GDP/observations?fips=12086",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "GDP",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "18 Read: fips missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/POPULATION/observations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "POPULATION",
+                "observations"
+              ]
+            }
+          }
+        },
+        {
+          "name": "19 Read: fips not 5 digits",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message names the problem', () => pm.expect(pm.response.json().message).to.include(\"5-digit\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/POPULATION/observations?fips=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "POPULATION",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "abc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "20 Read: fromYear after toYear",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/POPULATION/observations?fips=12086&fromYear=2025&toYear=2024",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "POPULATION",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2025"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2024"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Rejected before any provider is called: nothing is stored."
+    },
+    {
+      "name": "4 Success and revisions",
+      "item": [
+        {
+          "name": "21 Census vintage 2024: Florida, 67 counties",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('Census, Florida, 67 counties', () => { pm.expect(d.source).to.eql('CENSUS_PEP'); pm.expect(d.stateFips).to.eql('12'); pm.expect(d.counties).to.eql(67); });",
+                  "pm.test('1139 values (67 counties x (5 populations + 4 years x 3 migrations))', () => pm.expect(d.received).to.eql(1139));",
+                  "pm.test('received = inserted + revised + unchanged + olderVintage', () => pm.expect(d.inserted + d.revised + d.unchanged + d.olderVintage).to.eql(d.received));",
+                  "pm.test('provenance', () => { pm.expect(d.sourceVintage).to.eql('2024'); pm.expect(d.sourceUrl).to.include('co-est2024-alldata.csv'); });",
+                  "pm.test('periods 2020-07-01 to 2024-07-01', () => { pm.expect(d.periodFrom).to.eql('2020-07-01'); pm.expect(d.periodTo).to.eql('2024-07-01'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2024",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2024"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "22 Census vintage 2025: revises 2020-2024 and adds 2025",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('1407 values', () => pm.expect(d.received).to.eql(1407));",
+                  "pm.test('received = inserted + revised + unchanged + olderVintage', () => pm.expect(d.inserted + d.revised + d.unchanged + d.olderVintage).to.eql(d.received));",
+                  "pm.test('nothing skipped: 2025 is the newest vintage', () => pm.expect(d.olderVintage).to.eql(0));",
+                  "pm.test('first run: 268 new values for 2025 and 1070 revisions (later runs: unchanged)', () => pm.expect(d.inserted + d.revised === 1338 || d.unchanged === 1407).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "23 Census vintage 2025 again: no duplicate, all unchanged",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('no new row', () => pm.expect(d.inserted).to.eql(0));",
+                  "pm.test('no revision', () => pm.expect(d.revised).to.eql(0));",
+                  "pm.test('1407 unchanged', () => pm.expect(d.unchanged).to.eql(1407));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2025",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2025"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "24 Census vintage 2024 again: an older vintage never overwrites",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('all 1139 skipped as older vintage', () => pm.expect(d.olderVintage).to.eql(1139));",
+                  "pm.test('nothing written', () => pm.expect(d.inserted + d.revised + d.unchanged).to.eql(0));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/census-population?state=FL&vintage=2024",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "census-population"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "vintage",
+                  "value": "2024"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "25 Miami-Dade population 2024: revised value and previous value",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('one annual value in persons', () => { pm.expect(d.status).to.eql('OK'); pm.expect(d.frequency).to.eql('ANNUAL'); pm.expect(d.unit).to.eql('PERSONS'); pm.expect(d.observations.length).to.eql(1); });",
+                  "const o = d.observations[0];",
+                  "pm.test('a Census estimate', () => pm.expect(o.observationKind).to.eql('ESTIMATE'));",
+                  "pm.test('July 1, 2024', () => { pm.expect(o.period).to.eql('2024'); pm.expect(o.periodStart).to.eql('2024-07-01'); pm.expect(o.periodEnd).to.eql('2024-07-01'); });",
+                  "pm.test('vintage 2025 value 2,812,144', () => { pm.expect(o.value).to.eql(2812144); pm.expect(o.sourceVintage).to.eql('2025'); });",
+                  "pm.test('vintage 2024 value kept as previousValue', () => { pm.expect(o.previousValue).to.eql(2838461); pm.expect(o.revisionCount).to.be.at.least(1); pm.expect(o.revisedAt).to.be.a('string'); });",
+                  "pm.test('provenance and freshness', () => { pm.expect(o.sourceSeriesId).to.eql('POPESTIMATE2024'); pm.expect(o.sourceUrl).to.include('census.gov'); pm.expect(o.ingestedAt).to.be.a('string'); pm.expect(o.lastVerifiedAt).to.be.a('string'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/POPULATION/observations?fips=12086&fromYear=2024&toYear=2024",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "POPULATION",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2024"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2024"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "26 Miami-Dade net migration: July 1 to June 30, from 2021",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('2021 to 2025, no partial 2020', () => pm.expect(d.observations.map(o => o.period)).to.eql(['2021', '2022', '2023', '2024', '2025']));",
+                  "pm.test('each period is July 1 to June 30', () => d.observations.forEach(o => { pm.expect(o.periodStart.slice(5)).to.eql('07-01'); pm.expect(o.periodEnd.slice(5)).to.eql('06-30'); }));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/NET_MIGRATION/observations?fips=12086",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "NET_MIGRATION",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "27 BLS Miami-Dade 2025-2026 (1 BLS request)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('BLS, one county', () => { pm.expect(d.source).to.eql('BLS_LAUS'); pm.expect(d.counties).to.eql(1); });",
+                  "pm.test('values received', () => pm.expect(d.received).to.be.above(0));",
+                  "pm.test('received = inserted + revised + unchanged + olderVintage', () => pm.expect(d.inserted + d.revised + d.unchanged + d.olderVintage).to.eql(d.received));",
+                  "pm.test('vintage is the date of the read', () => pm.expect(d.sourceVintage).to.match(/^\\d{4}-\\d{2}-\\d{2}$/));",
+                  "pm.test('October 2025 was not published (shutdown): counted as missing, not stored', () => pm.expect(d.missingValues).to.be.at.least(3));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=2025&toYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2025"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "28 BLS Miami-Dade again: no duplicate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('no new row', () => pm.expect(d.inserted).to.eql(0));",
+                  "pm.test('every value already stored', () => pm.expect(d.unchanged + d.revised).to.eql(d.received));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL&fips=12086&fromYear=2025&toYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                },
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2025"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "29 Miami-Dade unemployment rate: monthly, no October 2025, every value an ESTIMATE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('monthly percent', () => { pm.expect(d.frequency).to.eql('MONTHLY'); pm.expect(d.unit).to.eql('PERCENT'); });",
+                  "const periods = d.observations.map(o => o.period);",
+                  "pm.test('periods are months', () => periods.forEach(p => pm.expect(p).to.match(/^\\d{4}-\\d{2}$/)));",
+                  "pm.test('October 2025 is absent, not 0', () => pm.expect(periods).to.not.include('2025-10'));",
+                  "pm.test('no annual average mixed in', () => pm.expect(d.observations.every(o => o.periodStart.endsWith('-01'))).to.be.true);",
+                  "pm.test('BLS county values are model-based: ESTIMATE', () => d.observations.forEach(o => pm.expect(o.observationKind).to.eql('ESTIMATE')));",
+                  "pm.test('BLS series ID kept', () => pm.expect(d.observations[0].sourceSeriesId).to.eql('LAUCN120860000000003'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators/UNEMPLOYMENT_RATE/observations?fips=12086&fromYear=2025&toYear=2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators",
+                "UNEMPLOYMENT_RATE",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "fips",
+                  "value": "12086"
+                },
+                {
+                  "key": "fromYear",
+                  "value": "2025"
+                },
+                {
+                  "key": "toYear",
+                  "value": "2026"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "30 Coverage after the imports",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const by = Object.fromEntries(d.map(i => [i.code, i.coverage]));",
+                  "pm.test('Census covers 67 counties', () => pm.expect(by.POPULATION.counties).to.eql(67));",
+                  "pm.test('BLS covers Miami-Dade at least', () => pm.expect(by.UNEMPLOYMENT_RATE.counties).to.be.at.least(1));",
+                  "pm.test('freshness is set', () => { pm.expect(by.POPULATION.lastVerifiedAt).to.be.a('string'); pm.expect(by.UNEMPLOYMENT_RATE.lastVerifiedAt).to.be.a('string'); });",
+                  "pm.test('population periods 2020 to 2025', () => { pm.expect(by.POPULATION.firstPeriod).to.eql('2020-07-01'); pm.expect(by.POPULATION.lastPeriod).to.eql('2025-07-01'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Run in order. Requests 22-24 show the revision rules on the real Florida files; 27-28 use 2 of the 25 keyless BLS requests of the day."
+    },
+    {
+      "name": "5 Optional: every Florida county from the BLS",
+      "item": [
+        {
+          "name": "31 BLS Florida, last 3 years (9 keyless BLS requests)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('67 counties', () => pm.expect(d.counties).to.eql(67));",
+                  "pm.test('received = inserted + revised + unchanged + olderVintage', () => pm.expect(d.inserted + d.revised + d.unchanged + d.olderVintage).to.eql(d.received));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/economic-indicators/import/bls-laus?state=FL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "economic-indicators",
+                "import",
+                "bls-laus"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "FL"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Uses 9 of the 25 BLS requests allowed per day without BLS_API_KEY. Run it once."
+    }
+  ]
+}

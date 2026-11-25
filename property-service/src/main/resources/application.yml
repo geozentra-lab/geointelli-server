@@ -140,3 +140,9 @@ opportunity-scores:
     initial-delay-millis: ${OPPORTUNITY_SCORES_REFRESH_INITIAL_DELAY_MILLIS:60000}
     poll-delay-millis: ${OPPORTUNITY_SCORES_REFRESH_DELAY_MILLIS:900000}
     batch-size: ${OPPORTUNITY_SCORES_BATCH_SIZE:1000}
+
+# Economic indicators (SCRUM-133, docs/economic-indicators.md). Needs the V50 tables.
+economic-indicators:
+  bls:
+    # Optional free key (https://data.bls.gov/registrationEngine/): 50 series and 500 requests a day instead of 25 and 25.
+    api-key: ${BLS_API_KEY:}
