@@ -60,6 +60,8 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     static final String INPUT_UNAVAILABLE = "INPUT_UNAVAILABLE";
     static final String INPUT_CHANGED = "INPUT_CHANGED";
     static final String DATASET_JOB_ACTIVE = "DATASET_JOB_ACTIVE";
+    /** Table of migration V48 that market evidence imports write. */
+    static final String MARKET_EVIDENCE_TABLE = "market_evidence_observations";
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
     private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
     /** FLDOE school grades are Florida's: their load must be for this state. */
@@ -133,14 +135,22 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         }
         County resolved = resolveCounty(dataset, county, state);
         validateInputs(dataset, inputs);
+        if (dataset == IngestionDataset.MARKET_EVIDENCE) {
+            if (!referenceScopes.hasTable(MARKET_EVIDENCE_TABLE)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The table " + MARKET_EVIDENCE_TABLE + " is missing: apply migration V48 first");
+            }
+            // Two imports at once could both insert the same new observation: one at a time
+            requireNoActiveJob(dataset);
+        }
 
         IngestionJob job = new IngestionJob();
         job.setId(UUID.randomUUID());
         job.setJobType(ImportJobType.CSV_IMPORT);
         job.setDataset(dataset);
         job.setStatus(IngestionJobStatus.QUEUED);
-        job.setSourceCounty(county.trim());
-        job.setSourceState(state.trim());
+        job.setSourceCounty(trimToNull(county));
+        job.setSourceState(trimToNull(state));
         job.setCounty(resolved);
         job.setCreatedBy(createdBy);
         storeInputs(job, inputs, null);
@@ -319,9 +329,22 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         return dto;
     }
 
-    /** Properties and folder imports may create the county; the related files need it to exist already. */
+    /**
+     * Properties and folder imports may create the county; the related files need it to exist already. A
+     * dataset that does not belong to one county (market evidence) runs without one and returns null; its
+     * optional county label needs its state, and the state needs a county.
+     */
     private County resolveCounty(IngestionDataset dataset, String county, String state) {
-        if (county == null || county.isBlank() || state == null || state.isBlank()) {
+        boolean countyGiven = county != null && !county.isBlank();
+        boolean stateGiven = state != null && !state.isBlank();
+        boolean given = countyGiven && stateGiven;
+        if (!dataset.requiresCounty()) {
+            if (countyGiven != stateGiven) {
+                throw new IllegalArgumentException("county and sourceState go together: give both or neither");
+            }
+            return given ? countyService.resolve(county, state) : null;
+        }
+        if (!given) {
             throw new IllegalArgumentException("county and sourceState are required");
         }
         if (dataset == IngestionDataset.PROPERTIES || dataset == IngestionDataset.FOLDER) {
@@ -520,6 +543,10 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
             @Override public long size() { return size; }
             @Override public InputStream open() throws IOException { return Files.newInputStream(file); }
         };
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static Set<String> folderFileNames() {

@@ -30,6 +30,14 @@ public class CountyServiceImpl implements CountyService {
         {"PR", "Puerto Rico"}, {"VI", "U.S. Virgin Islands"}
     };
 
+    /** Whether the code is one of the two-letter state, district or territory codes above, in any case. */
+    static boolean isUsStateCode(String code) {
+        for (String[] entry : US_STATES) {
+            if (entry[0].equalsIgnoreCase(code)) return true;
+        }
+        return false;
+    }
+
     @Override
     @Transactional
     public void ensureExists(String county, String state) {

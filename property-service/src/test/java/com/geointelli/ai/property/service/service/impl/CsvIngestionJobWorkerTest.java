@@ -39,6 +39,7 @@ import com.geointelli.ai.property.service.service.CsvImportService;
 import com.geointelli.ai.property.service.service.IngestionInputStore;
 import com.geointelli.ai.property.service.service.IngestionJobContext;
 import com.geointelli.ai.property.service.service.IngestionJobService;
+import com.geointelli.ai.property.service.service.MarketEvidenceImportService;
 import com.geointelli.ai.property.service.service.IngestionJobService.Counters;
 import com.geointelli.ai.property.service.service.IngestionJobWorker.Result;
 import com.geointelli.ai.property.service.service.IngestionLeaseLostException;
@@ -70,8 +71,8 @@ class CsvIngestionJobWorkerTest {
             .thenAnswer(invocation -> mock(TransactionStatus.class));
         IngestionProperties properties = new IngestionProperties();
         properties.getJobs().setCsvBatchSize(2);
-        worker = new CsvIngestionJobWorker(csvImportService, propertyImageService, mock(EntityManager.class),
-            new ObjectMapper(), properties);
+        worker = new CsvIngestionJobWorker(csvImportService, mock(MarketEvidenceImportService.class),
+            propertyImageService, mock(EntityManager.class), new ObjectMapper(), properties);
         job = new IngestionJob();
         job.setId(UUID.randomUUID());
         job.setJobType(ImportJobType.CSV_IMPORT);
