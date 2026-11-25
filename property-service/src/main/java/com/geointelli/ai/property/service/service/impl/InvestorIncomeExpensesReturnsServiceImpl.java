@@ -129,6 +129,12 @@ public class InvestorIncomeExpensesReturnsServiceImpl implements InvestorIncomeE
         return card;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public Period resolvePeriod(YearMonth fromMonth, YearMonth toMonth) {
+        return period(fromMonth, toMonth, YearMonth.from(clock.instant().atZone(ZoneOffset.UTC)));
+    }
+
     /** Both months or none (the last 12 complete months); only complete past months, at most MAX_MONTHS. */
     private static Period period(YearMonth fromMonth, YearMonth toMonth, YearMonth currentMonth) {
         if ((fromMonth == null) != (toMonth == null)) {

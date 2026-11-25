@@ -60,8 +60,8 @@ public class InvestorIncomeExpensesReturnsCardDTO {
     @Schema(description = "Whole months covered by both the actual and the projected figures")
     private Period period;
 
-    @Schema(description = "Number of holdings in the included portfolios", example = "4")
-    private long totalHoldings;
+    @Schema(description = "Number of holdings in the included portfolios; null on an ERROR card", example = "4")
+    private Long totalHoldings;
 
     @Schema(description = "Recorded cash of the period (financial records)")
     private Actual actual;
