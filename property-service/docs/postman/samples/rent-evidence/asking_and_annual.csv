@@ -1,0 +1,5 @@
+source,evidence_type,geography_level,geography_code,geography_name,state_code,county_name,period_start,period_end,rent_period,currency,observation_kind,bedrooms,median_rent,average_rent,median_rent_per_sqft,sample_count,source_dataset,source_release_date
+SAMPLE_LISTINGS,ASKING,TRACT,12086000107,,FL,,2026-10-01,2026-10-31,MONTHLY,USD,ACTUAL,2,2850,2975,2.4100,14,SAMPLE file for SCRUM-132 verification - not real data,2026-11-01
+SAMPLE_LISTINGS,ASKING,ZIP,33139,Miami Beach,FL,Miami-Dade,2026-10-01,2026-10-31,MONTHLY,USD,ACTUAL,,3200,3410,3.0500,212,SAMPLE file for SCRUM-132 verification - not real data,2026-11-01
+SAMPLE_LEASES,ACHIEVED,COUNTY,12086,Miami-Dade,FL,,2025-01-01,2025-12-31,ANNUAL,USD,ACTUAL,,30000,31500,,1800,SAMPLE file for SCRUM-132 verification - not real data,2026-02-15
+SAMPLE_LEASES,ACHIEVED,COUNTY,12086,Miami-Dade,FL,,2025-01-01,2025-12-31,MONTHLY,USD,ACTUAL,,2500,2625,,1800,SAMPLE file for SCRUM-132 verification - not real data,2026-02-15

@@ -44,6 +44,7 @@ import com.geointelli.ai.property.service.service.IngestionJobService.Counters;
 import com.geointelli.ai.property.service.service.IngestionJobWorker.Result;
 import com.geointelli.ai.property.service.service.IngestionLeaseLostException;
 import com.geointelli.ai.property.service.service.PropertyImageService;
+import com.geointelli.ai.property.service.service.RentEvidenceImportService;
 import jakarta.persistence.EntityManager;
 
 /** Drives the CSV worker with files in a temporary folder and a mocked transaction manager. */
@@ -72,7 +73,8 @@ class CsvIngestionJobWorkerTest {
         IngestionProperties properties = new IngestionProperties();
         properties.getJobs().setCsvBatchSize(2);
         worker = new CsvIngestionJobWorker(csvImportService, mock(MarketEvidenceImportService.class),
-            propertyImageService, mock(EntityManager.class), new ObjectMapper(), properties);
+            mock(RentEvidenceImportService.class), propertyImageService, mock(EntityManager.class), new ObjectMapper(),
+            properties);
         job = new IngestionJob();
         job.setId(UUID.randomUUID());
         job.setJobType(ImportJobType.CSV_IMPORT);

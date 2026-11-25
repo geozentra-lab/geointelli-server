@@ -84,7 +84,7 @@ public class SecurityConfig {
                     .authenticated();
             requests.requestMatchers(HttpMethod.GET, "/api/properties/**", "/api/addresses/**", "/api/parcels/**",
                     "/api/locations/**", "/api/map/**", "/api/images/property/*", "/api/predictions/bypropertyid",
-                    "/api/market-evidence")
+                    "/api/market-evidence", "/api/rent-evidence")
                     .authenticated();
             requests.requestMatchers(HttpMethod.POST, "/api/properties/*/favorite", "/api/properties/compare",
                     "/api/calculations/mortgage", "/api/calculations/affordability",

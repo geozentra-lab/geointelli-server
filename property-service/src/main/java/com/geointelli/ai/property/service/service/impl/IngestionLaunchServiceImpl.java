@@ -62,6 +62,8 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     static final String DATASET_JOB_ACTIVE = "DATASET_JOB_ACTIVE";
     /** Table of migration V48 that market evidence imports write. */
     static final String MARKET_EVIDENCE_TABLE = "market_evidence_observations";
+    /** Table of migration V50 that rent evidence imports write. */
+    static final String RENT_EVIDENCE_TABLE = "rent_evidence_observations";
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
     private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
     /** FLDOE school grades are Florida's: their load must be for this state. */
@@ -141,6 +143,14 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
                     "The table " + MARKET_EVIDENCE_TABLE + " is missing: apply migration V48 first");
             }
             // Two imports at once could both insert the same new observation: one at a time
+            requireNoActiveJob(dataset);
+        }
+        if (dataset == IngestionDataset.RENT_EVIDENCE) {
+            if (!referenceScopes.hasTable(RENT_EVIDENCE_TABLE)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The table " + RENT_EVIDENCE_TABLE + " is missing: apply migration V50 first");
+            }
+            // Same reason as market evidence: two imports could both insert the same new observation
             requireNoActiveJob(dataset);
         }
 
@@ -331,7 +341,7 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
 
     /**
      * Properties and folder imports may create the county; the related files need it to exist already. A
-     * dataset that does not belong to one county (market evidence) runs without one and returns null; its
+     * dataset that does not belong to one county (market or rent evidence) runs without one and returns null; its
      * optional county label needs its state, and the state needs a county.
      */
     private County resolveCounty(IngestionDataset dataset, String county, String state) {

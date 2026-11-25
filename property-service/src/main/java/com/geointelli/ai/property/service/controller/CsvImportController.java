@@ -145,6 +145,9 @@ public class CsvImportController {
         if (target == IngestionDataset.MARKET_EVIDENCE) {
             throw new IllegalArgumentException("Use POST /api/admin/market-evidence/import for market evidence");
         }
+        if (target == IngestionDataset.RENT_EVIDENCE) {
+            throw new IllegalArgumentException("Use POST /api/admin/rent-evidence/import for rent evidence");
+        }
         List<InputSource> inputs = List.of(input(file, stagedFile, target.getFileName(), "file"));
         return accepted(launchService.startCsv(target, county, sourceState, inputs, name(principal)));
     }
