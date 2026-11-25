@@ -19,7 +19,6 @@ public class InvestorDashboardDTO {
     public static final String STATUS_OK = "OK";
     public static final String STATUS_EMPTY = "EMPTY";
     public static final String STATUS_PARTIAL = "PARTIAL";
-    public static final String STATUS_ERROR = "ERROR";
 
     public static final String CARD_VALUE_EQUITY_DEBT = "valueEquityDebt";
     public static final String CARD_INCOME_EXPENSES_RETURNS = "incomeExpensesReturns";
@@ -36,8 +35,9 @@ public class InvestorDashboardDTO {
     @Schema(description = "Number of portfolios included (at most 100)", example = "2")
     private int portfolioCount;
 
-    @Schema(description = "OK: every card loaded; EMPTY: every card loaded and empty; PARTIAL: some cards failed "
-            + "(see failedCards), the others are kept; ERROR: no card could be loaded", example = STATUS_OK)
+    @Schema(description = "OK: every card loaded; EMPTY: every card loaded and empty; PARTIAL: one to three cards "
+            + "failed (see failedCards), the others are kept. When no card can be loaded the request fails with 503 "
+            + "instead", example = STATUS_OK)
     private String status;
 
     @Schema(description = "Names of the cards with status ERROR; empty when every card loaded",

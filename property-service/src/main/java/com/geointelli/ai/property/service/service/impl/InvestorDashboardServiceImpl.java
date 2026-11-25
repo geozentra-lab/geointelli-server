@@ -28,16 +28,20 @@ import java.util.function.Supplier;
 
 /**
  * Validates the scope and the period once, then calls each investor card service for that scope. Each card is
- * loaded on its own: when one throws, it is replaced by an ERROR card and the others are kept. This class is
- * deliberately not {@code @Transactional}: a card failing inside a shared transaction would mark it rollback-only
- * and make the whole response fail.
+ * loaded on its own: when one throws, it is replaced by an ERROR card and the others are kept; when all four throw,
+ * the request fails with 503, like the portfolio summary. This class is deliberately not {@code @Transactional}: a
+ * card failing inside a shared transaction would mark it rollback-only and make the whole response fail. The
+ * opportunities card has its own read-only transaction; the other three card services have none, so each of their
+ * queries runs on its own.
  */
 @Slf4j
 @Service
 public class InvestorDashboardServiceImpl implements InvestorDashboardService {
 
     static final int MAX_PORTFOLIOS = 100;
+    static final int CARD_COUNT = 4;
     static final String CARD_ERROR = "This card could not be loaded; the other cards are not affected.";
+    static final String UNAVAILABLE = "The investor dashboard is temporarily unavailable";
     static final String NOTE = "The four investor cards for the same portfolio scope. Only the income, expenses and "
             + "returns card uses period; the other cards show the current state. A card that could not be loaded "
             + "has status ERROR and is listed in failedCards; the other cards are kept. The opportunities card uses "
@@ -150,6 +154,10 @@ public class InvestorDashboardServiceImpl implements InvestorDashboardService {
                     return card;
                 }));
 
+        // 3. No card at all is an outage, not a dashboard: 503, the causes are in the log
+        if (failedCards.size() == CARD_COUNT) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, UNAVAILABLE);
+        }
         dashboard.setFailedCards(failedCards);
         dashboard.setStatus(status(dashboard, failedCards));
         return dashboard;
@@ -166,11 +174,8 @@ public class InvestorDashboardServiceImpl implements InvestorDashboardService {
         }
     }
 
-    /** ERROR if no card loaded, PARTIAL if some failed, EMPTY if every card is empty, OK otherwise. */
+    /** PARTIAL if some cards failed (never all four: that is a 503), EMPTY if every card is empty, OK otherwise. */
     private static String status(InvestorDashboardDTO dashboard, List<String> failedCards) {
-        if (failedCards.size() == 4) {
-            return InvestorDashboardDTO.STATUS_ERROR;
-        }
         if (!failedCards.isEmpty()) {
             return InvestorDashboardDTO.STATUS_PARTIAL;
         }

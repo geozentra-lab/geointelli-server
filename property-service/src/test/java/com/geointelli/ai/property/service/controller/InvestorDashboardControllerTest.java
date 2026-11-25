@@ -179,7 +179,7 @@ public class InvestorDashboardControllerTest {
             card.setStatus(InvestorValueEquityDebtCardDTO.STATUS_OK);
             card.setAsOfDate(LocalDate.of(2026, 11, 10));
             card.setCurrency("USD");
-            card.setTotalHoldings(4);
+            card.setTotalHoldings(4L);
             card.setValue(new PortfolioMetricDTO("PARTIAL", null, new BigDecimal("650000.00"), 3, 4));
             card.setEquity(new PortfolioMetricDTO("PARTIAL", null, new BigDecimal("200000.00"), 2, 4));
             card.setValueCoveragePercent(new BigDecimal("75.00"));
@@ -350,6 +350,19 @@ public class InvestorDashboardControllerTest {
             mockMvc.perform(get(DASHBOARD_URL).param("portfolioId", "9"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.message").value("Portfolio not found"));
+        }
+
+        @Test
+        @DisplayName("When no card can be loaded, then return 503 with the generic message")
+        void whenEveryCardFails_thenReturn503() throws Exception {
+            // Arrange
+            when(investorDashboardService.getDashboard(null, null, null)).thenThrow(new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "The investor dashboard is temporarily unavailable"));
+
+            // Act & Assert
+            mockMvc.perform(get(DASHBOARD_URL))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.message").value("The investor dashboard is temporarily unavailable"));
         }
     }
 }

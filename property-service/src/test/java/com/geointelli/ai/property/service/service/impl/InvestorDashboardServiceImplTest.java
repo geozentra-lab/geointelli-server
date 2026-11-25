@@ -17,10 +17,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -194,8 +197,8 @@ public class InvestorDashboardServiceImplTest {
         }
 
         @Test
-        @DisplayName("When every card fails, then return four ERROR cards with status ERROR")
-        void whenEveryCardFails_thenError() {
+        @DisplayName("When every card fails, then throw 503 like the portfolio summary, not a 200 of four ERROR cards")
+        void whenEveryCardFails_thenThrow503() {
             // Arrange
             when(valueEquityDebtService.getCard(5L)).thenThrow(new RuntimeException("down"));
             when(incomeExpensesReturnsService.getCard(5L, JAN, MAR)).thenThrow(new RuntimeException("down"));
@@ -203,15 +206,78 @@ public class InvestorDashboardServiceImplTest {
             when(opportunitiesService.getCard(5L, null, null, null)).thenThrow(new RuntimeException("down"));
 
             // Act
+            ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                    () -> investorDashboardService.getDashboard(5L, JAN, MAR));
+
+            // Assert: every card was tried, and the cause is not sent to the client
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, error.getStatusCode());
+            assertEquals(InvestorDashboardServiceImpl.UNAVAILABLE, error.getReason());
+            verify(valueEquityDebtService).getCard(5L);
+            verify(incomeExpensesReturnsService).getCard(5L, JAN, MAR);
+            verify(occupancyExposureService).getCard(5L);
+            verify(opportunitiesService).getCard(5L, null, null, null);
+        }
+
+        @Test
+        @DisplayName("When three cards fail, then keep the fourth and return PARTIAL")
+        void whenThreeCardsFail_thenPartial() {
+            // Arrange
+            givenCardsOfPortfolio5();
+            when(valueEquityDebtService.getCard(5L)).thenThrow(new RuntimeException("down"));
+            when(incomeExpensesReturnsService.getCard(5L, JAN, MAR)).thenThrow(new RuntimeException("down"));
+            when(opportunitiesService.getCard(5L, null, null, null)).thenThrow(new RuntimeException("down"));
+
+            // Act
             InvestorDashboardDTO dashboard = investorDashboardService.getDashboard(5L, JAN, MAR);
 
             // Assert
-            assertEquals(InvestorDashboardDTO.STATUS_ERROR, dashboard.getStatus());
+            assertEquals(InvestorDashboardDTO.STATUS_PARTIAL, dashboard.getStatus());
             assertEquals(List.of(InvestorDashboardDTO.CARD_VALUE_EQUITY_DEBT,
-                    InvestorDashboardDTO.CARD_INCOME_EXPENSES_RETURNS, InvestorDashboardDTO.CARD_OCCUPANCY_EXPOSURE,
-                    InvestorDashboardDTO.CARD_OPPORTUNITIES), dashboard.getFailedCards());
-            assertEquals(InvestorValueEquityDebtCardDTO.STATUS_ERROR, dashboard.getValueEquityDebt().getStatus());
-            assertEquals(InvestorOccupancyExposureCardDTO.STATUS_ERROR, dashboard.getOccupancyExposure().getStatus());
+                    InvestorDashboardDTO.CARD_INCOME_EXPENSES_RETURNS, InvestorDashboardDTO.CARD_OPPORTUNITIES),
+                    dashboard.getFailedCards());
+            assertSame(occupancyCard, dashboard.getOccupancyExposure());
+        }
+
+        @Test
+        @DisplayName("When cards fail, then their counts are null, never 0, as the other unknown fields")
+        void whenCardsFail_thenCountsNull() {
+            // Arrange
+            givenCardsOfPortfolio5();
+            when(valueEquityDebtService.getCard(5L)).thenThrow(new RuntimeException("down"));
+            when(incomeExpensesReturnsService.getCard(5L, JAN, MAR)).thenThrow(new RuntimeException("down"));
+            when(occupancyExposureService.getCard(5L)).thenThrow(new RuntimeException("down"));
+
+            // Act
+            InvestorDashboardDTO dashboard = investorDashboardService.getDashboard(5L, JAN, MAR);
+            // a second dashboard where the opportunities card fails instead of the value card
+            doReturn(valueCard).when(valueEquityDebtService).getCard(5L);
+            doThrow(new RuntimeException("down")).when(opportunitiesService).getCard(5L, null, null, null);
+            InvestorOpportunitiesCardDTO opportunities = investorDashboardService.getDashboard(5L, JAN, MAR)
+                    .getOpportunities();
+
+            // Assert
+            assertNull(dashboard.getValueEquityDebt().getTotalHoldings());
+            assertNull(dashboard.getIncomeExpensesReturns().getTotalHoldings());
+            InvestorOccupancyExposureCardDTO occupancy = dashboard.getOccupancyExposure();
+            assertNull(occupancy.getTotalHoldings());
+            assertNull(occupancy.getKnownOccupancyHoldings());
+            assertNull(occupancy.getRentalHoldings());
+            assertNull(occupancy.getKnownGeographyHoldings());
+            assertEquals(InvestorOpportunitiesCardDTO.STATUS_ERROR, opportunities.getStatus());
+            assertNull(opportunities.getLimit());
+            assertNull(opportunities.getTotalCandidates());
+        }
+
+        @Test
+        @DisplayName("The dashboard service is not transactional, so a failing card cannot roll back the others")
+        void dashboardIsNotTransactional() throws Exception {
+            Method getDashboard = InvestorDashboardServiceImpl.class
+                    .getMethod("getDashboard", Long.class, YearMonth.class, YearMonth.class);
+
+            assertNull(AnnotatedElementUtils.findMergedAnnotation(InvestorDashboardServiceImpl.class, Transactional.class));
+            assertNull(AnnotatedElementUtils.findMergedAnnotation(getDashboard, Transactional.class));
+            assertNull(AnnotatedElementUtils.findMergedAnnotation(InvestorDashboardServiceImpl.class,
+                    jakarta.transaction.Transactional.class));
         }
 
         @Test

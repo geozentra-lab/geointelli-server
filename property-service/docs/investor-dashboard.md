@@ -41,12 +41,20 @@ A bearer token is required. Every parameter is optional.
 When one card cannot be loaded (for example a database error in the opportunity scores), the other cards are kept:
 
 - the failed card keeps its place with `status: ERROR`, a generic `error` message, the scope and `generatedAt`; its
-  other fields are null. The technical cause is written to the service log, not sent to the client;
+  other fields are null, the counts too (`totalHoldings`, `limit`, `totalCandidates`, ...: unknown, never 0). The
+  technical cause is written to the service log, not sent to the client;
 - its name is added to `failedCards`;
 - the dashboard `status` is `PARTIAL`.
 
-The dashboard service is not transactional on purpose: each card runs in its own transaction, so one failing card
-cannot roll back the others.
+When **all four** cards fail, there is nothing to show: the request fails with `503` and the generic message
+`The investor dashboard is temporarily unavailable`, as `GET /api/portfolios/{id}/summary` does when its three
+sections fail.
+
+The dashboard service is not transactional on purpose, so no card shares a transaction with another and one failing
+card cannot roll back the others. The opportunities card service runs in its own read-only transaction; the other
+three card services are not transactional, so each of their queries runs on its own. The cards are read one after
+another, not as one snapshot: a holding saved while the dashboard is being built can appear in a later card and not
+in an earlier one.
 
 ## Response
 
@@ -65,7 +73,8 @@ cannot roll back the others.
   "occupancyExposure":     { "status": "OK", "totalHoldings": 2, ... },
   "opportunities":         { "scope": "PORTFOLIO", "portfolioId": 5, "portfolioCount": 1, "status": "ERROR",
                              "error": "This card could not be loaded; the other cards are not affected.",
-                             "generatedAt": "2026-11-23T10:00:00Z", "items": null, ... },
+                             "generatedAt": "2026-11-23T10:00:00Z", "limit": null, "totalCandidates": null,
+                             "items": null, ... },
   "note": "The four investor cards for the same portfolio scope. ..."
 }
 ```
@@ -77,7 +86,8 @@ cannot roll back the others.
 | `OK` | every card loaded, at least one is not empty |
 | `EMPTY` | every card loaded and every card is `EMPTY` |
 | `PARTIAL` | one to three cards failed (`failedCards`); the others are kept |
-| `ERROR` | the four cards failed; the response is still 200 with the four ERROR cards |
+
+When the four cards fail, the response is `503`, not a dashboard (see above).
 
 ## Empty and incomplete data
 
@@ -88,6 +98,7 @@ cannot roll back the others.
 | unknown value, debt, occupancy or state | 200; the coverage percentages of the cards show what is missing |
 | no opportunity score | 200; opportunities card `EMPTY` with its `candidateStatus` |
 | a card fails | 200; that card `ERROR`, dashboard `PARTIAL` |
+| every card fails | 503 |
 
 Missing data is never shown as 0: each card keeps its own rules (missing costs, coverage, `null` totals).
 
@@ -97,10 +108,11 @@ Only the current user's portfolios are read. A portfolio of another user returns
 
 | Response | When |
 |---|---|
-| 200 | the dashboard (`OK`, `EMPTY`, `PARTIAL` or `ERROR`) |
+| 200 | the dashboard (`OK`, `EMPTY` or `PARTIAL`) |
 | 400 | `portfolioId` not a number or not positive; a month not `yyyy-MM`; only one month given; `fromMonth` after `toMonth`; `toMonth` not before the current month; `fromMonth` before 1900-01; more than 120 months |
 | 401 | no bearer token |
 | 404 | the portfolio does not exist or belongs to another user |
+| 503 | none of the four cards could be loaded |
 
 Errors use the shared `ApiError` body:
 
@@ -120,3 +132,16 @@ service in the debugger with a breakpoint in one card service (for example `Inve
 throw an exception from the breakpoint (IntelliJ: right click the frame, "Throw Exception",
 `new RuntimeException("test")`) and let the request finish: the other cards are returned, the failed card has
 status `ERROR` and is listed in `failedCards`.
+
+### 2026-11-25, review fixes
+
+Local scratch database, application from this branch with the real Keycloak. Card failures were caused by renaming
+a table for one call, then renaming it back: `property_opportunity_scores` (opportunities card) and
+`portfolio_holdings` (the three holding cards).
+
+- 56 of 56 API checks: each composed card is identical to its own endpoint, scope, period, 400, 401 and 404 cases.
+- Opportunities card failing: `200 PARTIAL`, `failedCards ["opportunities"]`, its `limit` and `totalCandidates`
+  null (before: 5 and 0).
+- Three holding cards failing: `200 PARTIAL`, every count of their ERROR cards null (before: 0).
+- All four failing: `503 The investor dashboard is temporarily unavailable`, no SQL text (before: `200` with four
+  ERROR cards saying "the other cards are not affected"). An unknown portfolio is still `404` first.
