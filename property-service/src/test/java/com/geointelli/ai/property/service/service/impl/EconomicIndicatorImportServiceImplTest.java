@@ -93,7 +93,7 @@ class EconomicIndicatorImportServiceImplTest {
     }
 
     @Test
-    @DisplayName("When migration V50 is not applied, then 409 and no provider is called")
+    @DisplayName("When migration V51 is not applied, then 409 and no provider is called")
     void whenTableMissing_thenConflict() {
         when(scopes.hasTable("economic_indicator_observations")).thenReturn(false);
 
@@ -101,7 +101,7 @@ class EconomicIndicatorImportServiceImplTest {
                 () -> service.importCensusPopulation("FL", 2025, "admin"));
 
         assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
-        assertTrue(error.getReason().contains("apply migration V50 first"));
+        assertTrue(error.getReason().contains("apply migration V51 first"));
         verifyNoInteractions(censusPopulation);
     }
 

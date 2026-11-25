@@ -5,16 +5,16 @@ that the MVP market outputs read: employment, population and migration (SOW §23
 calculated here; growth rates are left to the market outputs. Market evidence (SCRUM-131) is stored in its own table
 with the same `observation_kind` and geography conventions.
 
-Tables: migration `V50__add_economic_indicators.sql` (V45 to V49 are taken by master and other branches). It needs
+Tables: migration `V51__add_economic_indicators.sql` (V45 to V51 are taken by master and other branches). It needs
 V42 (`counties.fips_code`). Flyway is off: apply it by hand in one transaction:
 
 ```
-psql -h <host> -U <user> -d <database> -v ON_ERROR_STOP=1 -1 -f src/main/resources/db/migration/V50__add_economic_indicators.sql
+psql -h <host> -U <user> -d <database> -v ON_ERROR_STOP=1 -1 -f src/main/resources/db/migration/V51__add_economic_indicators.sql
 ```
 
 It creates `economic_indicators` (the 7 definitions below), `economic_indicator_observations` and
 `economic_indicator_loads`; no existing table or row changes. Until it is applied, the imports answer
-`409 ... apply migration V50 first`.
+`409 ... apply migration V51 first`.
 
 ## Supported indicators
 
@@ -135,7 +135,8 @@ counts it as a revision. Each spring, BLS also revises the previous years (annua
 
 ## Read
 
-Public reference data (U.S. federal statistics): no token, no owner.
+Any signed-in user (the SCRUM-94 baseline, like market evidence): 401 without a valid token. The values are
+U.S. federal statistics, owned by no user.
 
 `GET /api/economic-indicators`: every indicator with its definition and coverage. Before the first import, the
 counts are 0 and the dates null.
@@ -176,10 +177,10 @@ shows what is actually stored.
 | Response | When |
 |---|---|
 | 400 | `state` missing or unknown; `fips` not 5 digits or not a county of the state; years not numbers or outside the rules; `vintage` outside 2021 to the current year, or not published yet; `fips` missing on the read endpoint |
-| 401 | import without a token |
+| 401 | no token, or an invalid one |
 | 403 | import with a token without the `admin` role |
 | 404 | unknown indicator code on the read endpoint |
-| 409 | migration V50 not applied |
+| 409 | migration V51 not applied |
 | 502 | the BLS API or the Census file is unavailable, the BLS daily limit is reached, or the answer is not in the expected format; nothing is stored |
 
 ## Tests
@@ -190,8 +191,8 @@ shows what is actually stored.
 | `CensusPopulationProviderServiceImplTest` | reading a Census file: counties of the state only, 2020 migration skipped, Latin-1 names, empty cells, wrong format |
 | `EconomicIndicatorImportServiceImplTest` | import rules and defaults, counts, one import time, a period given twice |
 | `EconomicIndicatorServiceImplTest` | read rules: `OK`, `EMPTY`, 400, 404 |
-| `EconomicIndicatorSecurityTest` | admin role on the imports (401, 403), public reading, error statuses |
-| `EconomicIndicatorDatabaseTest` | V50 and the SQL on PostgreSQL: revision without duplicate, older vintage, filters, constraints. Opt-in, like `MarketEvidenceDatabaseTest`: it runs only with `ENVIRONMENTAL_TEST_DB_URL` set to a local database whose name ends with `_test` (with `DB_USER` and `DB_PASSWORD`), in a schema of its own that it drops |
+| `EconomicIndicatorSecurityTest` | admin role on the imports (401, 403), reading with any token (401 without), error statuses |
+| `EconomicIndicatorDatabaseTest` | V51 and the SQL on PostgreSQL: revision without duplicate, older vintage, filters, constraints. Opt-in, like `MarketEvidenceDatabaseTest`: it runs only with `ENVIRONMENTAL_TEST_DB_URL` set to a local database whose name ends with `_test` (with `DB_USER` and `DB_PASSWORD`), in a schema of its own that it drops |
 
 None of them calls the BLS API or the Census Bureau.
 
@@ -200,5 +201,5 @@ None of them calls the BLS API or the Census Bureau.
 Postman collection: `docs/postman/SCRUM-133-economic-indicators.postman_collection.json`. Set `baseUrl`,
 `admin_token` (Keycloak realm role `admin`) and `user_token` (a user without it), then run folders 1 to 4 in
 order (folder 5 is optional). It imports Miami-Dade only from the BLS (2 requests) and Census vintages 2024 then
-2025 to show a revision. The data is public and owned by no user, so the access checks are on the admin role,
-not on ownership.
+2025 to show a revision. The data is owned by no user, so the access checks are on the token and the admin
+role, not on ownership.

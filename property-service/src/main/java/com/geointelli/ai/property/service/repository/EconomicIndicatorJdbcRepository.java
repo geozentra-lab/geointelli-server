@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Reads and writes the economic indicators of migration V50 (SCRUM-133) with plain SQL. One row per indicator,
+ * Reads and writes the economic indicators of migration V51 (SCRUM-133) with plain SQL. One row per indicator,
  * county and period: an import of a period already stored updates that row (a revision) and never adds a second one.
  */
 @Repository

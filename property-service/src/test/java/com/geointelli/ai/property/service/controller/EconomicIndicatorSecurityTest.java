@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.geointelli.ai.property.service.config.AuthoritiesConverter;
+import com.geointelli.ai.property.service.config.CorsConfig;
 import com.geointelli.ai.property.service.config.SecurityConfig;
 import com.geointelli.ai.property.service.dto.EconomicIndicatorImportResultDTO;
 import com.geointelli.ai.property.service.dto.EconomicIndicatorObservationsDTO;
@@ -36,11 +37,12 @@ import com.geointelli.ai.property.service.service.EconomicIndicatorService;
 
 /**
  * Runs the real security filter chain (SecurityConfig + AuthoritiesConverter) and the GlobalExceptionHandler in front
- * of the economic indicator endpoints (SCRUM-133): the imports need the admin realm role; reading is public. The
+ * of the economic indicator endpoints (SCRUM-133): the imports need the admin realm role; reading needs any valid
+ * token (SCRUM-94). The
  * JwtDecoder is mocked: each test token decodes to a JWT with chosen realm roles.
  */
 @WebMvcTest({AdminEconomicIndicatorController.class, EconomicIndicatorController.class})
-@Import({SecurityConfig.class, AuthoritiesConverter.class})
+@Import({SecurityConfig.class, AuthoritiesConverter.class, CorsConfig.class})
 class EconomicIndicatorSecurityTest {
     private static final String BLS_URL = "/api/admin/economic-indicators/import/bls-laus";
     private static final String CENSUS_URL = "/api/admin/economic-indicators/import/census-population";
@@ -115,7 +117,7 @@ class EconomicIndicatorSecurityTest {
         when(importService.importCensusPopulation("ZZ", null, "user-admin-token"))
                 .thenThrow(new IllegalArgumentException("Unknown state, or none of its counties has a FIPS code: ZZ"));
         when(importService.importCensusPopulation("FL", 2021, "user-admin-token"))
-                .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "apply migration V50 first"));
+                .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "apply migration V51 first"));
         when(importService.importCensusPopulation("FL", 2022, "user-admin-token"))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Census file unavailable"));
 
@@ -137,15 +139,26 @@ class EconomicIndicatorSecurityTest {
         mockMvc.perform(post(CENSUS_URL).param("state", "FL").param("vintage", "abc")
                         .header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(get(READ_URL + "/POPULATION/observations")).andExpect(status().isBadRequest());
+        mockMvc.perform(get(READ_URL + "/POPULATION/observations").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isBadRequest());
         verifyNoInteractions(importService);
     }
 
     @Test
-    @DisplayName("When reading without a token, then 200: the indicators are public reference data")
-    void whenReadWithoutToken_thenOk() throws Exception {
-        mockMvc.perform(get(READ_URL)).andExpect(status().isOk());
+    @DisplayName("When reading without a token, then 401 without calling the service")
+    void whenReadWithoutToken_thenUnauthorized() throws Exception {
+        mockMvc.perform(get(READ_URL)).andExpect(status().isUnauthorized());
         mockMvc.perform(get(READ_URL + "/POPULATION/observations").param("fips", "12086"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(economicIndicatorService);
+    }
+
+    @Test
+    @DisplayName("When reading with any valid token, also without the admin role, then 200")
+    void whenReadWithToken_thenOk() throws Exception {
+        mockMvc.perform(get(READ_URL).header("Authorization", "Bearer user-token")).andExpect(status().isOk());
+        mockMvc.perform(get(READ_URL + "/POPULATION/observations").param("fips", "12086")
+                        .header("Authorization", "Bearer user-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EMPTY"));
         verify(economicIndicatorService).getObservations("POPULATION", "12086", null, null);
@@ -157,7 +170,8 @@ class EconomicIndicatorSecurityTest {
         when(economicIndicatorService.getObservations("GDP", "12086", null, null))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown economic indicator: GDP"));
 
-        mockMvc.perform(get(READ_URL + "/GDP/observations").param("fips", "12086"))
+        mockMvc.perform(get(READ_URL + "/GDP/observations").param("fips", "12086")
+                        .header("Authorization", "Bearer user-token"))
                 .andExpect(status().isNotFound());
     }
 }

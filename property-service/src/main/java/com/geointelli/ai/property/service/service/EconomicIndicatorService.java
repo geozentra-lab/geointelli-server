@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * Reads the stored economic indicators (SCRUM-133): their definitions with the coverage, and the values of one
- * county. Public reference data: no user owns it.
+ * county. U.S. federal statistics: no user owns them.
  */
 public interface EconomicIndicatorService {
 

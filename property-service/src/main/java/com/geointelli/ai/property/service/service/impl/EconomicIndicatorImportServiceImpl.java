@@ -120,14 +120,14 @@ public class EconomicIndicatorImportServiceImpl implements EconomicIndicatorImpo
         return save(SOURCE_CENSUS, CensusPopulationProviderService.INDICATORS, stateFips, counties, data, loadedBy);
     }
 
-    /** The 2-digit FIPS code of the state; 409 when migration V50 has not been applied. */
+    /** The 2-digit FIPS code of the state; 409 when migration V51 has not been applied. */
     private String stateFips(String state) {
         if (state == null || state.isBlank()) {
             throw new IllegalArgumentException("state is required, for example FL");
         }
         if (!scopes.hasTable(TABLE)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The table " + TABLE + " is missing: apply migration V50 first");
+                    "The table " + TABLE + " is missing: apply migration V51 first");
         }
         return scopes.stateFips(state).orElseThrow(() ->
                 new IllegalArgumentException("Unknown state, or none of its counties has a FIPS code: " + state));

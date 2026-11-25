@@ -1,7 +1,7 @@
 -- SCRUM-133: economic indicators (SCRUM-55), read by the market outputs.
 -- County employment from the BLS LAUS API and county population and migration from the Census Bureau population
 -- estimates. PostgreSQL only. Requires V42 (counties.fips_code). See docs/economic-indicators.md.
--- V45 to V49 are taken by master and other branches, so this is V50.
+-- V45 to V50 are taken by master and other branches (V50: SCRUM-132 rent evidence), so this is V51.
 -- Apply by hand in ONE transaction (psql -1 -f ...). Adds three tables; changes no existing table or row.
 --
 -- Rule: a value the source does not give is not stored. A missing month or year has no row; it is never 0.

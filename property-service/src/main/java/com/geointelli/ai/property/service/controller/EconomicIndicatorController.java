@@ -16,7 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * Stored economic indicators (SCRUM-133): public reference data, read by the market outputs. No user owns it.
+ * Stored economic indicators (SCRUM-133), read by the market outputs: any signed-in user (SCRUM-94 baseline).
+ * No user owns them.
  */
 @RestController
 @RequestMapping("/api/economic-indicators")

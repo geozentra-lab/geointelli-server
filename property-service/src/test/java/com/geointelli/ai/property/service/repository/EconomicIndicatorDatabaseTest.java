@@ -35,7 +35,7 @@ import com.geointelli.ai.property.service.dto.EconomicObservation;
 import com.geointelli.ai.property.service.repository.EconomicIndicatorJdbcRepository.RunCounts;
 
 /**
- * Opt-in checks of migration V50 and its SQL (SCRUM-133) on a real PostgreSQL database, with the same rules as
+ * Opt-in checks of migration V51 and its SQL (SCRUM-133) on a real PostgreSQL database, with the same rules as
  * MarketEvidenceDatabaseTest: a schema of its own on a dedicated local test database whose name ends with _test,
  * dropped afterwards; never the application's database.
  */
@@ -68,11 +68,11 @@ class EconomicIndicatorDatabaseTest {
         }
         dataSource.setCurrentSchema(SCHEMA);
         jdbc = new JdbcTemplate(dataSource);
-        // The part of counties that V50 and the repository use (fips_code comes from V42)
+        // The part of counties that V51 and the repository use (fips_code comes from V42)
         jdbc.execute("CREATE TABLE counties (id bigint PRIMARY KEY, name varchar(100) NOT NULL, fips_code varchar(5))");
         jdbc.execute("INSERT INTO counties VALUES (1, 'Miami-Dade', '12086'), (2, 'Broward', '12011'), "
                 + "(3, 'Fulton', '13121'), (4, 'No code', NULL)");
-        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V50__add_economic_indicators.sql")));
+        jdbc.execute(Files.readString(Path.of("src/main/resources/db/migration/V51__add_economic_indicators.sql")));
         repository = new EconomicIndicatorJdbcRepository(new NamedParameterJdbcTemplate(dataSource));
     }
 
@@ -111,7 +111,7 @@ class EconomicIndicatorDatabaseTest {
     }
 
     @Test
-    @DisplayName("V50 creates the 7 indicator definitions with their unit, frequency, geography and source")
+    @DisplayName("V51 creates the 7 indicator definitions with their unit, frequency, geography and source")
     void whenApplied_thenSevenDefinitions() {
         List<EconomicIndicatorDTO> indicators = repository.findIndicators();
 
@@ -252,7 +252,7 @@ class EconomicIndicatorDatabaseTest {
     }
 
     @Test
-    @DisplayName("V50 refuses an unknown indicator, a bad county code, an unknown kind and the same period twice")
+    @DisplayName("V51 refuses an unknown indicator, a bad county code, an unknown kind and the same period twice")
     void whenRowInvalid_thenRefused() {
         String insert = "INSERT INTO " + TABLE + " (indicator_code, geography_level, geography_code, period_start, "
                 + "period_end, value, observation_kind, source_vintage, source_url, ingested_at, last_verified_at) "

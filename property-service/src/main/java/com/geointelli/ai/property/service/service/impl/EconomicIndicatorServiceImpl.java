@@ -14,7 +14,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 
-/** Reads the economic indicator tables of migration V50 through {@link EconomicIndicatorJdbcRepository}. */
+/** Reads the economic indicator tables of migration V51 through {@link EconomicIndicatorJdbcRepository}. */
 @Service
 @RequiredArgsConstructor
 public class EconomicIndicatorServiceImpl implements EconomicIndicatorService {

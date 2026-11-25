@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SCRUM-133 Economic indicators",
-    "description": "Import and read county economic indicators (docs/economic-indicators.md). Set baseUrl, admin_token (Keycloak realm role admin) and user_token (a user without the admin role). Needs migration V50 and internet access to api.bls.gov and www2.census.gov. Run folders 1 to 4 in order; folder 5 is optional. The data is public and owned by no user, so access is checked on the admin role instead of ownership. No secret is stored in this file.",
+    "description": "Import and read county economic indicators (docs/economic-indicators.md). Set baseUrl, admin_token (Keycloak realm role admin) and user_token (a user without the admin role). Needs migration V51 and internet access to api.bls.gov and www2.census.gov. Run folders 1 to 4 in order; folder 5 is optional. The data is owned by no user, so access is checked on the token and the admin role instead of ownership. No secret is stored in this file.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -116,13 +116,13 @@
           }
         },
         {
-          "name": "03 Read without token: public reference data (200)",
+          "name": "03 Read without token (401)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('200', () => pm.response.to.have.status(200));"
+                  "pm.test('401', () => pm.response.to.have.status(401));"
                 ],
                 "type": "text/javascript"
               }
@@ -144,9 +144,46 @@
               ]
             }
           }
+        },
+        {
+          "name": "03b Read as a user without the admin role (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/economic-indicators",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "economic-indicators"
+              ]
+            }
+          }
         }
       ],
-      "description": "Imports need the admin realm role. The indicators are public data owned by no user: there is no ownership check."
+      "description": "Imports need the admin realm role; reading needs any valid token (SCRUM-94). The indicators are owned by no user: there is no ownership check."
     },
     {
       "name": "2 Empty and missing data",
@@ -176,7 +213,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -209,7 +253,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -854,7 +905,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -892,7 +950,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -925,7 +990,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -963,7 +1035,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -1241,7 +1320,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -1290,7 +1376,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -1461,7 +1554,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {
@@ -1513,7 +1613,14 @@
           ],
           "request": {
             "auth": {
-              "type": "noauth"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{user_token}}",
+                  "type": "string"
+                }
+              ]
             },
             "method": "GET",
             "url": {

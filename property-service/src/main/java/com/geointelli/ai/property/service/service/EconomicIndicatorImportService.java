@@ -3,7 +3,7 @@ package com.geointelli.ai.property.service.service;
 import com.geointelli.ai.property.service.dto.EconomicIndicatorImportResultDTO;
 
 /**
- * Imports economic indicators from their provider into the tables of migration V50 (SCRUM-133). One row per
+ * Imports economic indicators from their provider into the tables of migration V51 (SCRUM-133). One row per
  * indicator, county and period: importing a period again updates its row (a revision) and never adds a second one.
  */
 public interface EconomicIndicatorImportService {

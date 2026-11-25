@@ -44,7 +44,7 @@ public class AdminEconomicIndicatorController {
             + "(25 series each, 3 series per county).")
     @ApiResponse(responseCode = "200", description = "Imported")
     @ApiResponse(responseCode = "400", description = "Unknown state or county, invalid years")
-    @ApiResponse(responseCode = "409", description = "Migration V50 not applied")
+    @ApiResponse(responseCode = "409", description = "Migration V51 not applied")
     @ApiResponse(responseCode = "502", description = "BLS API unavailable, daily limit reached or unreadable answer")
     public EconomicIndicatorImportResultDTO importBlsLaus(@RequestParam String state,
                                                           @RequestParam(required = false) String fips,
@@ -67,7 +67,7 @@ public class AdminEconomicIndicatorController {
             + "vintage revises the years already stored; an older vintage never overwrites a newer one.")
     @ApiResponse(responseCode = "200", description = "Imported")
     @ApiResponse(responseCode = "400", description = "Unknown state, invalid vintage or vintage not published")
-    @ApiResponse(responseCode = "409", description = "Migration V50 not applied")
+    @ApiResponse(responseCode = "409", description = "Migration V51 not applied")
     @ApiResponse(responseCode = "502", description = "Census file unavailable or not in the expected format")
     public EconomicIndicatorImportResultDTO importCensusPopulation(@RequestParam String state,
                                                                    @RequestParam(required = false) Integer vintage,
