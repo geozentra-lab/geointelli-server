@@ -95,11 +95,12 @@ public class CsvImportController {
     }
 
     /**
-     * Starts a single-file import, or an environmental reference load (SCRUM-201).
+     * Starts a single-file import, or a reference load: environmental (SCRUM-201) or school (SCRUM-202).
      *
      * @param dataset properties, addresses, assessments, buildings, lands, sales, taxes, extra-features,
      *                parcels, property-value-predictions or property-images; or the reference datasets
-     *                census-tracts, nri-tracts, flood-zones (one county file) and storm-events
+     *                census-tracts, nri-tracts, flood-zones (one county file), storm-events, schools, school-grades
+     *                and school-zones
      * @param county the county of the file; required for CSV datasets and flood-zones, omitted for the statewide
      *               reference datasets
      * @param downloadedOn reference datasets only: the date the source was downloaded (data vintage)
@@ -113,12 +114,15 @@ public class CsvImportController {
             + "Environmental reference data (SCRUM-201): census-tracts, nri-tracts and storm-events load a whole state "
             + "(sourceState, no county); flood-zones loads ONE county file (county required). They need downloadedOn "
             + "(yyyy-MM-dd), are loaded with PostgreSQL COPY in one transaction per file, and replace the rows of the "
-            + "same county or state. Large files should be named with stagedFile (the upload limit is 1 GB).")
+            + "same county or state. School reference data (SCRUM-202): schools, school-grades and school-zones load "
+            + "one statewide file (sourceState, no county) and replace only what the file contains: its counties "
+            + "(schools, school-zones) or its school years (school-grades). Large files should be named with "
+            + "stagedFile (the upload limit is 1 GB).")
     @ApiResponse(responseCode = "202", description = "Job queued")
     @ApiResponse(responseCode = "400", description = "Unknown dataset, missing file, missing column, empty file, unknown "
             + "county/state, missing downloadedOn, or a file whose first row belongs to another county or state")
-    @ApiResponse(responseCode = "409", description = "Reference data: migration V42 not applied, or a statewide job for "
-            + "the dataset is already queued or running")
+    @ApiResponse(responseCode = "409", description = "Reference data: migration V42 (or V44 for the school datasets) "
+            + "not applied, or a statewide job for the dataset is already queued or running")
     public ResponseEntity<ImportJobDTO> importCsv(
             @Parameter(description = "Dataset path segment, for example extra-features or flood-zones") @PathVariable String dataset,
             @RequestParam(required = false) MultipartFile file,
@@ -137,6 +141,9 @@ public class CsvImportController {
         if (county == null || county.isBlank()) throw new IllegalArgumentException("county is required");
         if (target == IngestionDataset.OWNERS) {
             throw new IllegalArgumentException("Use POST /api/ingestion/import/owners for owners");
+        }
+        if (target == IngestionDataset.MARKET_EVIDENCE) {
+            throw new IllegalArgumentException("Use POST /api/admin/market-evidence/import for market evidence");
         }
         List<InputSource> inputs = List.of(input(file, stagedFile, target.getFileName(), "file"));
         return accepted(launchService.startCsv(target, county, sourceState, inputs, name(principal)));

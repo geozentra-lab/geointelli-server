@@ -52,4 +52,10 @@ public class ReferenceDataScopeServiceImpl implements ReferenceDataScopeService 
         }
         return prefixes.stream().findFirst();
     }
+
+    @Override
+    public boolean hasTable(String table) {
+        Boolean exists = jdbc.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class, "public." + table);
+        return Boolean.TRUE.equals(exists);
+    }
 }

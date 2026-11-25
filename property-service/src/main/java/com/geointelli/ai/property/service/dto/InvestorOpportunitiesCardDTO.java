@@ -59,11 +59,12 @@ public class InvestorOpportunitiesCardDTO {
     @Schema(description = "Filters passed to the shared service; null = not applied", example = "1")
     private Long stateId;
 
-    @Schema(description = "Maximum number of items in this card", example = "5")
-    private int limit;
+    @Schema(description = "Maximum number of items in this card; null on an ERROR card", example = "5")
+    private Integer limit;
 
-    @Schema(description = "Number of scored properties matching the filters, before the limit", example = "416226")
-    private long totalCandidates;
+    @Schema(description = "Number of scored properties matching the filters, before the limit; null on an ERROR card",
+            example = "416226")
+    private Long totalCandidates;
 
     @Schema(description = "Best candidates first (score descending, ties by property ID); empty when EMPTY")
     private List<Item> items;

@@ -51,8 +51,8 @@ public class InvestorValueEquityDebtCardDTO {
     @Schema(description = "Currency of every amount", example = "USD")
     private String currency;
 
-    @Schema(description = "Number of holdings in the included portfolios", example = "4")
-    private long totalHoldings;
+    @Schema(description = "Number of holdings in the included portfolios; null on an ERROR card", example = "4")
+    private Long totalHoldings;
 
     @Schema(description = "Market value by ownership share")
     private PortfolioMetricDTO value;

@@ -15,10 +15,13 @@ under `/api/admin/import-jobs` need the Keycloak realm role `admin`.
 | `POST /api/ingestion/import/{dataset}` | One CSV file; `dataset` is `properties`, `addresses`, `assessments`, `buildings`, `lands`, `sales`, `taxes`, `extra-features`, `parcels`, `property-value-predictions` or `property-images` | `file` (multipart) or `stagedFile`; `county`, `sourceState` |
 | `POST /api/ingestion/import/owners` | `owners.csv` and `property_owner.csv` in one step | `ownersFile` + `propertyOwnersFile`, or `stagedOwnersFile` + `stagedPropertyOwnersFile`; `county`, `sourceState` |
 | `POST /api/ingestion/import/folder` | A whole county folder, in the usual order | `files` (several multipart parts named as the county files) or `stagedFolder`; `county`, `sourceState` |
+| `POST /api/admin/market-evidence/import` (admin) | Market evidence (SCRUM-131): one `market_evidence.csv`, dataset `MARKET_EVIDENCE`, job type `CSV_IMPORT`, batches and retries like the files above, one job at a time (`409 DATASET_JOB_ACTIVE`); the generic endpoint refuses it; see `market-evidence-ingestion.md` | `file` or `stagedFile`; optional `county` + `sourceState` together |
 | `POST /api/ingestion/run` | Properties for parcel folios that have none | — |
 | `POST /api/ingestion/ingestbuildings`, `ingest_extrafeatures`, `ingest_sales`, `ingestaddresses` | The dataset for properties that lack it | — |
 | `GET /api/ingestion/jobs/{id}` | The job with its first 1000 failed or skipped records | — |
 | `POST /api/ingestion/import/{dataset}` with `census-tracts`, `nri-tracts`, `flood-zones`, `storm-events` | Environmental reference data (SCRUM-201), job type `REFERENCE_DATA_IMPORT`, loaded with PostgreSQL COPY in one transaction per file; see `environmental-reference-data.md` | `stagedFile` or `file`; `sourceState`; `downloadedOn`; `county` for `flood-zones` only |
+| `POST /api/ingestion/import/{dataset}` with `schools`, `school-grades`, `school-zones` | School reference data (SCRUM-202), same job type and loader; each file replaces the counties or school years it contains; see `school-reference-data.md` | `stagedFile` or `file`; `sourceState`; `downloadedOn`; no `county` |
+| `POST /api/property-school-analysis/assign`, `POST /api/property-school-analysis/calculate-all?version=2` | School assignment and school score v2 (SCRUM-203), job type `SCHOOL_SCORING`, datasets `SCHOOL_ASSIGNMENT` and `SCHOOL_SCORE_V2`; no input file; one county per transaction; admin role; see `school-score-v2.md` | `fips5` (optional: every county) |
 
 Server file paths are no longer accepted. A file is either uploaded, or named relative to the directory in
 `INGESTION_STAGING_DIRECTORY` (empty by default, which disables staged inputs). Names that leave that

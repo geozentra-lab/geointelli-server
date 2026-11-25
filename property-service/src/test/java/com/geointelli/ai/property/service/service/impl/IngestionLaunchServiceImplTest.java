@@ -35,6 +35,8 @@ import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService.InputSource;
 import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
+import com.geointelli.ai.property.service.service.SchoolAssignmentService;
+import com.geointelli.ai.property.service.service.SchoolScoreV2Service;
 
 class IngestionLaunchServiceImplTest {
     private static final String ADDRESS_HEADER = "property_id,address,building_number,city,house_number_suffix,message,"
@@ -49,6 +51,8 @@ class IngestionLaunchServiceImplTest {
     private IngestionLaunchServiceImpl service;
     private County county;
     private ReferenceDataScopeService scopes;
+    private SchoolAssignmentService schoolAssignments;
+    private SchoolScoreV2Service schoolScores;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -70,8 +74,10 @@ class IngestionLaunchServiceImplTest {
         scopes = mock(ReferenceDataScopeService.class);
         when(scopes.countyFips(1L)).thenReturn(Optional.of("12003"));
         when(scopes.stateFips("FL")).thenReturn(Optional.of("12"));
+        schoolAssignments = mock(SchoolAssignmentService.class);
+        schoolScores = mock(SchoolScoreV2Service.class);
         service = new IngestionLaunchServiceImpl(jobService, store, workerService, new IngestionJobMapper(jobService, store),
-            countyService, properties, new ObjectMapper(), scopes);
+            countyService, properties, new ObjectMapper(), scopes, schoolAssignments, schoolScores);
     }
 
     private InputSource addresses(String content) {
@@ -175,6 +181,95 @@ class IngestionLaunchServiceImplTest {
             assertEquals("LOCAL", job.getInputStorage());
             assertEquals("host-a", job.getInputScope());
             assertNotNull(job.getLeaseExpiresAt());
+        }
+    }
+
+    @Nested
+    @DisplayName("Starting market evidence jobs (SCRUM-131)")
+    class StartMarketEvidence {
+        private static final String MARKET_HEADER =
+            "source,evidence_type,geography_level,geography_code,period_start,period_end,sale_count\n";
+
+        private InputSource marketFile() {
+            return service.upload(new MockMultipartFile("file", "market_evidence.csv", "text/csv",
+                (MARKET_HEADER + "P,SALE,ZIP,33139,2026-10-01,2026-10-31,4\n").getBytes(StandardCharsets.UTF_8)),
+                "market_evidence.csv");
+        }
+
+        @BeforeEach
+        void tableApplied() {
+            when(scopes.hasTable(IngestionLaunchServiceImpl.MARKET_EVIDENCE_TABLE)).thenReturn(true);
+        }
+
+        @Test
+        @DisplayName("When no county is given, then the job is queued without one")
+        void whenNoCounty_thenQueuedWithoutCounty() {
+            service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, " ", List.of(marketFile()), "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(IngestionDataset.MARKET_EVIDENCE, job.getDataset());
+            assertNull(job.getCounty());
+            assertNull(job.getSourceCounty());
+            assertNull(job.getSourceState());
+            verify(countyService, never()).resolve(any(), any());
+        }
+
+        @Test
+        @DisplayName("When a county and its state are given, then the job is labelled with that county")
+        void whenCountyAndState_thenLabelled() {
+            service.startCsv(IngestionDataset.MARKET_EVIDENCE, "Baker", "FL", List.of(marketFile()), null);
+
+            assertSame(county, createdJob().getCounty());
+        }
+
+        @Test
+        @DisplayName("When only the county or only the state is given, then the request is rejected")
+        void whenHalfLabel_thenRejected() {
+            InputSource file = marketFile();
+            IllegalArgumentException countyOnly = assertThrows(IllegalArgumentException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, "Baker", null, List.of(file), null));
+            assertEquals("county and sourceState go together: give both or neither", countyOnly.getMessage());
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, " ", "FL", List.of(file), null));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When another market evidence job is queued or running, then 409 DATASET_JOB_ACTIVE")
+        void whenJobActive_thenConflict() {
+            when(jobService.hasActive(IngestionDataset.MARKET_EVIDENCE)).thenReturn(true);
+            InputSource file = marketFile();
+
+            ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, null, List.of(file), null));
+
+            assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+            assertTrue(error.getReason().startsWith(IngestionLaunchServiceImpl.DATASET_JOB_ACTIVE));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When migration V48 is not applied, then 409 naming it, before anything is stored")
+        void whenTableMissing_thenConflict() throws Exception {
+            when(scopes.hasTable(IngestionLaunchServiceImpl.MARKET_EVIDENCE_TABLE)).thenReturn(false);
+            InputSource file = marketFile();
+
+            ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, null, List.of(file), null));
+
+            assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+            assertTrue(error.getReason().contains("apply migration V48 first"));
+            verify(store, never()).store(any(), any(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("When another CSV dataset is started, then neither the table nor active jobs are checked")
+        void whenOtherDataset_thenNoMarketChecks() {
+            service.startCsv(IngestionDataset.ADDRESSES, "Baker", "FL",
+                List.of(addresses(ADDRESS_HEADER + "12,x,,Miami,,,Main,1,,St,,,33101\n")), null);
+
+            verify(scopes, never()).hasTable(any());
+            verify(jobService, never()).hasActive(any());
         }
     }
 
@@ -466,6 +561,178 @@ class IngestionLaunchServiceImplTest {
             var migration = assertThrows(ResponseStatusException.class,
                 () -> service.startReference(IngestionDataset.NRI_TRACTS, null, "FL", tracts, DOWNLOADED, null));
             assertEquals(HttpStatus.CONFLICT, migration.getStatusCode());
+            verify(jobService, never()).create(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Starting school reference loads (SCRUM-202)")
+    class StartSchoolReference {
+        private static final LocalDate BUILT = LocalDate.of(2026, 11, 22);
+        private static final String SCHOOL_ROW = "13-0041,13-0041,120039000412,12086,Miami-Dade,CORAL WAY K-8,PUBLIC,"
+            + "ELEMENTARY,REGULAR,-1,8,false,true,1215,64.5,1950 SW 13TH AVE,MIAMI,33145,25.75,-80.21,false,\n";
+        private static final String GRADE_ROW = "13-0041,13,41,CORAL WAY K-8,2026,A,false,Combination,false,true,No,"
+            + "71,68,60,55,72,66,59,61,74,,,,689,10,69,99,58\n";
+
+        private InputSource staged(String name, String content) throws Exception {
+            Files.createDirectories(staging.resolve("schools"));
+            Files.writeString(staging.resolve(name), content);
+            return service.staged(name, Path.of(name).getFileName().toString());
+        }
+
+        private InputSource schools(String row) throws Exception {
+            return staged("schools/schools.csv", SchoolReferenceDataRowsTest.SCHOOLS_HEADER + "\n" + row);
+        }
+
+        @Test
+        @DisplayName("When the statewide schools file is valid, then it is queued without a county, with its build date")
+        void whenSchoolsValid_thenQueued() throws Exception {
+            when(scopes.hasTable("schools")).thenReturn(true);
+
+            service.startReference(IngestionDataset.SCHOOLS, null, "FL", schools(SCHOOL_ROW), BUILT, "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.REFERENCE_DATA_IMPORT, job.getJobType());
+            assertEquals(IngestionDataset.SCHOOLS, job.getDataset());
+            assertNull(job.getCounty(), "the file holds several counties; each one in it is replaced");
+            assertTrue(job.getParametersJson().contains("\"name\":\"schools.csv\""));
+            assertTrue(job.getParametersJson().contains("\"downloadedOn\":\"2026-11-22\""));
+            verify(workerService).poll();
+        }
+
+        @Test
+        @DisplayName("When migration V44 is missing, then the request is refused with 409 before anything is stored")
+        void whenV44Missing_thenConflict() throws Exception {
+            when(scopes.hasTable("schools")).thenReturn(false);
+
+            var missing = assertThrows(ResponseStatusException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, null, "FL", schools(SCHOOL_ROW), BUILT, null));
+
+            assertEquals(HttpStatus.CONFLICT, missing.getStatusCode());
+            assertTrue(missing.getReason().contains("V44"));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When a county is given, the first row is in another state, a column is missing or the grades are not "
+            + "Florida's, then the request is rejected")
+        void whenWrongInput_thenRejected() throws Exception {
+            when(scopes.hasTable(any())).thenReturn(true);
+            when(scopes.stateFips("GA")).thenReturn(Optional.of("13"));
+            InputSource valid = schools(SCHOOL_ROW);
+            InputSource georgia = staged("schools/georgia.csv", SchoolReferenceDataRowsTest.SCHOOLS_HEADER + "\n"
+                + SCHOOL_ROW.replace(",12086,", ",13121,"));
+            InputSource noColumn = staged("schools/zones.csv", "fips5,level\n12086,ELEMENTARY\n");
+            InputSource grades = staged("schools/school_grades.csv", SchoolReferenceDataRowsTest.GRADES_HEADER + "\n" + GRADE_ROW);
+            InputSource notFldoe = staged("schools/other.csv", SchoolReferenceDataRowsTest.GRADES_HEADER + "\n"
+                + GRADE_ROW.replace("13-0041,", "X-1,"));
+
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, "Miami-Dade", "FL", valid, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOLS, null, "FL", georgia, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_ZONES, null, "FL", noColumn, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_GRADES, null, "GA", grades, BUILT, null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startReference(IngestionDataset.SCHOOL_GRADES, null, "FL", notFldoe, BUILT, null));
+            verify(jobService, never()).create(any());
+
+            service.startReference(IngestionDataset.SCHOOL_GRADES, null, "FL", grades, BUILT, null);
+            assertEquals(IngestionDataset.SCHOOL_GRADES, createdJob().getDataset());
+        }
+    }
+
+    @Nested
+    @DisplayName("Starting school scoring jobs (SCRUM-203)")
+    class StartSchoolScoring {
+        private final SchoolAssignmentService.SchoolCounty miamiDade =
+            new SchoolAssignmentService.SchoolCounty(1L, "12086", "Miami-Dade", "FL");
+
+        @BeforeEach
+        void tablesExist() {
+            when(scopes.hasTable(any())).thenReturn(true);
+            when(countyService.resolve("Miami-Dade", "FL")).thenReturn(county);
+        }
+
+        @Test
+        @DisplayName("When the county has attendance zones, then an assignment job without input is queued for it")
+        void whenCountyHasZones_thenAssignmentQueued() {
+            when(schoolAssignments.countiesToAssign("12086")).thenReturn(List.of(miamiDade));
+
+            ImportJobDTO dto = service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, " 12086 ", "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(ImportJobType.SCHOOL_SCORING, job.getJobType());
+            assertEquals(IngestionDataset.SCHOOL_ASSIGNMENT, job.getDataset());
+            assertEquals("QUEUED", job.getStatus());
+            assertSame(county, job.getCounty());
+            assertEquals("Miami-Dade", job.getSourceCounty());
+            assertEquals("FL", job.getSourceState());
+            assertEquals("NONE", job.getInputStorage());
+            assertEquals("admin-1", job.getCreatedBy());
+            assertEquals(job.getId().toString(), dto.getId());
+            verify(workerService).poll();
+        }
+
+        @Test
+        @DisplayName("When no county is given, then the score job covers every assigned county")
+        void whenNoCounty_thenEveryCounty() {
+            when(schoolScores.countiesToScore(null)).thenReturn(List.of(miamiDade));
+
+            service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, null, null);
+
+            IngestionJob job = createdJob();
+            assertEquals(IngestionDataset.SCHOOL_SCORE_V2, job.getDataset());
+            assertNull(job.getCounty());
+            verify(schoolAssignments, never()).countiesToAssign(any());
+        }
+
+        @Test
+        @DisplayName("When fips5 is not 5 digits or no county has it, then 400 and nothing is queued")
+        void whenFipsInvalidOrUnknown_thenBadRequest() {
+            when(schoolAssignments.countiesToAssign("99999")).thenReturn(List.of());
+            when(schoolAssignments.countyExists("99999")).thenReturn(false);
+
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "1208", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12O86", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "99999", null));
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOLS, "12086", null));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When V49 is missing, the county has no zones or no assignment, or a job is active, then 409")
+        void whenNothingToDoOrBusy_thenConflict() {
+            when(schoolAssignments.countyExists("12001")).thenReturn(true);
+            when(schoolAssignments.countiesToAssign("12001")).thenReturn(List.of());
+            when(schoolScores.countiesToScore("12001")).thenReturn(List.of());
+
+            var noZones = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12001", null));
+            var noAssignment = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, "12001", null));
+            assertEquals(HttpStatus.CONFLICT, noZones.getStatusCode());
+            assertTrue(noZones.getReason().contains("school-zones"));
+            assertEquals(HttpStatus.CONFLICT, noAssignment.getStatusCode());
+            assertTrue(noAssignment.getReason().contains("/assign"));
+
+            when(schoolAssignments.countiesToAssign("12086")).thenReturn(List.of(miamiDade));
+            when(jobService.hasActive(IngestionDataset.SCHOOL_ASSIGNMENT)).thenReturn(true);
+            var busy = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_ASSIGNMENT, "12086", null));
+            assertEquals(HttpStatus.CONFLICT, busy.getStatusCode());
+
+            when(scopes.hasTable("property_school_scores")).thenReturn(false);
+            var missing = assertThrows(ResponseStatusException.class,
+                () -> service.startSchoolScoring(IngestionDataset.SCHOOL_SCORE_V2, "12086", null));
+            assertEquals(HttpStatus.CONFLICT, missing.getStatusCode());
+            assertTrue(missing.getReason().contains("V49"));
             verify(jobService, never()).create(any());
         }
     }

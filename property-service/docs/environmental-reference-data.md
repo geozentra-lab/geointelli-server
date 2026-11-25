@@ -41,7 +41,8 @@ keeps one row with `geom` NULL, so no source row is lost.
 | `sfha` | `SFHA_TF` | `T` = inside the Special Flood Hazard Area (high risk); NULL if empty |
 | `static_bfe`, `depth`, `velocity` | `STATIC_BFE`, `DEPTH`, `VELOCITY` | `-9999`/`-99999` = none = NULL |
 | `len_unit`, `vel_unit`, `v_datum` | `LEN_UNIT`, `VEL_UNIT`, `V_DATUM` | units/datum of the numbers |
-| `dual_zone`, `study_typ`, `version_id`, `source_cit` | same | `SOURCE_CIT` = FEMA study id |
+| `dual_zone`, `version_id`, `source_cit` | same | `SOURCE_CIT` = FEMA study id |
+| `study_typ` | `STUDY_TYP` | `VARCHAR(50)` since V47: FEMA's values are up to 28 characters (`NP`, `SFHAs WITH MEDIUM FLOOD RISK`, `SFHA with BFE no floodway`, ...) |
 | `geom` | `geom_wkt` | `geometry(MultiPolygon, 4326)`, GIST `idx_flood_zones_geom` |
 
 Index `idx_flood_zones_fips5 (fips5, source_row)` serves the county replacement and the regrouping.
@@ -102,7 +103,7 @@ compared without case, spaces or punctuation and with `Saint`/`St.` alike, so `S
 `De Soto`, `Miami-Dade` and `Miami Dade` all match. The migration **fails** (and rolls back) when a Florida county
 row has no match, listing the names.
 
-## Applying V42
+## Applying V42 and V47
 
 Flyway is disabled locally; apply the migration by hand to each database, **in one transaction**:
 
@@ -114,6 +115,12 @@ psql "host=... dbname=geozentra sslmode=verify-full sslrootcert=..." -v ON_ERROR
 It needs PostGIS (already installed: `parcels.geom`). It only adds tables and one column; it changes no existing
 row except `counties.fips_code`. The application does not map the new tables to JPA entities (`ddl-auto: validate`
 is unaffected).
+
+Then apply `V47__widen_flood_zones_study_typ.sql` the same way. V42 made `flood_zones.study_typ` `VARCHAR(20)`, but
+FEMA's `STUDY_TYP` is up to 28 characters, so without V47 the flood zone load of 46 of the 67 counties fails with
+`value too long for type character varying(20)` (Miami-Dade loads because its files only use `NP`). V47 only widens
+the column: no row is rewritten. It waits for open transactions that read `flood_zones`, so give it a lock timeout
+(`PGOPTIONS='-c lock_timeout=10s'`) and run it again if it times out. Running it twice is harmless.
 
 ## Loading
 
