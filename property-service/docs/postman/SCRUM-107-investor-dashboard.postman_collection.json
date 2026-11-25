@@ -1,0 +1,1177 @@
+{
+  "info": {
+    "name": "SCRUM-107 Investor dashboard: composed GET /api/dashboards/investor",
+    "description": "Manual checks for GET /api/dashboards/investor. See docs/investor-dashboard.md. Run the folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc), two users (A owns the data, B is another investor; both must have logged in to GeoZentra once) and two existing property IDs (propertyIdA, propertyIdB). Folder 1 creates a new portfolio for A and folder 6 deletes it with its holdings and records, so the collection can be repeated. The opportunities card depends on the stored opportunity scores of the database: it is OK or EMPTY. A card failure (status PARTIAL) cannot be caused from Postman; see the doc. Passwords are left empty: set them in your local environment and never commit them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8091"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": ""
+    },
+    {
+      "key": "clientIdKc",
+      "value": ""
+    },
+    {
+      "key": "userA",
+      "value": ""
+    },
+    {
+      "key": "passwordA",
+      "value": ""
+    },
+    {
+      "key": "userB",
+      "value": ""
+    },
+    {
+      "key": "passwordB",
+      "value": ""
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "propertyIdA",
+      "value": ""
+    },
+    {
+      "key": "propertyIdB",
+      "value": ""
+    },
+    {
+      "key": "portfolioId",
+      "value": ""
+    },
+    {
+      "key": "holdingIdA",
+      "value": ""
+    },
+    {
+      "key": "holdingIdB",
+      "value": ""
+    },
+    {
+      "key": "unknownPortfolioId",
+      "value": "999999999"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Tokens",
+      "item": [
+        {
+          "name": "Token for user A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userA}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordA}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token for user B (another investor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userB}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordB}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Empty data",
+      "item": [
+        {
+          "name": "A creates a new portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('portfolioId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"SCRUM-107 Postman portfolio\"}"
+            }
+          }
+        },
+        {
+          "name": "Portfolio without holdings: the portfolio cards are EMPTY",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const cards = [d.valueEquityDebt, d.incomeExpensesReturns, d.occupancyExposure, d.opportunities];",
+                  "pm.test('scope of my portfolio', () => { pm.expect(d.scope).to.eql('PORTFOLIO'); pm.expect(d.portfolioId).to.eql(Number(pm.collectionVariables.get('portfolioId'))); pm.expect(d.portfolioCount).to.eql(1); });",
+                  "pm.test('four cards, all loaded, same scope', () => {",
+                  "  pm.expect(d.failedCards).to.eql([]);",
+                  "  cards.forEach(c => { pm.expect(c).to.be.an('object'); pm.expect(c.status).to.be.oneOf(['OK', 'EMPTY']); pm.expect(c.error).to.eql(null); pm.expect(c.scope).to.eql(d.scope); pm.expect(c.portfolioId).to.eql(d.portfolioId); });",
+                  "});",
+                  "pm.test('income card uses the dashboard period', () => pm.expect(d.incomeExpensesReturns.period).to.eql(d.period));",
+                  "pm.test('opportunities: items are flagged alreadyHeld', () => d.opportunities.items.forEach(i => pm.expect(i.alreadyHeld).to.be.a('boolean')));",
+                  "pm.test('note', () => pm.expect(d.note).to.be.a('string'));",
+                  "pm.test('value, income and occupancy cards are EMPTY with 0 holdings', () => {",
+                  "  [d.valueEquityDebt, d.incomeExpensesReturns, d.occupancyExposure].forEach(c => { pm.expect(c.status).to.eql('EMPTY'); pm.expect(c.totalHoldings).to.eql(0); });",
+                  "});",
+                  "pm.test('income card: no records and projection unavailable, nothing invented', () => {",
+                  "  pm.expect(d.incomeExpensesReturns.actual.status).to.eql('NO_RECORDS'); pm.expect(d.incomeExpensesReturns.actual.income).to.eql(0);",
+                  "  pm.expect(d.incomeExpensesReturns.projected.status).to.eql('UNAVAILABLE');",
+                  "});",
+                  "pm.test('dashboard EMPTY when every card is empty, otherwise OK (stored opportunity scores)', () => {",
+                  "  pm.expect(d.status).to.eql(d.opportunities.status === 'EMPTY' ? 'EMPTY' : 'OK');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{portfolioId}}&fromMonth=2026-01&toMonth=2026-03",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{portfolioId}}"
+                },
+                {
+                  "key": "fromMonth",
+                  "value": "2026-01"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-03"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Setup: two rented holdings and their records",
+      "item": [
+        {
+          "name": "Holding A: rented 1500/month since 2025-01-01",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('holdingIdA', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"propertyId\":{{propertyIdA}},\"purchasePrice\":200000,\"ownershipSharePercent\":100,\"acquisitionDate\":\"2025-01-01\",\"occupancy\":{\"status\":\"RENTED\",\"monthlyRent\":1500,\"leaseStartDate\":\"2025-01-01\"}}"
+            }
+          }
+        },
+        {
+          "name": "Holding B: rented 2000/month since 2025-01-01",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('holdingIdB', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"propertyId\":{{propertyIdB}},\"purchasePrice\":300000,\"ownershipSharePercent\":100,\"acquisitionDate\":\"2025-01-01\",\"occupancy\":{\"status\":\"RENTED\",\"monthlyRent\":2000,\"leaseStartDate\":\"2025-01-01\"}}"
+            }
+          }
+        },
+        {
+          "name": "A: rent received 2026-01-05 (1500)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings/{{holdingIdA}}/financial-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings",
+                "{{holdingIdA}}",
+                "financial-records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"category\":\"RENT\",\"amount\":1500,\"currency\":\"USD\",\"transactionDate\":\"2026-01-05\"}"
+            }
+          }
+        },
+        {
+          "name": "B: rent received 2026-01-05 (2000)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings/{{holdingIdB}}/financial-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings",
+                "{{holdingIdB}}",
+                "financial-records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"category\":\"RENT\",\"amount\":2000,\"currency\":\"USD\",\"transactionDate\":\"2026-01-05\"}"
+            }
+          }
+        },
+        {
+          "name": "A: repairs paid 2026-02-10 (300)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}/holdings/{{holdingIdA}}/financial-records",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}",
+                "holdings",
+                "{{holdingIdA}}",
+                "financial-records"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"category\":\"REPAIRS\",\"amount\":300,\"currency\":\"USD\",\"transactionDate\":\"2026-02-10\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Success",
+      "item": [
+        {
+          "name": "Period 2026-01 to 2026-03: the four cards of my portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const cards = [d.valueEquityDebt, d.incomeExpensesReturns, d.occupancyExposure, d.opportunities];",
+                  "pm.test('scope of my portfolio', () => { pm.expect(d.scope).to.eql('PORTFOLIO'); pm.expect(d.portfolioId).to.eql(Number(pm.collectionVariables.get('portfolioId'))); pm.expect(d.portfolioCount).to.eql(1); });",
+                  "pm.test('four cards, all loaded, same scope', () => {",
+                  "  pm.expect(d.failedCards).to.eql([]);",
+                  "  cards.forEach(c => { pm.expect(c).to.be.an('object'); pm.expect(c.status).to.be.oneOf(['OK', 'EMPTY']); pm.expect(c.error).to.eql(null); pm.expect(c.scope).to.eql(d.scope); pm.expect(c.portfolioId).to.eql(d.portfolioId); });",
+                  "});",
+                  "pm.test('income card uses the dashboard period', () => pm.expect(d.incomeExpensesReturns.period).to.eql(d.period));",
+                  "pm.test('opportunities: items are flagged alreadyHeld', () => d.opportunities.items.forEach(i => pm.expect(i.alreadyHeld).to.be.a('boolean')));",
+                  "pm.test('note', () => pm.expect(d.note).to.be.a('string'));",
+                  "pm.test('status OK', () => pm.expect(d.status).to.eql('OK'));",
+                  "pm.test('period is the 3 requested months', () => pm.expect(d.period).to.eql({ fromMonth: '2026-01', toMonth: '2026-03', fromDate: '2026-01-01', toDate: '2026-03-31', months: 3, timeZone: 'UTC' }));",
+                  "pm.test('value and occupancy cards see the 2 holdings', () => {",
+                  "  pm.expect(d.valueEquityDebt.status).to.eql('OK'); pm.expect(d.valueEquityDebt.totalHoldings).to.eql(2);",
+                  "  pm.expect(d.occupancyExposure.status).to.eql('OK'); pm.expect(d.occupancyExposure.totalHoldings).to.eql(2); pm.expect(d.occupancyExposure.occupancyCounts.RENTED).to.eql(2);",
+                  "});",
+                  "pm.test('income card: recorded cash of the period, projection kept apart', () => {",
+                  "  const c = d.incomeExpensesReturns; pm.expect(c.status).to.eql('OK');",
+                  "  pm.expect(c.actual.income).to.eql(3500); pm.expect(c.actual.expenses).to.eql(300); pm.expect(c.actual.cashFlow).to.eql(3200);",
+                  "  pm.expect(c.projected.status).to.eql('AVAILABLE'); pm.expect(c.projected.monthlyGrossRent).to.eql(3500);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{portfolioId}}&fromMonth=2026-01&toMonth=2026-03",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{portfolioId}}"
+                },
+                {
+                  "key": "fromMonth",
+                  "value": "2026-01"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-03"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Without months: the last 12 complete months",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const cards = [d.valueEquityDebt, d.incomeExpensesReturns, d.occupancyExposure, d.opportunities];",
+                  "pm.test('scope of my portfolio', () => { pm.expect(d.scope).to.eql('PORTFOLIO'); pm.expect(d.portfolioId).to.eql(Number(pm.collectionVariables.get('portfolioId'))); pm.expect(d.portfolioCount).to.eql(1); });",
+                  "pm.test('four cards, all loaded, same scope', () => {",
+                  "  pm.expect(d.failedCards).to.eql([]);",
+                  "  cards.forEach(c => { pm.expect(c).to.be.an('object'); pm.expect(c.status).to.be.oneOf(['OK', 'EMPTY']); pm.expect(c.error).to.eql(null); pm.expect(c.scope).to.eql(d.scope); pm.expect(c.portfolioId).to.eql(d.portfolioId); });",
+                  "});",
+                  "pm.test('income card uses the dashboard period', () => pm.expect(d.incomeExpensesReturns.period).to.eql(d.period));",
+                  "pm.test('opportunities: items are flagged alreadyHeld', () => d.opportunities.items.forEach(i => pm.expect(i.alreadyHeld).to.be.a('boolean')));",
+                  "pm.test('note', () => pm.expect(d.note).to.be.a('string'));",
+                  "const now = new Date(); const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));",
+                  "const first = new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth() - 11, 1));",
+                  "const ym = x => x.getUTCFullYear() + '-' + String(x.getUTCMonth() + 1).padStart(2, '0');",
+                  "pm.test('12 months ending with the previous month', () => { pm.expect(d.period.months).to.eql(12); pm.expect(d.period.toMonth).to.eql(ym(last)); pm.expect(d.period.fromMonth).to.eql(ym(first)); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{portfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{portfolioId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "All my portfolios: scope ALL_PORTFOLIOS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('all portfolios, including the new one', () => { pm.expect(d.scope).to.eql('ALL_PORTFOLIOS'); pm.expect(d.portfolioId).to.eql(null); pm.expect(d.portfolioCount).to.be.at.least(1); });",
+                  "pm.test('every card covers all portfolios', () => [d.valueEquityDebt, d.incomeExpensesReturns, d.occupancyExposure, d.opportunities].forEach(c => { pm.expect(c.scope).to.eql('ALL_PORTFOLIOS'); pm.expect(c.portfolioCount).to.eql(d.portfolioCount); }));",
+                  "pm.test('no card failed', () => { pm.expect(d.failedCards).to.eql([]); pm.expect(d.status).to.be.oneOf(['OK', 'EMPTY']); });",
+                  "pm.test('the 2 new holdings are included', () => pm.expect(d.valueEquityDebt.totalHoldings).to.be.at.least(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2026-01&toMonth=2026-03",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2026-01"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-03"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Invalid input",
+      "item": [
+        {
+          "name": "portfolioId 0: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('portfolioId must be a positive number'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "portfolioId not a number: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('portfolioId: invalid value'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "abc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Month 13: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('fromMonth: invalid value'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2026-13&toMonth=2026-03",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2026-13"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-03"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Only fromMonth: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('fromMonth and toMonth must be given together'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2026-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2026-01"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "fromMonth after toMonth: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('fromMonth must not be after toMonth'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2026-03&toMonth=2026-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2026-03"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-01"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "toMonth in the future: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.match(/^toMonth must be a complete month before \\d{4}-\\d{2}$/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2026-01&toMonth=2999-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2026-01"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2999-01"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "More than 120 months: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('The period must not be longer than 120 months'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?fromMonth=2000-01&toMonth=2026-01",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "fromMonth",
+                  "value": "2000-01"
+                },
+                {
+                  "key": "toMonth",
+                  "value": "2026-01"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Ownership",
+      "item": [
+        {
+          "name": "No token: 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{portfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{portfolioId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "User B reads A's portfolio: 404, no partial dashboard",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('Portfolio not found'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{portfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{portfolioId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown portfolio: 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('message', () => pm.expect(pm.response.json().message).to.eql('Portfolio not found'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboards/investor?portfolioId={{unknownPortfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboards",
+                "investor"
+              ],
+              "query": [
+                {
+                  "key": "portfolioId",
+                  "value": "{{unknownPortfolioId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Cleanup",
+      "item": [
+        {
+          "name": "Delete the portfolio with its holdings and records",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portfolios/{{portfolioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portfolios",
+                "{{portfolioId}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -50,26 +50,26 @@ public class InvestorOccupancyExposureCardDTO {
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private LocalDate asOfDate;
 
-    @Schema(description = "Number of holdings in the included portfolios", example = "5")
-    private long totalHoldings;
+    @Schema(description = "Number of holdings in the included portfolios; null on an ERROR card", example = "5")
+    private Long totalHoldings;
 
     @Schema(description = "Holdings per owner-reported occupancy; every status is present, UNKNOWN included")
     private Map<HoldingOccupancyStatus, Long> occupancyCounts;
 
-    @Schema(description = "Holdings whose occupancy is known (not UNKNOWN)", example = "4")
-    private long knownOccupancyHoldings;
+    @Schema(description = "Holdings whose occupancy is known (not UNKNOWN); null on an ERROR card", example = "4")
+    private Long knownOccupancyHoldings;
 
     @Schema(description = "knownOccupancyHoldings / totalHoldings × 100; null without holdings", example = "80.00")
     private BigDecimal occupancyCoveragePercent;
 
-    @Schema(description = "Rental holdings: RENTED + VACANT", example = "3")
-    private long rentalHoldings;
+    @Schema(description = "Rental holdings: RENTED + VACANT; null on an ERROR card", example = "3")
+    private Long rentalHoldings;
 
     @Schema(description = "RENTED / (RENTED + VACANT) × 100; null without rental holdings", example = "66.67")
     private BigDecimal rentalOccupancyPercent;
 
-    @Schema(description = "Holdings whose state is known", example = "4")
-    private long knownGeographyHoldings;
+    @Schema(description = "Holdings whose state is known; null on an ERROR card", example = "4")
+    private Long knownGeographyHoldings;
 
     @Schema(description = "knownGeographyHoldings / totalHoldings × 100; null without holdings", example = "80.00")
     private BigDecimal geographyCoveragePercent;
