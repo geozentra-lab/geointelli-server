@@ -155,7 +155,7 @@ public enum IngestionDataset {
     public boolean requiresCounty() {
         return this != MARKET_EVIDENCE;
     }
-  
+
     /** Whether this is a reference dataset loaded with COPY: environmental (SCRUM-201) or school (SCRUM-202). */
     public boolean isReferenceData() {
         return jobType == ImportJobType.REFERENCE_DATA_IMPORT;

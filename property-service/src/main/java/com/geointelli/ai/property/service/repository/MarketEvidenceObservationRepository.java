@@ -31,14 +31,15 @@ public interface MarketEvidenceObservationRepository extends JpaRepository<Marke
     /**
      * Observations of one market, newest period first. Geography is required; evidence type, source and the
      * period window are optional filters (a null parameter means "any"). A period matches when it overlaps the
-     * window: it ends on or after {@code from} and starts on or before {@code to}.
+     * window: it ends on or after {@code from} and starts on or before {@code to}. The order ends on the ID, so
+     * pages never repeat or skip a row when several periods start on the same day.
      */
     @Query("SELECT o FROM MarketEvidenceObservation o WHERE o.geographyLevel = :level AND o.geographyCode = :code "
         + "AND (:type IS NULL OR o.evidenceType = :type) "
         + "AND (:source IS NULL OR o.source = :source) "
         + "AND (CAST(:from AS date) IS NULL OR o.periodEnd >= :from) "
         + "AND (CAST(:to AS date) IS NULL OR o.periodStart <= :to) "
-        + "ORDER BY o.periodStart DESC, o.evidenceType ASC, o.source ASC")
+        + "ORDER BY o.periodStart DESC, o.evidenceType ASC, o.source ASC, o.periodEnd DESC, o.id ASC")
     Page<MarketEvidenceObservation> findMarket(@Param("level") MarketGeographyLevel level,
                                                @Param("code") String code,
                                                @Param("type") MarketEvidenceType type,

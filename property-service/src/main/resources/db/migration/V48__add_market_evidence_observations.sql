@@ -6,6 +6,9 @@
 -- SALE rows carry the transaction columns (sale_*); ASKING rows carry the listing columns (*_listing_*,
 -- *_asking_*, days on market). The check constraints keep the other group NULL, so a sold price and an asking
 -- price can never be added together. Values are the provider's own observations; nothing is estimated here.
+--
+-- Apply by hand in ONE transaction (psql -1 -f ...), after V42: COUNTY rows are linked to our counties through
+-- counties.fips_code. Adds one table; changes no existing table or row. See docs/market-evidence-ingestion.md.
 CREATE TABLE market_evidence_observations (
     id BIGSERIAL PRIMARY KEY,
     -- SALE: closed transactions; ASKING: homes offered for sale (inventory and asking prices)
@@ -20,7 +23,7 @@ CREATE TABLE market_evidence_observations (
     -- STATE: two-letter code; COUNTY: five-digit FIPS code; ZIP: five-digit ZIP code
     geography_code VARCHAR(32) NOT NULL,
     geography_name VARCHAR(120),
-    -- Resolved against our states and counties when the code or name matches; NULL when it does not
+    -- Resolved against our states and counties when the code, FIPS code or name matches; NULL when it does not
     state_id BIGINT REFERENCES states(id),
     county_id BIGINT REFERENCES counties(id),
     -- Inclusive observation period, usually one calendar month
@@ -28,7 +31,8 @@ CREATE TABLE market_evidence_observations (
     period_end DATE NOT NULL,
     -- ACTUAL: observed by the provider; ESTIMATE: a provider value marked as modelled or preliminary
     observation_kind VARCHAR(16) NOT NULL DEFAULT 'ACTUAL' CHECK (observation_kind IN ('ACTUAL', 'ESTIMATE')),
-    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    -- VARCHAR, not CHAR: the entity maps a String of length 3, which Hibernate validates as varchar(3)
+    currency VARCHAR(3) NOT NULL DEFAULT 'USD' CHECK (currency ~ '^[A-Z]{3}$'),
     -- SALE columns
     sale_count INTEGER CHECK (sale_count >= 0),
     median_sale_price NUMERIC(14,2) CHECK (median_sale_price >= 0),
