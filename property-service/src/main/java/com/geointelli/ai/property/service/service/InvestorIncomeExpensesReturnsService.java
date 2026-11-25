@@ -29,4 +29,17 @@ public interface InvestorIncomeExpensesReturnsService {
      *         to another user
      */
     InvestorIncomeExpensesReturnsCardDTO getCard(Long portfolioId, YearMonth fromMonth, YearMonth toMonth);
+
+    /**
+     * Checks the months with the rules of {@link #getCard} and returns the period they cover, without reading any
+     * data. Used by the composed dashboard (SCRUM-107) to reject an invalid period before loading the cards.
+     *
+     * @param fromMonth first month, included; give both months or none
+     * @param toMonth   last month, included; must be before the current month
+     * @return the period; the last 12 complete months when both months are null
+     * @throws IllegalArgumentException if only one month is given, fromMonth is after toMonth, toMonth is not a
+     *         complete past month, fromMonth is before 1900-01 or the period is longer than {@link #MAX_MONTHS}
+     *         months
+     */
+    InvestorIncomeExpensesReturnsCardDTO.Period resolvePeriod(YearMonth fromMonth, YearMonth toMonth);
 }
