@@ -151,6 +151,11 @@ public enum IngestionDataset {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
     }
 
+    /** Whether a job for this dataset must name the county its rows belong to; market files cover many. */
+    public boolean requiresCounty() {
+        return this != MARKET_EVIDENCE;
+    }
+
     /** Whether this is a reference dataset loaded with COPY: environmental (SCRUM-201) or school (SCRUM-202). */
     public boolean isReferenceData() {
         return jobType == ImportJobType.REFERENCE_DATA_IMPORT;
@@ -167,11 +172,6 @@ public enum IngestionDataset {
             if (dataset.isReferenceData() && dataset.pathSegment.equals(segment)) return Optional.of(dataset);
         }
         return Optional.empty();
-    }
-
-    /** Whether a job for this dataset must name the county its rows belong to; market files cover many. */
-    public boolean requiresCounty() {
-        return this != MARKET_EVIDENCE;
     }
 
     /** Resolves a single-file CSV dataset from its endpoint path segment ({@code extra-features} and so on). */
