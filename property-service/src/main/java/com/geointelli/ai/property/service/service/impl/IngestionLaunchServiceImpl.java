@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +42,9 @@ import com.geointelli.ai.property.service.service.IngestionInputStore.StoredInpu
 import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService;
+import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
+import com.geointelli.ai.property.service.service.SchoolAssignmentService;
+import com.geointelli.ai.property.service.service.SchoolScoreV2Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -55,7 +60,15 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     static final String INPUT_UNAVAILABLE = "INPUT_UNAVAILABLE";
     static final String INPUT_CHANGED = "INPUT_CHANGED";
     static final String DATASET_JOB_ACTIVE = "DATASET_JOB_ACTIVE";
+    /** Table of migration V48 that market evidence imports write. */
+    static final String MARKET_EVIDENCE_TABLE = "market_evidence_observations";
     private static final CSVFormat HEADER_FORMAT = CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).get();
+    private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
+    /** FLDOE school grades are Florida's: their load must be for this state. */
+    static final String FLORIDA_FIPS = "12";
+    private static final java.util.regex.Pattern FIPS5 = java.util.regex.Pattern.compile("[0-9]{5}");
+    /** Tables of migration V49 that the school scoring jobs write. */
+    static final List<String> SCHOOL_SCORING_TABLES = List.of("property_school_assignments", "property_school_scores");
 
     private final IngestionJobService jobService;
     private final IngestionInputStore inputStore;
@@ -64,6 +77,9 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     private final CountyService countyService;
     private final IngestionProperties properties;
     private final ObjectMapper objectMapper;
+    private final ReferenceDataScopeService referenceScopes;
+    private final SchoolAssignmentService schoolAssignments;
+    private final SchoolScoreV2Service schoolScores;
 
     @Override
     public InputSource upload(MultipartFile file, String name) {
@@ -119,17 +135,85 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         }
         County resolved = resolveCounty(dataset, county, state);
         validateInputs(dataset, inputs);
+        if (dataset == IngestionDataset.MARKET_EVIDENCE) {
+            if (!referenceScopes.hasTable(MARKET_EVIDENCE_TABLE)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The table " + MARKET_EVIDENCE_TABLE + " is missing: apply migration V48 first");
+            }
+            // Two imports at once could both insert the same new observation: one at a time
+            requireNoActiveJob(dataset);
+        }
 
         IngestionJob job = new IngestionJob();
         job.setId(UUID.randomUUID());
         job.setJobType(ImportJobType.CSV_IMPORT);
         job.setDataset(dataset);
         job.setStatus(IngestionJobStatus.QUEUED);
-        job.setSourceCounty(county.trim());
+        job.setSourceCounty(trimToNull(county));
+        job.setSourceState(trimToNull(state));
+        job.setCounty(resolved);
+        job.setCreatedBy(createdBy);
+        storeInputs(job, inputs, null);
+        return queue(job);
+    }
+
+    @Override
+    public ImportJobDTO startReference(IngestionDataset dataset, String county, String state, InputSource input,
+            LocalDate downloadedOn, String createdBy) {
+        if (dataset == null || !dataset.isReferenceData()) {
+            throw new IllegalArgumentException("Not a reference dataset: " + dataset);
+        }
+        if (state == null || state.isBlank()) throw new IllegalArgumentException("sourceState is required");
+        if (downloadedOn == null) {
+            throw new IllegalArgumentException("downloadedOn (yyyy-MM-dd) is required: the date the source was downloaded");
+        }
+        if (downloadedOn.isAfter(LocalDate.now())) throw new IllegalArgumentException("downloadedOn is in the future");
+        if (input == null) throw new IllegalArgumentException("Upload 'file' or name a staged file");
+        if (!REFERENCE_FILE_NAME.matcher(input.name()).matches()) {
+            throw new IllegalArgumentException("The file name must be a .csv name of letters, digits, '-', '_' or '.'");
+        }
+        if (input.size() <= 0) throw new IllegalArgumentException("The file " + input.name() + " is empty");
+
+        County resolved = null;
+        String scope;
+        try {
+            if (dataset == IngestionDataset.FLOOD_ZONES) {
+                if (county == null || county.isBlank()) {
+                    throw new IllegalArgumentException("county is required for flood-zones: one county file per job");
+                }
+                resolved = countyService.resolve(county, state);
+                scope = referenceScopes.countyFips(resolved.getId()).orElseThrow(() -> new IllegalArgumentException(
+                    "The county " + county.trim() + " has no FIPS code (counties.fips_code)"));
+            } else {
+                if (county != null && !county.isBlank()) {
+                    throw new IllegalArgumentException(dataset.getPathSegment() + " loads a whole state; omit county");
+                }
+                scope = referenceScopes.stateFips(state).orElseThrow(() -> new IllegalArgumentException(
+                    "Unknown state " + state.trim() + ", or none of its counties has a FIPS code"));
+            }
+        } catch (IllegalStateException unavailable) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, unavailable.getMessage());
+        }
+        if (dataset.isSchoolData() && !referenceScopes.hasTable(ReferenceDataSql.targetTable(dataset))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The table " + ReferenceDataSql.targetTable(dataset) + " is missing: apply migration V44 first");
+        }
+        if (dataset == IngestionDataset.SCHOOL_GRADES && !FLORIDA_FIPS.equals(scope)) {
+            throw new IllegalArgumentException("school-grades loads the FLDOE (Florida) file: use sourceState FL");
+        }
+        validateReferenceInput(dataset, input, scope);
+        if (dataset != IngestionDataset.FLOOD_ZONES) requireNoActiveJob(dataset);
+
+        IngestionJob job = new IngestionJob();
+        job.setId(UUID.randomUUID());
+        job.setJobType(ImportJobType.REFERENCE_DATA_IMPORT);
+        job.setDataset(dataset);
+        job.setStatus(IngestionJobStatus.QUEUED);
+        job.setSourceCounty(resolved == null ? null : county.trim());
         job.setSourceState(state.trim());
         job.setCounty(resolved);
         job.setCreatedBy(createdBy);
-        storeInputs(job, inputs);
+        storeInputs(job, List.of(input), downloadedOn.toString());
         return queue(job);
     }
 
@@ -147,6 +231,53 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setCounty(countyService.miamiDade());
         job.setSourceCounty("Miami-Dade");
         job.setSourceState("FL");
+        job.setInputStorage("NONE");
+        job.setCreatedBy(createdBy);
+        return queue(job);
+    }
+
+    @Override
+    public ImportJobDTO startSchoolScoring(IngestionDataset dataset, String fips5, String createdBy) {
+        if (dataset == null || !dataset.isSchoolScoring()) {
+            throw new IllegalArgumentException("Not a school scoring dataset: " + dataset);
+        }
+        String scope = fips5 == null || fips5.isBlank() ? null : fips5.trim();
+        if (scope != null && !FIPS5.matcher(scope).matches()) {
+            throw new IllegalArgumentException("fips5 must be the 5-digit FIPS code of a county, for example 12086");
+        }
+        for (String table : SCHOOL_SCORING_TABLES) {
+            if (!referenceScopes.hasTable(table)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The table " + table + " is missing: apply migration V49 first");
+            }
+        }
+        boolean assign = dataset == IngestionDataset.SCHOOL_ASSIGNMENT;
+        List<SchoolAssignmentService.SchoolCounty> counties = assign
+            ? schoolAssignments.countiesToAssign(scope) : schoolScores.countiesToScore(scope);
+        if (counties.isEmpty()) {
+            if (scope != null && !schoolAssignments.countyExists(scope)) {
+                throw new IllegalArgumentException("No county has the FIPS code " + scope);
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT, assign
+                ? (scope == null ? "No county has both attendance zones and properties"
+                    : "The county " + scope + " has no attendance zones or no properties")
+                    + ": load school-zones (SCRUM-202) first"
+                : (scope == null ? "No county has school assignments" : "The county " + scope + " has no school assignments")
+                    + ": run POST /api/property-school-analysis/assign first");
+        }
+        requireNoActiveJob(dataset);
+
+        IngestionJob job = new IngestionJob();
+        job.setId(UUID.randomUUID());
+        job.setJobType(ImportJobType.SCHOOL_SCORING);
+        job.setDataset(dataset);
+        job.setStatus(IngestionJobStatus.QUEUED);
+        if (scope != null) {
+            SchoolAssignmentService.SchoolCounty county = counties.get(0);
+            job.setCounty(countyService.resolve(county.name(), county.state()));
+            job.setSourceCounty(county.name());
+            job.setSourceState(county.state());
+        }
         job.setInputStorage("NONE");
         job.setCreatedBy(createdBy);
         return queue(job);
@@ -198,9 +329,22 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         return dto;
     }
 
-    /** Properties and folder imports may create the county; the related files need it to exist already. */
+    /**
+     * Properties and folder imports may create the county; the related files need it to exist already. A
+     * dataset that does not belong to one county (market evidence) runs without one and returns null; its
+     * optional county label needs its state, and the state needs a county.
+     */
     private County resolveCounty(IngestionDataset dataset, String county, String state) {
-        if (county == null || county.isBlank() || state == null || state.isBlank()) {
+        boolean countyGiven = county != null && !county.isBlank();
+        boolean stateGiven = state != null && !state.isBlank();
+        boolean given = countyGiven && stateGiven;
+        if (!dataset.requiresCounty()) {
+            if (countyGiven != stateGiven) {
+                throw new IllegalArgumentException("county and sourceState go together: give both or neither");
+            }
+            return given ? countyService.resolve(county, state) : null;
+        }
+        if (!given) {
             throw new IllegalArgumentException("county and sourceState are required");
         }
         if (dataset == IngestionDataset.PROPERTIES || dataset == IngestionDataset.FOLDER) {
@@ -256,7 +400,45 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         }
     }
 
-    private void storeInputs(IngestionJob job, List<InputSource> inputs) {
+    /**
+     * Checks a reference file before anything is stored: the columns the importer reads, and that its first row
+     * belongs to the county (flood zones) or state the job replaces.
+     */
+    private void validateReferenceInput(IngestionDataset dataset, InputSource input, String scope) {
+        validateHeader(input, dataset.getRequiredHeaders());
+        CSVRecord first;
+        try (Reader reader = new java.io.InputStreamReader(input.open(), StandardCharsets.UTF_8);
+                CSVParser parser = HEADER_FORMAT.parse(reader)) {
+            var records = parser.iterator();
+            if (!records.hasNext()) throw new IllegalArgumentException("The file " + input.name() + " has no data rows");
+            first = records.next();
+        } catch (IOException | java.io.UncheckedIOException | IllegalStateException unreadable) {
+            throw new IllegalArgumentException("The file " + input.name() + " is not a readable CSV: " + unreadable.getMessage());
+        }
+        if (dataset == IngestionDataset.SCHOOL_GRADES) {
+            // FLDOE ids carry a district, not a state; the state was checked above.
+            if (!first.get("state_school_id").trim().matches("\\d{2}-\\d{4}")) {
+                throw new IllegalArgumentException("The file " + input.name() + " is not an FLDOE school grades file: "
+                    + "state_school_id must be DD-SSSS");
+            }
+            return;
+        }
+        String key = switch (dataset) {
+            case FLOOD_ZONES -> first.get("fips5");
+            case CENSUS_TRACTS -> first.get("tract_fips");
+            case NRI_TRACTS -> first.get("TRACTFIPS");
+            case STORM_EVENTS -> String.format("%2s", first.get("STATE_FIPS").trim()).replace(' ', '0');
+            case SCHOOLS, SCHOOL_ZONES -> first.get("fips5");
+            default -> "";
+        };
+        boolean matches = dataset == IngestionDataset.FLOOD_ZONES ? scope.equals(key.trim()) : key.trim().startsWith(scope);
+        if (!matches) {
+            throw new IllegalArgumentException("The file " + input.name() + " is for " + key.trim() + ", not "
+                + (dataset == IngestionDataset.FLOOD_ZONES ? "the county " : "the state ") + scope);
+        }
+    }
+
+    private void storeInputs(IngestionJob job, List<InputSource> inputs, String downloadedOn) {
         String location = inputStore.locationFor(job.getId());
         List<StoredInputRef> stored = new ArrayList<>();
         try {
@@ -273,7 +455,7 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setInputStorage(inputStore.storageType());
         job.setInputLocation(location);
         job.setInputScope(inputStore.scope());
-        job.setParametersJson(json(new IngestionJobParameters(stored)));
+        job.setParametersJson(json(new IngestionJobParameters(stored, downloadedOn)));
         if ("LOCAL".equals(job.getInputStorage())) {
             // Nobody else can run it: give up if this instance does not claim it in time.
             job.setLeaseExpiresAt(Instant.now().plusSeconds(properties.getJobs().getQueueDeadlineSeconds()));
@@ -361,6 +543,10 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
             @Override public long size() { return size; }
             @Override public InputStream open() throws IOException { return Files.newInputStream(file); }
         };
+    }
+
+    private static String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static Set<String> folderFileNames() {

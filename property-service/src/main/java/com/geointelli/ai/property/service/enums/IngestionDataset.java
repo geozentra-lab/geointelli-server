@@ -2,6 +2,7 @@ package com.geointelli.ai.property.service.enums;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 
 /**
@@ -57,6 +58,13 @@ public enum IngestionDataset {
         "last_sale_date", "confidence_score", "prediction_date", "model_version")),
     PROPERTY_IMAGES(ImportJobType.CSV_IMPORT, "property-images", "property_images.csv", List.of(
         "property_id", "original_url", "primary_image", "display_order")),
+    /**
+     * Market sale and asking-price observations by geography and period (SCRUM-131). Not a county file: one
+     * file may cover many states, counties and ZIP codes, so the job carries no county. Started from
+     * {@code POST /api/admin/market-evidence/import}, never from the generic county import endpoint.
+     */
+    MARKET_EVIDENCE(ImportJobType.CSV_IMPORT, "market-evidence", "market_evidence.csv", List.of(
+        "source", "evidence_type", "geography_level", "geography_code", "period_start", "period_end")),
     /** All county files in one job, in the order {@code CsvFolderImportService} uses. */
     FOLDER(ImportJobType.CSV_IMPORT, "folder", null, List.of()),
 
@@ -64,7 +72,57 @@ public enum IngestionDataset {
     API_BUILDINGS(ImportJobType.PROPERTY_INGESTION, "ingestbuildings", null, List.of()),
     API_EXTRA_FEATURES(ImportJobType.PROPERTY_INGESTION, "ingest_extrafeatures", null, List.of()),
     API_SALES(ImportJobType.PROPERTY_INGESTION, "ingest_sales", null, List.of()),
-    API_ADDRESSES(ImportJobType.PROPERTY_INGESTION, "ingestaddresses", null, List.of());
+    API_ADDRESSES(ImportJobType.PROPERTY_INGESTION, "ingestaddresses", null, List.of()),
+
+    /** Census TIGER/Line tract boundaries of one state ({@code census_tracts}); replaces the state's tracts. */
+    CENSUS_TRACTS(ImportJobType.REFERENCE_DATA_IMPORT, "census-tracts", null, List.of(
+        "fips5", "tract_fips", "name", "land_area_m2", "water_area_m2", "geom_wkt")),
+    /** FEMA National Risk Index per census tract of one state ({@code nri_tract_risk}); replaces the state's rows. */
+    NRI_TRACTS(ImportJobType.REFERENCE_DATA_IMPORT, "nri-tracts", null, List.of(
+        "TRACTFIPS", "NRI_VER", "RISK_SCORE", "RISK_RATNG", "HRCN_RISKS", "HRCN_RISKR", "IFLD_RISKS", "IFLD_RISKR",
+        "CFLD_RISKS", "CFLD_RISKR", "TRND_RISKS", "TRND_RISKR", "WFIR_RISKS", "WFIR_RISKR", "SWND_RISKS",
+        "SWND_RISKR", "LTNG_RISKS", "LTNG_RISKR", "HWAV_RISKS", "HWAV_RISKR")),
+    /** FEMA NFHL flood hazard zones of ONE county file ({@code flood_zones}); replaces that county's zones. */
+    FLOOD_ZONES(ImportJobType.REFERENCE_DATA_IMPORT, "flood-zones", null, List.of(
+        "fips5", "DFIRM_ID", "FLD_AR_ID", "FLD_ZONE", "ZONE_SUBTY", "SFHA_TF", "STATIC_BFE", "DEPTH", "V_DATUM",
+        "LEN_UNIT", "VELOCITY", "VEL_UNIT", "DUAL_ZONE", "STUDY_TYP", "VERSION_ID", "SOURCE_CIT", "geom_wkt")),
+    /** NOAA NCEI Storm Events of one state ({@code storm_events}); replaces the state's events. */
+    STORM_EVENTS(ImportJobType.REFERENCE_DATA_IMPORT, "storm-events", null, List.of(
+        "fips5", "BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME", "END_YEARMONTH", "END_DAY", "END_TIME",
+        "EPISODE_ID", "EVENT_ID", "STATE_FIPS", "EVENT_TYPE", "CZ_TYPE", "CZ_FIPS", "CZ_NAME", "CZ_TIMEZONE",
+        "INJURIES_DIRECT", "INJURIES_INDIRECT", "DEATHS_DIRECT", "DEATHS_INDIRECT", "DAMAGE_PROPERTY",
+        "DAMAGE_CROPS", "MAGNITUDE", "MAGNITUDE_TYPE", "FLOOD_CAUSE", "TOR_F_SCALE", "BEGIN_LAT", "BEGIN_LON")),
+    /**
+     * School locations of one state, county by county ({@code schools}, SCRUM-202); every county in the file is
+     * replaced, rows upserted on {@code school_key} so a school keeps its id.
+     */
+    SCHOOLS(ImportJobType.REFERENCE_DATA_IMPORT, "schools", null, List.of(
+        "school_key", "state_school_id", "nces_id", "fips5", "county", "name", "sector", "level", "school_type",
+        "lowest_grade", "highest_grade", "is_virtual", "is_active", "enrollment", "free_reduced_lunch_pct",
+        "address", "city", "zip", "latitude", "longitude", "in_schools_zip", "status_note")),
+    /** FLDOE school grades ({@code school_grades}, SCRUM-202); every school year in the file is replaced. */
+    SCHOOL_GRADES(ImportJobType.REFERENCE_DATA_IMPORT, "school-grades", null, List.of(
+        "state_school_id", "district_number", "school_number", "school_name", "school_year", "letter_grade",
+        "is_baseline", "fldoe_school_type", "is_charter", "is_title_i", "alternative_ese_center",
+        "grade3_ela_achievement", "ela_achievement", "ela_learning_gains", "ela_lowest25_gains", "math_achievement",
+        "math_learning_gains", "math_lowest25_gains", "science_achievement", "social_studies_achievement",
+        "middle_school_acceleration", "graduation_rate", "college_career_acceleration", "total_points_earned",
+        "total_components", "pct_total_points", "pct_tested", "pct_econ_disadvantaged")),
+    /** School attendance zones ({@code school_attendance_zones}, SCRUM-202); every county in the file is replaced. */
+    SCHOOL_ZONES(ImportJobType.REFERENCE_DATA_IMPORT, "school-zones", null, List.of(
+        "fips5", "county", "level", "zone_school_name", "school_key", "school_match", "source_school_id", "source",
+        "source_type", "zone_year", "method_fr", "note_fr", "geom_wkt")),
+
+    /**
+     * School assignment of a county ({@code property_school_assignments}, SCRUM-203), then school score v2 of the
+     * same county ({@code property_school_scores}); computed from the school reference data, no input file.
+     */
+    SCHOOL_ASSIGNMENT(ImportJobType.SCHOOL_SCORING, "assign", null, List.of()),
+    /** School score v2 of a county from its stored assignments ({@code property_school_scores}, SCRUM-203). */
+    SCHOOL_SCORE_V2(ImportJobType.SCHOOL_SCORING, "calculate-all", null, List.of());
+
+    /** School reference datasets (SCRUM-202): their scope is the set of counties or years the file contains. */
+    public static final Set<IngestionDataset> SCHOOL_REFERENCE = Set.of(SCHOOLS, SCHOOL_GRADES, SCHOOL_ZONES);
 
     /** Columns read from property_owner.csv, the second file of the {@link #OWNERS} dataset. */
     public static final List<String> PROPERTY_OWNER_HEADERS = List.of("property_id", "owner_id");
@@ -99,6 +157,34 @@ public enum IngestionDataset {
     /** Whether this is one CSV file (or the owners pair) that a job reads row by row. */
     public boolean isSingleCsv() {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
+    }
+
+    /** Whether a job for this dataset must name the county its rows belong to; market files cover many. */
+    public boolean requiresCounty() {
+        return this != MARKET_EVIDENCE;
+    }
+
+    /** Whether this is a reference dataset loaded with COPY: environmental (SCRUM-201) or school (SCRUM-202). */
+    public boolean isReferenceData() {
+        return jobType == ImportJobType.REFERENCE_DATA_IMPORT;
+    }
+
+    /** Whether this is a school reference dataset (SCRUM-202), replaced by the counties or years of its file. */
+    public boolean isSchoolData() {
+        return SCHOOL_REFERENCE.contains(this);
+    }
+
+    /** Whether this is a school assignment or school score v2 job (SCRUM-203), computed without an input file. */
+    public boolean isSchoolScoring() {
+        return jobType == ImportJobType.SCHOOL_SCORING;
+    }
+
+    /** Resolves a reference dataset from its endpoint path segment ({@code flood-zones} and so on). */
+    public static Optional<IngestionDataset> referenceFromPathSegment(String segment) {
+        for (IngestionDataset dataset : values()) {
+            if (dataset.isReferenceData() && dataset.pathSegment.equals(segment)) return Optional.of(dataset);
+        }
+        return Optional.empty();
     }
 
     /** Resolves a single-file CSV dataset from its endpoint path segment ({@code extra-features} and so on). */

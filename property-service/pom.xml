@@ -67,7 +67,7 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>42.7.3</version>
-            <scope>runtime</scope>
+            <!-- compile scope: the reference data importer (SCRUM-201) uses the driver's COPY API -->
         </dependency>
 
         <dependency>

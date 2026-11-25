@@ -33,6 +33,25 @@ public interface PortfolioHoldingRepository extends JpaRepository<PortfolioHoldi
         + "WHERE h.portfolio.id IN :ids GROUP BY h.portfolio.id")
     List<PortfolioHoldingCount> countForPortfolios(@Param("ids") List<Long> ids);
 
+    /**
+     * Which of the given properties are held in one of the given portfolios (investor dashboard opportunities card,
+     * SCRUM-106). The portfolios must already be ownership-checked. One query for a whole card.
+     */
+    @Query("SELECT DISTINCT h.property.id FROM PortfolioHolding h "
+        + "WHERE h.portfolio.id IN :portfolioIds AND h.property.id IN :propertyIds")
+    List<Long> findHeldPropertyIds(@Param("portfolioIds") List<Long> portfolioIds,
+                                   @Param("propertyIds") List<Long> propertyIds);
+
+    /**
+     * Rent, purchase-price and date facts of the holdings of the given portfolios, checked again against the owner
+     * (investor income, expenses and returns card).
+     */
+    @Query("SELECT new com.geointelli.ai.property.service.repository.HoldingRentFacts("
+            + "h.id, h.occupancyStatus, h.monthlyRent, h.purchasePrice, h.ownershipSharePercent, "
+            + "h.acquisitionDate, h.leaseStartDate, h.leaseEndDate) "
+            + "FROM PortfolioHolding h WHERE h.portfolio.id IN :ids AND h.portfolio.user.id = :userId ORDER BY h.id")
+    List<HoldingRentFacts> rentFacts(@Param("ids") List<Long> ids, @Param("userId") Long userId);
+
     @Modifying
     @Query("DELETE FROM PortfolioHolding h WHERE h.portfolio.id = :portfolioId")
     void deleteForPortfolio(@Param("portfolioId") Long portfolioId);

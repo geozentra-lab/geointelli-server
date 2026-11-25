@@ -77,6 +77,11 @@ class SecurityPolicyTest {
                 .andExpect(status().isOk());
         mvc.perform(delete("/api/properties/1/favorite").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+        // property reads added after SCRUM-94 branched: forecast, price divergence, risk section, market evidence
+        for (String path : List.of("/api/properties/id/1/forecast", "/api/properties/id/1/price-divergence",
+                "/api/properties/id/1/location-intelligence/risk", "/api/market-evidence")) {
+            mvc.perform(get(path).header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        }
     }
 
     @ParameterizedTest
@@ -84,7 +89,10 @@ class SecurityPolicyTest {
             "GET,/api/dashboards/realtor/clients-leads,realtor", "GET,/api/lender/applications,lender",
             "POST,/api/lender/organizations,lender", "GET,/api/dashboards/lender/mortgage-context,lender",
             "GET,/api/portfolios,investor", "PATCH,/api/scenarios/7,investor", "GET,/api/opportunities,investor",
-            "GET,/api/properties/id/7/opportunity-score,investor", "POST,/api/calculations/investment,investor" })
+            "GET,/api/properties/id/7/opportunity-score,investor", "POST,/api/calculations/investment,investor",
+            "GET,/api/dashboards/investor,investor", "GET,/api/dashboards/investor/opportunities,investor",
+            "GET,/api/dashboards/investor/income-expenses-returns,investor", "POST,/api/scenarios/7/calculate,investor",
+            "GET,/api/dashboards/lender/application-pipeline,lender" })
     void professionalFeatureRequiresItsOwnRoleOrAdmin(String method, String path, String role) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         mvc.perform(request(HttpMethod.valueOf(method), path).header("Authorization", "Bearer user"))
@@ -105,7 +113,10 @@ class SecurityPolicyTest {
             "POST,/api/property-school-analysis/7/calculate-property-score",
             "POST,/api/property-transportation-analysis/calculate-all",
             "POST,/api/property-transportation-analysis/7/calculate-property-score",
-            "GET,/api/admin/valuation-refresh-requests", "POST,/api/admin/opportunity-scores/refresh" })
+            "GET,/api/admin/valuation-refresh-requests", "POST,/api/admin/opportunity-scores/refresh",
+            "POST,/api/property-school-analysis/assign", "GET,/api/admin/coverage-health",
+            "PATCH,/api/admin/data-quality/issues/DQ-1", "POST,/api/admin/market-evidence/import",
+            "GET,/api/admin/realtor-license-verifications", "POST,/api/admin/realtor-license-verifications/7/approve" })
     void operationsRequireAdminIncludingLegacyRoutes(String method, String path) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         for (String role : List.of("user", "investor", "realtor", "lender")) {
@@ -143,6 +154,8 @@ class SecurityPolicyTest {
         mvc.perform(get("/api/properties/search")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/properties/search").header("Authorization", "Bearer invalid"))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/properties/id/1/location-intelligence/risk")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/market-evidence")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/admin/import-jobs").header("Authorization", "Bearer no-subject"))
                 .andExpect(status().isUnauthorized());
     }

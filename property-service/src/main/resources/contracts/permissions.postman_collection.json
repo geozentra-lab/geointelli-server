@@ -2,7 +2,7 @@
   "info": {
     "name": "SCRUM-94 Roles and ownership",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "SCRUM-194/195/196 permission matrix (property-service).\n\nKeycloak setup: create case-sensitive REALM roles investor, realtor, lender and admin. Assign approved roles to users; do not assign professional/admin roles as realm defaults. Obtain a fresh access_token after changes. Only realm_access.roles from the validated JWT grants feature access. Client roles, persona, request bodies and organization IDs cannot grant a feature role. Every authenticated identity has baseline user access without needing an explicit user role. Users may hold multiple roles.\n\nBASELINE (any valid bearer token): property/search/details, valuation/history/forecast routes when present, comparables, property comparison, addresses/locations/parcels/map, image reads, prediction reads, read-only school/transport bulk lookups, favorites, profile/preferences, realtor license submission/status, saved searches, alerts/evaluation, contact requests, recommendations, user dashboard, mortgage and affordability calculations.\nINVESTOR or ADMIN: portfolios/holdings/financial records/summaries, scenarios, investor dashboard, opportunities/property opportunity score and investment calculations.\nREALTOR or ADMIN: clients/leads/tasks/transactions/CRM activities and realtor dashboard.\nLENDER or ADMIN: lender organizations/applications/imports/collateral and lender dashboard.\nADMIN only: all /api/admin/** and /api/ingestion/** routes, image imports/backfills (including job reads), prediction bulk writes, school/transport calculate-all and calculate-property-score writes.\nPUBLIC: Swagger UI/API descriptions and health/liveness/readiness. Other actuator paths and unclassified routes are denied. Existing configured CORS origins can preflight before authentication.\n\nScope: every personal resource remains owner-scoped, including for admins. A lender role does not imply organization membership. Lender application IDs must match the requested member organization. Only an organization owner manages membership. Foreign/missing private resources return 404; role denials return 403; missing/invalid JWTs return 401. Record IDs, owner fields and membership IDs are not feature grants.\n\nSubscriptions: NOT_CONFIGURED. There is no implemented billing/subscription approval contract, so no plan is inferred from persona or arbitrary JWT claims. License submission and selection of REALTOR persona do not grant the realtor role. Existing contact-directory categories do not certify credentials.\n\nManual setup: run against a test database. Use access_token for the current tester; switch it between an ordinary user, each professional role and admin. To test private ownership, create resources as account A using the existing feature collections, then read them as a second account B WITH THE SAME FEATURE ROLE. Fill foreign_* variables with A's IDs; never use a missing ID as the only ownership test. Foreign lender organization and mismatched application/organization are separate checks. No test in this collection deletes or changes business data.\n\nWorkflow checks: as an ordinary account PATCH /api/users/me with persona=REALTOR, then GET entitlements; realtorCrm must remain false and GET /api/clients must remain 403. Use the existing collections to verify foreign PATCH/DELETE attempts also return 404 without changing A's records. A lender organization member attempting membership changes must get 403; the organization owner succeeds. Repeat foreign-resource checks as an admin to ensure no ownership bypass. Existing access tokens retain their grants until replaced/expired; these endpoints do not administer Keycloak roles.\n"
+    "description": "SCRUM-194/195/196 permission matrix (property-service).\n\nKeycloak setup: create case-sensitive REALM roles investor, realtor, lender and admin. Assign approved roles to users; do not assign professional/admin roles as realm defaults. Obtain a fresh access_token after changes. Only realm_access.roles from the validated JWT grants feature access. Client roles, persona, request bodies and organization IDs cannot grant a feature role. Every authenticated identity has baseline user access without needing an explicit user role. Users may hold multiple roles.\n\nBASELINE (any valid bearer token): property/search/details, valuation/history/forecast routes, price divergence, location intelligence (schools, transport, risk), market evidence reads, comparables, property comparison, addresses/locations/parcels/map, image reads, prediction reads, read-only school/transport bulk lookups, favorites, profile/preferences, realtor license submission/status, saved searches, alerts/evaluation, contact requests, recommendations, user dashboard, mortgage and affordability calculations.\nINVESTOR or ADMIN: portfolios/holdings/financial records/summaries, scenarios (including recalculation), investor dashboard (composed and its four cards), opportunities/property opportunity score and investment calculations.\nREALTOR or ADMIN: clients/leads/tasks/transactions/CRM activities and realtor dashboard.\nLENDER or ADMIN: lender organizations/applications/imports/collateral and lender dashboard (mortgage context, application pipeline).\nADMIN only: all /api/admin/** and /api/ingestion/** routes (including import jobs, market evidence import, data quality, coverage health, realtor license review), image imports/backfills (including job reads), prediction bulk writes, school assignment (assign), school/transport calculate-all (every version, v1 included) and calculate-property-score writes.\nPUBLIC: Swagger UI/API descriptions and health/liveness/readiness. Other actuator paths and unclassified routes are denied. Existing configured CORS origins can preflight before authentication.\n\nScope: every personal resource remains owner-scoped, including for admins. A lender role does not imply organization membership. Lender application IDs must match the requested member organization. Only an organization owner manages membership. Foreign/missing private resources return 404; role denials return 403; missing/invalid JWTs return 401. Record IDs, owner fields and membership IDs are not feature grants.\n\nSubscriptions: NOT_CONFIGURED. There is no implemented billing/subscription approval contract, so no plan is inferred from persona or arbitrary JWT claims. License submission and selection of REALTOR persona do not grant the realtor role. Existing contact-directory categories do not certify credentials.\n\nManual setup: run against a test database. Use access_token for the current tester; switch it between an ordinary user, each professional role and admin. To test private ownership, create resources as account A using the existing feature collections, then read them as a second account B WITH THE SAME FEATURE ROLE. Fill foreign_* variables with A's IDs and property_id with any existing property; never use a missing ID as the only ownership test. Foreign lender organization and mismatched application/organization are separate checks. No test in this collection deletes or changes business data.\n\nWorkflow checks: as an ordinary account PATCH /api/users/me with persona=REALTOR, then GET entitlements; realtorCrm must remain false and GET /api/clients must remain 403. Use the existing collections to verify foreign PATCH/DELETE attempts also return 404 without changing A's records. A lender organization member attempting membership changes must get 403; the organization owner succeeds. Repeat foreign-resource checks as an admin to ensure no ownership bypass. Existing access tokens retain their grants until replaced/expired; these endpoints do not administer Keycloak roles.\n"
   },
   "auth": {
     "type": "bearer",
@@ -46,6 +46,10 @@
     {
       "key": "own_organization_id",
       "value": ""
+    },
+    {
+      "key": "property_id",
+      "value": ""
     }
   ],
   "item": [
@@ -77,6 +81,63 @@
             "method": "GET",
             "url": "{{base_url}}/api/properties/search?page=0&size=1",
             "description": "Any valid account, including professional roles."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Market evidence read",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/market-evidence?level=ZIP&code=33139",
+            "description": "SCRUM-131 licensed market data: any signed-in account, no role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Property risk context",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/properties/id/{{property_id}}/location-intelligence/risk",
+            "description": "SCRUM-127 risk section: baseline property read."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Property price divergence",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/properties/id/{{property_id}}/price-divergence",
+            "description": "SCRUM-60: baseline property read, like the valuation."
           },
           "event": [
             {
@@ -123,6 +184,50 @@
             "method": "GET",
             "url": "{{base_url}}/api/users/me/entitlements",
             "description": "No bearer token.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous market evidence",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/market-evidence?level=ZIP&code=33139",
+            "description": "No token: 401 before any validation.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 401\", function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous property risk context",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/properties/id/{{property_id}}/location-intelligence/risk",
+            "description": "Property reads need a token since SCRUM-94.",
             "auth": {
               "type": "noauth"
             }
@@ -268,6 +373,101 @@
               }
             }
           ]
+        },
+        {
+          "name": "No investor dashboard access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/investor",
+            "description": "Composed investor dashboard (SCRUM-107): investor or admin role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No lender pipeline access",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/lender/application-pipeline?organizationId={{own_organization_id}}",
+            "description": "Lender dashboard card (SCRUM-113): lender or admin role, checked before membership."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No school assignment job",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/property-school-analysis/assign?fips5=12086",
+            "description": "SCRUM-203 school assignment rewrites a county's school data: admin only. Nothing is queued."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No school v1 recalculation",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/property-school-analysis/calculate-all",
+            "description": "Every calculate-all version is an admin route since SCRUM-94. Nothing is recalculated."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No admin coverage health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/admin/coverage-health",
+            "description": "SCRUM-191 admin page: admin only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 403\", function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -337,6 +537,63 @@
             "method": "GET",
             "url": "{{base_url}}/api/admin/import-jobs",
             "description": "Use admin token; expect 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Investor - composed dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/investor",
+            "description": "Use an investor token: the four cards of the caller's own portfolios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lender - application pipeline of own organization",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/lender/application-pipeline?organizationId={{own_organization_id}}",
+            "description": "Use a lender token that is a member of own_organization_id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - coverage health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/admin/coverage-health",
+            "description": "Use an admin token."
           },
           "event": [
             {
@@ -456,6 +713,63 @@
             "method": "GET",
             "url": "{{base_url}}/api/lender/applications/{{foreign_application_id}}?organizationId={{own_organization_id}}",
             "description": "B has membership of own_organization_id, but the application belongs to A organization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foreign portfolio on the investor dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/investor?portfolioId={{foreign_portfolio_id}}",
+            "description": "Investor B asks for investor A's portfolio: same 404 as a missing one, no card loaded."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recalculate a foreign scenario",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/scenarios/{{foreign_scenario_id}}/calculate",
+            "description": "Investor B recalculates investor A's scenario: 404, nothing saved."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Expected HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lender pipeline of a foreign organization",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/dashboards/lender/application-pipeline?organizationId={{foreign_organization_id}}",
+            "description": "Lender who is not a member: same 404 as a missing organization."
           },
           "event": [
             {

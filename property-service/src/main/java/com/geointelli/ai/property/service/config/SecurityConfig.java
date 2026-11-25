@@ -61,6 +61,7 @@ public class SecurityConfig {
             requests.requestMatchers("/api/admin/**", "/api/ingestion/**", "/api/images/import/**",
                     "/api/properties/images/backfill/**").hasRole(ApplicationRoles.ADMIN);
             requests.requestMatchers(HttpMethod.POST, "/api/predictions/bulk",
+                    "/api/property-school-analysis/assign",
                     "/api/property-school-analysis/calculate-all",
                     "/api/property-school-analysis/*/calculate-property-score",
                     "/api/property-transportation-analysis/calculate-all",
@@ -82,7 +83,8 @@ public class SecurityConfig {
                     "/api/contact-requests/**", "/api/recommendations/**", "/api/dashboards/user/**")
                     .authenticated();
             requests.requestMatchers(HttpMethod.GET, "/api/properties/**", "/api/addresses/**", "/api/parcels/**",
-                    "/api/locations/**", "/api/map/**", "/api/images/property/*", "/api/predictions/bypropertyid")
+                    "/api/locations/**", "/api/map/**", "/api/images/property/*", "/api/predictions/bypropertyid",
+                    "/api/market-evidence")
                     .authenticated();
             requests.requestMatchers(HttpMethod.POST, "/api/properties/*/favorite", "/api/properties/compare",
                     "/api/calculations/mortgage", "/api/calculations/affordability",

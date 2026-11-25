@@ -1,22 +1,31 @@
 package com.geointelli.ai.property.service.controller;
 
+import com.geointelli.ai.property.service.dto.InvestorDashboardDTO;
+import com.geointelli.ai.property.service.dto.InvestorIncomeExpensesReturnsCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorOccupancyExposureCardDTO;
+import com.geointelli.ai.property.service.dto.InvestorOpportunitiesCardDTO;
 import com.geointelli.ai.property.service.dto.InvestorValueEquityDebtCardDTO;
+import com.geointelli.ai.property.service.service.InvestorDashboardService;
+import com.geointelli.ai.property.service.service.InvestorIncomeExpensesReturnsService;
 import com.geointelli.ai.property.service.service.InvestorOccupancyExposureService;
+import com.geointelli.ai.property.service.service.InvestorOpportunitiesService;
 import com.geointelli.ai.property.service.service.InvestorValueEquityDebtService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.YearMonth;
+
 /**
- * Investor dashboard (SCRUM-85). Each card has its own endpoint so it can be verified alone;
- * the composed {@code GET /api/dashboards/investor} is added by SCRUM-107.
+ * Investor dashboard (SCRUM-85). Each card has its own endpoint so it can be verified alone, and
+ * {@code GET /api/dashboards/investor} returns the four cards together (SCRUM-107).
  */
 @RestController
 @RequestMapping("/api/dashboards/investor")
@@ -28,6 +37,9 @@ public class InvestorDashboardController {
 
     private final InvestorOccupancyExposureService investorOccupancyExposureService;
     private final InvestorValueEquityDebtService investorValueEquityDebtService;
+    private final InvestorOpportunitiesService investorOpportunitiesService;
+    private final InvestorIncomeExpensesReturnsService investorIncomeExpensesReturnsService;
+    private final InvestorDashboardService investorDashboardService;
 
     /**
      * Occupancy and exposure card: occupancy counts, rental occupancy, state and county exposure and their coverage.
@@ -65,4 +77,85 @@ public class InvestorDashboardController {
             @RequestParam(required = false) Long portfolioId) {
         return ResponseEntity.ok(investorValueEquityDebtService.getCard(portfolioId));
     }
+
+    /**
+     * Opportunities card: a bounded list of the best stored opportunity scores (SCRUM-76) with their explanation
+     * and evidence coverage, flagged when the investor already holds the property.
+     *
+     * @param portfolioId optional portfolio of the current user whose holdings are flagged; all portfolios when omitted
+     * @param countyId    optional county filter passed to the shared opportunity service
+     * @param stateId     optional state filter passed to the shared opportunity service
+     * @param limit       number of items, 1 to 20; 5 when omitted
+     * @return 200 with the card (EMPTY with the shared service's reason when there is no candidate); 400 if a
+     *         parameter is invalid; 401 without a bearer token; 404 if the portfolio is missing or belongs to
+     *         another user
+     */
+    @GetMapping("/opportunities")
+    @Operation(summary = "Opportunities card of my investor dashboard", description = "First page of the shared "
+            + "opportunity browse (SCRUM-76) in score order, bounded by limit (default 5, max 20), optionally within "
+            + "countyId or stateId. Each item keeps the shared service's factors (ranking explanation) and "
+            + "coveragePercent; nothing is rescored. alreadyHeld marks properties held in my portfolios (or in "
+            + "portfolioId). Without candidates: status EMPTY, candidateStatus NOT_SCORED, "
+            + "NO_ELIGIBLE_OPPORTUNITIES or NO_MATCHES, and an empty list; nothing is invented.")
+    public ResponseEntity<InvestorOpportunitiesCardDTO> opportunities(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) Long countyId,
+            @RequestParam(required = false) Long stateId,
+            @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(investorOpportunitiesService.getCard(portfolioId, countyId, stateId, limit));
+    }
+
+    /**
+     * Income, expenses and returns card: recorded cash and contract-rent figures over the same whole months.
+     *
+     * @param portfolioId optional portfolio of the current user; all portfolios when omitted
+     * @param fromMonth   first month (yyyy-MM, included); give both months or none for the last 12 complete months
+     * @param toMonth     last month (yyyy-MM, included); must be before the current month
+     * @return 200 with the card (EMPTY without holdings); 400 if portfolioId is invalid, a month is not yyyy-MM,
+     *         only one month is given, fromMonth is after toMonth, toMonth is not a complete past month, fromMonth
+     *         is before 1900-01 or the period exceeds 120 months; 401 without a bearer token; 404 if the portfolio
+     *         is missing or belongs to another user
+     */
+    @GetMapping("/income-expenses-returns")
+    @Operation(summary = "Income, expenses and returns card of my investor dashboard", description = "actual = the "
+            + "SCRUM-74 financial summaries of all my portfolios, or of portfolioId, over whole months: recorded "
+            + "income, expenses and cash flow after ownership share, with the expense categories that have no "
+            + "record (missing costs, not 0). projected = the contract rent of the rented holdings for the same "
+            + "months, each holding only from its acquisition date and lease start to its lease end (a partly "
+            + "covered month in proportion to its days), and today's gross yield, from the SCRUM-64 investment "
+            + "calculation; projected NOI is not "
+            + "calculated because holdings store no operating costs. The sections are never added together. "
+            + "Without months: the last 12 complete months (UTC).")
+    public ResponseEntity<InvestorIncomeExpensesReturnsCardDTO> incomeExpensesReturns(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth) {
+        return ResponseEntity.ok(investorIncomeExpensesReturnsService.getCard(portfolioId, fromMonth, toMonth));
+    }
+
+    /**
+     * Composed investor dashboard: the four cards for the same portfolio scope in one response.
+     *
+     * @param portfolioId optional portfolio of the current user; all portfolios when omitted
+     * @param fromMonth   first month of the income card (yyyy-MM, included); give both months or none for the last
+     *                    12 complete months
+     * @param toMonth     last month of the income card (yyyy-MM, included); must be before the current month
+     * @return 200 with the dashboard (OK, EMPTY or PARTIAL); 400 if portfolioId or the period is invalid;
+     *         401 without a bearer token; 404 if the portfolio is missing or belongs to another user; 503 if none
+     *         of the four cards could be loaded
+     */
+    @GetMapping
+    @Operation(summary = "My investor dashboard", description = "The value-equity-debt, income-expenses-returns, "
+            + "occupancy-exposure and opportunities cards for all my portfolios, or for portfolioId. The scope and the "
+            + "period are checked first: an invalid value fails the whole request. Only the income card uses the "
+            + "period (whole months; the last 12 complete months by default). A card that cannot be loaded gets "
+            + "status ERROR and is listed in failedCards; the other cards are kept (status PARTIAL). When none of "
+            + "the four can be loaded: 503.")
+    public ResponseEntity<InvestorDashboardDTO> dashboard(
+            @RequestParam(required = false) Long portfolioId,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth) {
+        return ResponseEntity.ok(investorDashboardService.getDashboard(portfolioId, fromMonth, toMonth));
+    }
+
 }

@@ -37,4 +37,8 @@ public interface CountyRepository extends JpaRepository<County, Long> {
           AND (LOWER(s.code) = LOWER(:state) OR LOWER(s.name) = LOWER(:state))
         """)
     Optional<County> findByCountyAndState(@Param("county") String county, @Param("state") String state);
+
+    /** ID of the county with this five-digit FIPS code ({@code counties.fips_code}, migration V42). */
+    @Query(value = "SELECT id FROM counties WHERE fips_code = :fips", nativeQuery = true)
+    Optional<Long> findIdByFipsCode(@Param("fips") String fips);
 }
