@@ -76,12 +76,23 @@ class ContactRequestServiceImplTest {
             String url = connection.getMetaData().getURL();
             assertTrue(url.startsWith("jdbc:postgresql://127.0.0.1:") && url.endsWith("/contacts_test"));
             for (String table : List.of("contact_request_outbox","property_contact_requests","crm_activities",
-                    "crm_tasks","crm_transactions","crm_leads","crm_clients","properties","users"))
+                    "crm_tasks","crm_transactions","crm_leads","crm_clients","properties","realtor_license_verifications",
+                    "role_grant_events","users"))
                 jdbc.execute("DROP TABLE IF EXISTS " + table);
             jdbc.execute("""
                 CREATE TABLE users(id BIGINT PRIMARY KEY, keycloak_user_id VARCHAR(255) UNIQUE NOT NULL,
                     username VARCHAR(255), email VARCHAR(255), first_name VARCHAR(255), last_name VARCHAR(255),
-                    persona VARCHAR(40), created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())
+                    persona VARCHAR(40), onboarding_completed_at TIMESTAMPTZ,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())
+                """);
+            // SCRUM-204: a contactable realtor is an active realtor (verified license valid today, role not revoked)
+            jdbc.execute("""
+                CREATE TABLE realtor_license_verifications(id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+                    status VARCHAR(20) NOT NULL, license_expiration_date DATE)
+                """);
+            jdbc.execute("""
+                CREATE TABLE role_grant_events(id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+                    role VARCHAR(20) NOT NULL, action VARCHAR(10) NOT NULL)
                 """);
             jdbc.execute("CREATE TABLE properties(id BIGINT PRIMARY KEY)");
             ScriptUtils.executeSqlScript(connection,new ClassPathResource("db/migration/V21__add_clients_leads_and_activity.sql"));
@@ -93,10 +104,14 @@ class ContactRequestServiceImplTest {
 
     @BeforeEach void setup() {
         for (String table : List.of("contact_request_outbox","property_contact_requests","crm_activities",
-                "crm_tasks","crm_transactions","crm_leads","crm_clients","properties","users"))
+                "crm_tasks","crm_transactions","crm_leads","crm_clients","properties","realtor_license_verifications",
+                    "role_grant_events","users"))
             jdbc.update("DELETE FROM " + table);
         jdbc.update("INSERT INTO users(id,keycloak_user_id,persona,first_name) VALUES "
-            + "(7,'requester','USER','User'),(8,'professional','REALTOR','Realtor'),(9,'outsider','USER','Other')");
+            + "(7,'requester','USER','User'),(8,'professional','REALTOR','Realtor'),(9,'outsider','REALTOR','Other')");
+        // only 8 is an active realtor; 9 keeps the legacy REALTOR persona without a license, which no longer counts
+        jdbc.update("INSERT INTO realtor_license_verifications(user_id,status,license_expiration_date) VALUES "
+            + "(8,'VERIFIED',CURRENT_DATE + 30),(9,'PENDING_REVIEW',NULL)");
         jdbc.update("INSERT INTO properties VALUES(100)");
         User professional = new User(); professional.setId(8L);
         when(currentUser.getCurrentUserEntity()).thenReturn(professional);
@@ -180,8 +195,19 @@ class ContactRequestServiceImplTest {
         jdbc.update("DELETE FROM properties");
         status(HttpStatus.NOT_FOUND,()->contacts.submit(7L,request(),"one"));
         jdbc.update("INSERT INTO properties VALUES(100)");
-        jdbc.update("UPDATE users SET persona='USER' WHERE id=8");
+        jdbc.update("INSERT INTO role_grant_events(user_id,role,action) VALUES (8,'realtor','GRANT'),(8,'realtor','REVOKE')");
         status(HttpStatus.NOT_FOUND,()->contacts.submit(7L,request(),"one"));
+        jdbc.update("DELETE FROM role_grant_events");
+        jdbc.update("UPDATE realtor_license_verifications SET license_expiration_date=CURRENT_DATE - 1 WHERE user_id=8");
+        status(HttpStatus.NOT_FOUND,()->contacts.submit(7L,request(),"one"));
+        jdbc.update("UPDATE realtor_license_verifications SET license_expiration_date=NULL WHERE user_id=8");
+        jdbc.update("INSERT INTO role_grant_events(user_id,role,action) VALUES (8,'realtor','REVOKE'),(8,'realtor','GRANT')");
+        // 9 has the legacy REALTOR persona and a pending license only: not contactable
+        var toNine = new PropertyContactRequest(100L,9L,"Person","person@example.com",null,null,true,request().consentVersion());
+        status(HttpStatus.NOT_FOUND,()->contacts.submit(7L,toNine,"to-nine"));
+        assertTrue(contacts.submit(7L,request(),"granted-again").created());
+        jdbc.update("DELETE FROM contact_request_outbox"); jdbc.update("DELETE FROM property_contact_requests");
+        jdbc.update("DELETE FROM crm_activities"); jdbc.update("DELETE FROM crm_leads");
         assertEquals(0,count("property_contact_requests")); assertEquals(0,count("crm_leads"));
     }
 
@@ -217,6 +243,12 @@ class ContactRequestServiceImplTest {
         jdbc.update("UPDATE users SET first_name=NULL,last_name=NULL,username='private@example.com' WHERE id=8");
         assertEquals("Professional 8",contacts.professionals(0,20).content().get(0).name());
         assertThrows(IllegalArgumentException.class,()->contacts.professionals(0,101));
+        jdbc.update("UPDATE realtor_license_verifications SET status='VERIFIED',license_expiration_date=NULL WHERE user_id=9");
+        var both=contacts.professionals(0,1);
+        assertEquals(2,both.totalElements());
+        assertEquals(9L,both.content().get(0).id());
+        jdbc.update("INSERT INTO role_grant_events(user_id,role,action) VALUES (9,'realtor','REVOKE')");
+        assertEquals(1,contacts.professionals(0,20).totalElements());
     }
 
     @Test void historicalRequestCanReplayAfterPropertyDeletionAndLeadEdits() {

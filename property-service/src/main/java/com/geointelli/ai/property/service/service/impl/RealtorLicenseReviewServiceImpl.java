@@ -12,18 +12,21 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.geointelli.ai.property.service.config.ApplicationRoles;
 import com.geointelli.ai.property.service.dto.PageResponse;
 import com.geointelli.ai.property.service.dto.RealtorLicenseDecisionRequest;
 import com.geointelli.ai.property.service.dto.RealtorLicenseReviewDTO;
 import com.geointelli.ai.property.service.entity.RealtorLicenseDecisionMethod;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerification;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
+import com.geointelli.ai.property.service.entity.RoleGrantSource;
 import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.exception.RealtorLicenseNotFoundException;
 import com.geointelli.ai.property.service.repository.RealtorLicenseVerificationRepository;
 import com.geointelli.ai.property.service.repository.UserRepository;
 import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.RealtorLicenseReviewService;
+import com.geointelli.ai.property.service.service.RoleGrantService;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -44,6 +47,7 @@ public class RealtorLicenseReviewServiceImpl implements RealtorLicenseReviewServ
     private final RealtorLicenseVerificationRepository repository;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final RoleGrantService roleGrants;
 
     @Override
     @Transactional(readOnly = true)
@@ -113,6 +117,14 @@ public class RealtorLicenseReviewServiceImpl implements RealtorLicenseReviewServ
                 && expiration.isBefore(LocalDate.now(ZoneOffset.UTC))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The license expired on " + expiration
                 + " while the submission was pending; reject it so the applicant can submit the renewed license");
+        }
+        if (outcome == RealtorLicenseVerificationStatus.VERIFIED) {
+            // SCRUM-204: the realtor realm role is granted in Keycloak before the decision is written, so a Keycloak
+            // failure (503) leaves the submission PENDING_REVIEW and nothing changes
+            User applicant = userRepository.findById(row.getUserId())
+                .orElseThrow(() -> new IllegalStateException("Applicant " + row.getUserId() + " does not exist"));
+            roleGrants.grant(applicant, ApplicationRoles.REALTOR, RoleGrantSource.REALTOR_LICENSE, row.getId(),
+                "Realtor license verified (" + registrySource.trim() + ")", reviewerId);
         }
         row.setStatus(outcome);
         row.setDecisionMethod(RealtorLicenseDecisionMethod.MANUAL);

@@ -4,9 +4,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.Locale;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +26,6 @@ import com.geointelli.ai.property.service.dto.PropertyContactRequest;
 import com.geointelli.ai.property.service.entity.ContactRequestOutbox;
 import com.geointelli.ai.property.service.entity.PropertyContact;
 import com.geointelli.ai.property.service.entity.User;
-import com.geointelli.ai.property.service.entity.UserPersona;
 import com.geointelli.ai.property.service.repository.ContactRequestOutboxRepository;
 import com.geointelli.ai.property.service.repository.PropertyContactRepository;
 import com.geointelli.ai.property.service.repository.PropertyRepository;
@@ -65,7 +68,9 @@ public class ContactRequestServiceImpl implements ContactRequestService {
         User professional = value.professionalUserId().equals(first) ? firstUser : secondUser;
         existing = requests.findByRequesterUserIdAndRequestKey(requester, idempotencyKey).orElse(null);
         if (existing != null) return replay(existing, hash);
-        if (professional.getPersona() != UserPersona.REALTOR || professional.getKeycloakUserId() == null
+        // an active realtor: verified license valid today, realtor role not revoked (SCRUM-204, not the persona)
+        if (!users.isActiveRealtor(professional.getId(), LocalDate.now(ZoneOffset.UTC))
+                || professional.getKeycloakUserId() == null
                 || professional.getKeycloakUserId().isBlank()) throw professionalNotFound();
         if (!properties.existsById(value.propertyId()))
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Property not found");
@@ -113,7 +118,9 @@ public class ContactRequestServiceImpl implements ContactRequestService {
 
     @Override
     public CrmPageDTO<ContactProfessionalDTO> professionals(int page, int size) {
-        var result = users.findByPersona(UserPersona.REALTOR, validation.page(page, size));
+        Pageable requested = validation.page(page, size);
+        var result = users.findActiveRealtors(LocalDate.now(ZoneOffset.UTC),
+            PageRequest.of(requested.getPageNumber(), requested.getPageSize()));
         var content = result.map(user -> {
             String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
                 + (user.getLastName() == null ? "" : user.getLastName())).trim();

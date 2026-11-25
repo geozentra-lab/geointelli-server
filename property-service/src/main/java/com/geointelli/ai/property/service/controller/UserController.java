@@ -35,7 +35,7 @@ public class UserController {
         return ResponseEntity.ok(withLicenseStatus(userProfileService.updateProfile(request)));
     }
 
-    /** Adds the latest realtor license status (SCRUM-200); persona and verification stay separate fields. */
+    /** Adds the latest realtor license status (SCRUM-200); the account type is the realm role (SCRUM-204). */
     private UserDTO withLicenseStatus(UserDTO user) {
         user.setRealtorLicenseStatus(realtorLicenseVerificationService.latestStatusOf(user.getId()).orElse(null));
         return user;

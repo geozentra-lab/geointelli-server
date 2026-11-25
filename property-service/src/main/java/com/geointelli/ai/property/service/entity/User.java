@@ -36,9 +36,14 @@ public class User extends AuditableEntity {
 
     private String lastName;
 
+    /** Legacy column, no longer read: the account type is the user's Keycloak realm role (SCRUM-204). */
     @Enumerated(EnumType.STRING)
     @Column(length = 40)
     private UserPersona persona = UserPersona.USER;
+
+    /** When the user answered the onboarding page (SCRUM-204); null until then. */
+    @Column(name = "onboarding_completed_at")
+    private java.time.Instant onboardingCompletedAt;
     @OneToMany(
         mappedBy = "user",
         cascade = CascadeType.ALL,
