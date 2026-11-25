@@ -179,6 +179,95 @@ class IngestionLaunchServiceImplTest {
     }
 
     @Nested
+    @DisplayName("Starting market evidence jobs (SCRUM-131)")
+    class StartMarketEvidence {
+        private static final String MARKET_HEADER =
+            "source,evidence_type,geography_level,geography_code,period_start,period_end,sale_count\n";
+
+        private InputSource marketFile() {
+            return service.upload(new MockMultipartFile("file", "market_evidence.csv", "text/csv",
+                (MARKET_HEADER + "P,SALE,ZIP,33139,2026-10-01,2026-10-31,4\n").getBytes(StandardCharsets.UTF_8)),
+                "market_evidence.csv");
+        }
+
+        @BeforeEach
+        void tableApplied() {
+            when(scopes.hasTable(IngestionLaunchServiceImpl.MARKET_EVIDENCE_TABLE)).thenReturn(true);
+        }
+
+        @Test
+        @DisplayName("When no county is given, then the job is queued without one")
+        void whenNoCounty_thenQueuedWithoutCounty() {
+            service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, " ", List.of(marketFile()), "admin-1");
+
+            IngestionJob job = createdJob();
+            assertEquals(IngestionDataset.MARKET_EVIDENCE, job.getDataset());
+            assertNull(job.getCounty());
+            assertNull(job.getSourceCounty());
+            assertNull(job.getSourceState());
+            verify(countyService, never()).resolve(any(), any());
+        }
+
+        @Test
+        @DisplayName("When a county and its state are given, then the job is labelled with that county")
+        void whenCountyAndState_thenLabelled() {
+            service.startCsv(IngestionDataset.MARKET_EVIDENCE, "Baker", "FL", List.of(marketFile()), null);
+
+            assertSame(county, createdJob().getCounty());
+        }
+
+        @Test
+        @DisplayName("When only the county or only the state is given, then the request is rejected")
+        void whenHalfLabel_thenRejected() {
+            InputSource file = marketFile();
+            IllegalArgumentException countyOnly = assertThrows(IllegalArgumentException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, "Baker", null, List.of(file), null));
+            assertEquals("county and sourceState go together: give both or neither", countyOnly.getMessage());
+            assertThrows(IllegalArgumentException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, " ", "FL", List.of(file), null));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When another market evidence job is queued or running, then 409 DATASET_JOB_ACTIVE")
+        void whenJobActive_thenConflict() {
+            when(jobService.hasActive(IngestionDataset.MARKET_EVIDENCE)).thenReturn(true);
+            InputSource file = marketFile();
+
+            ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, null, List.of(file), null));
+
+            assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+            assertTrue(error.getReason().startsWith(IngestionLaunchServiceImpl.DATASET_JOB_ACTIVE));
+            verify(jobService, never()).create(any());
+        }
+
+        @Test
+        @DisplayName("When migration V48 is not applied, then 409 naming it, before anything is stored")
+        void whenTableMissing_thenConflict() throws Exception {
+            when(scopes.hasTable(IngestionLaunchServiceImpl.MARKET_EVIDENCE_TABLE)).thenReturn(false);
+            InputSource file = marketFile();
+
+            ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.startCsv(IngestionDataset.MARKET_EVIDENCE, null, null, List.of(file), null));
+
+            assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+            assertTrue(error.getReason().contains("apply migration V48 first"));
+            verify(store, never()).store(any(), any(), any(), anyLong());
+        }
+
+        @Test
+        @DisplayName("When another CSV dataset is started, then neither the table nor active jobs are checked")
+        void whenOtherDataset_thenNoMarketChecks() {
+            service.startCsv(IngestionDataset.ADDRESSES, "Baker", "FL",
+                List.of(addresses(ADDRESS_HEADER + "12,x,,Miami,,,Main,1,,St,,,33101\n")), null);
+
+            verify(scopes, never()).hasTable(any());
+            verify(jobService, never()).hasActive(any());
+        }
+    }
+
+    @Nested
     @DisplayName("Staged inputs")
     class Staged {
 

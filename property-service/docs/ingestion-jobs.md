@@ -15,6 +15,7 @@ under `/api/admin/import-jobs` need the Keycloak realm role `admin`.
 | `POST /api/ingestion/import/{dataset}` | One CSV file; `dataset` is `properties`, `addresses`, `assessments`, `buildings`, `lands`, `sales`, `taxes`, `extra-features`, `parcels`, `property-value-predictions` or `property-images` | `file` (multipart) or `stagedFile`; `county`, `sourceState` |
 | `POST /api/ingestion/import/owners` | `owners.csv` and `property_owner.csv` in one step | `ownersFile` + `propertyOwnersFile`, or `stagedOwnersFile` + `stagedPropertyOwnersFile`; `county`, `sourceState` |
 | `POST /api/ingestion/import/folder` | A whole county folder, in the usual order | `files` (several multipart parts named as the county files) or `stagedFolder`; `county`, `sourceState` |
+| `POST /api/admin/market-evidence/import` (admin) | Market evidence (SCRUM-131): one `market_evidence.csv`, dataset `MARKET_EVIDENCE`, job type `CSV_IMPORT`, batches and retries like the files above, one job at a time (`409 DATASET_JOB_ACTIVE`); the generic endpoint refuses it; see `market-evidence-ingestion.md` | `file` or `stagedFile`; optional `county` + `sourceState` together |
 | `POST /api/ingestion/run` | Properties for parcel folios that have none | — |
 | `POST /api/ingestion/ingestbuildings`, `ingest_extrafeatures`, `ingest_sales`, `ingestaddresses` | The dataset for properties that lack it | — |
 | `GET /api/ingestion/jobs/{id}` | The job with its first 1000 failed or skipped records | — |
