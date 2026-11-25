@@ -1,0 +1,368 @@
+{
+  "info": {
+    "_postman_id": "5cf60483-cda5-550a-8ccd-54acfa5d1d22",
+    "name": "SCRUM-127 Risk context",
+    "description": "Manual checks for GET /api/properties/id/{id}/location-intelligence/risk. No token needed. Variables: baseUrl and one property id per case: idSfha (parcel point inside a FEMA SFHA polygon), idZoneX (zone X), idOpenWater (sea tract, no NRI row), idNoPolygon (no FEMA polygon at the point), idNoParcel (property without parcel), idNoStorms (no located NOAA event within 10 km), idCountyNotLoaded (county whose flood map is not loaded), idInvalid (0), idUnknown. The defaults match the local verification of 2026-11-24 (docs/location-intelligence-risk.md); on another database pick ids with SELECTs on parcels, flood_zones and census_tracts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Inside a Special Flood Hazard Area (200, flood AVAILABLE)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idSfha}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idSfha}}",
+            "location-intelligence",
+            "risk"
+          ]
+        },
+        "description": "A property whose parcel point lies inside a FEMA AE/A/V polygon."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('top status AVAILABLE', () => pm.expect(r.status).to.eql('AVAILABLE'));",
+              "pm.test('flood zone with SFHA true', () => { pm.expect(r.flood.status).to.eql('AVAILABLE'); pm.expect(r.flood.zone).to.be.a('string'); pm.expect(r.flood.specialFloodHazardArea).to.eql(true); });",
+              "pm.test('hazards: tract, version and 8 ratings', () => { pm.expect(r.hazards.status).to.eql('AVAILABLE'); pm.expect(r.hazards.tractFips).to.have.lengthOf(11); pm.expect(r.hazards.ratings).to.have.lengthOf(8); pm.expect(r.hazards.ratings[0].code).to.eql('HRCN'); });",
+              "pm.test('storms: counts within radius and county', () => { pm.expect(r.storms.status).to.eql('AVAILABLE'); pm.expect(r.storms.radius).to.eql(10000); pm.expect(r.storms.fromYear).to.eql(1996); pm.expect(r.storms.eventsWithinRadius).to.be.above(0); pm.expect(r.storms.eventsInCounty).to.be.at.least(r.storms.eventsWithinRadius); });",
+              "pm.test('every block has source and dataAsOf', () => ['flood','hazards','storms'].forEach(k => { const b = pm.response.json()[k]; pm.expect(b.source, k).to.be.a('string'); if (b.status !== 'NO_COVERAGE') pm.expect(b.dataAsOf, k).to.match(/^\\d{4}-\\d{2}-\\d{2}$/); }));",
+              "pm.test('zone-recorded storm types listed as not counted, never as zero', () => { const s = pm.response.json().storms; pm.expect(s.notCountedEventTypes).to.be.an('array'); if (s.notCountedEventTypes.length) pm.expect(s.note).to.include('not evidence that they did not occur'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Zone X (200, SFHA false, no elevation)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idZoneX}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idZoneX}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const f = pm.response.json().flood;",
+              "pm.test('zone X outside the SFHA', () => { pm.expect(f.status).to.eql('AVAILABLE'); pm.expect(f.zone).to.eql('X'); pm.expect(f.specialFloodHazardArea).to.eql(false); });",
+              "pm.test('no base flood elevation invented', () => pm.expect(f.baseFloodElevationFt).to.be.null);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Open water (200, hazards NO_DATA)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idOpenWater}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idOpenWater}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('flood zone OPEN WATER', () => pm.expect(r.flood.zone).to.eql('OPEN WATER'));",
+              "pm.test('water tract has no NRI row and says so', () => { pm.expect(r.hazards.status).to.eql('NO_DATA'); pm.expect(r.hazards.overallRating).to.be.null; pm.expect(r.hazards.note).to.include('no NRI row'); });",
+              "pm.test('storms still evaluated', () => pm.expect(r.storms.status).to.be.oneOf(['AVAILABLE', 'NO_DATA']));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 No FEMA polygon at the point (200, flood NO_DATA)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idNoPolygon}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idNoPolygon}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('flood NO_DATA, not flood-free', () => { pm.expect(r.flood.status).to.eql('NO_DATA'); pm.expect(r.flood.zone).to.be.null; pm.expect(r.flood.specialFloodHazardArea).to.be.null; pm.expect(r.flood.note).to.include('not a flood-free determination'); });",
+              "pm.test('other blocks unaffected', () => { pm.expect(r.hazards.status).to.not.eql('UNAVAILABLE'); pm.expect(r.storms.status).to.eql('AVAILABLE'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Property without parcel (200, NO_COVERAGE)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idNoParcel}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idNoParcel}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('NO_COVERAGE with note and no blocks', () => { pm.expect(r.status).to.eql('NO_COVERAGE'); pm.expect(r.note).to.include('No parcel polygon'); pm.expect(r.flood).to.be.null; pm.expect(r.hazards).to.be.null; pm.expect(r.storms).to.be.null; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 No located storm within 10 km (200, storms NO_DATA)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idNoStorms}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idNoStorms}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const s = pm.response.json().storms;",
+              "pm.test('zero within radius, county count kept', () => { pm.expect(s.status).to.eql('NO_DATA'); pm.expect(s.eventsWithinRadius).to.eql(0); pm.expect(s.byType).to.be.empty; pm.expect(s.eventsInCounty).to.be.above(0); pm.expect(s.note).to.include('county-level events may still exist'); });",
+              "pm.test('zone-recorded storm types listed as not counted, never as zero', () => { const s = pm.response.json().storms; pm.expect(s.notCountedEventTypes).to.be.an('array'); if (s.notCountedEventTypes.length) pm.expect(s.note).to.include('not evidence that they did not occur'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 County flood map not loaded (200, flood NO_COVERAGE, others AVAILABLE)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idCountyNotLoaded}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idCountyNotLoaded}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('flood NO_COVERAGE names the gap', () => { pm.expect(r.flood.status).to.eql('NO_COVERAGE'); pm.expect(r.flood.dataAsOf).to.be.null; pm.expect(r.flood.note).to.include('not loaded'); });",
+              "pm.test('a missing source hides nothing', () => { pm.expect(r.status).to.eql('AVAILABLE'); pm.expect(r.hazards.status).to.eql('AVAILABLE'); pm.expect(r.storms.status).to.eql('AVAILABLE'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Invalid id (400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idInvalid}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idInvalid}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message', () => pm.expect(JSON.stringify(pm.response.json())).to.include('positive'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Unknown property (404)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idUnknown}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idUnknown}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));",
+              "pm.test('message names the id', () => pm.expect(JSON.stringify(pm.response.json())).to.include('No property found'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "idSfha",
+      "value": "1"
+    },
+    {
+      "key": "idZoneX",
+      "value": "2"
+    },
+    {
+      "key": "idOpenWater",
+      "value": "3"
+    },
+    {
+      "key": "idNoPolygon",
+      "value": "4"
+    },
+    {
+      "key": "idNoParcel",
+      "value": "5"
+    },
+    {
+      "key": "idNoStorms",
+      "value": "6"
+    },
+    {
+      "key": "idCountyNotLoaded",
+      "value": "7"
+    },
+    {
+      "key": "idInvalid",
+      "value": "0"
+    },
+    {
+      "key": "idUnknown",
+      "value": "999"
+    }
+  ]
+}
