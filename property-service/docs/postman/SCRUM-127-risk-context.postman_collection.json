@@ -321,6 +321,41 @@
           }
         }
       ]
+    },
+    {
+      "name": "10 No bearer token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "noauth"
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{idSfha}}/location-intelligence/risk",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{idSfha}}",
+            "location-intelligence",
+            "risk"
+          ]
+        }
+      }
     }
   ],
   "variable": [
@@ -363,6 +398,22 @@
     {
       "key": "idUnknown",
       "value": "999"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "Access token of any user (no realm role needed): SCRUM-94 baseline property reads"
     }
-  ]
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  }
 }

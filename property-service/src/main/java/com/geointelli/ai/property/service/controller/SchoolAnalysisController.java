@@ -64,8 +64,9 @@ public class SchoolAnalysisController {
     }
 
     @PostMapping("/calculate-all")
-    @Operation(summary = "Recalculate school scores", description = "version=1 (default) recalculates the v1 score of "
-            + "property_school_analysis now and returns 204, as before. version=2 (admin) queues a background job "
+    @Operation(summary = "Recalculate school scores (admin)", description = "Admin role required for every version. "
+            + "version=1 (default) recalculates the v1 score of "
+            + "property_school_analysis now and returns 204, as before. version=2 queues a background job "
             + "that computes school score v2 from the stored assignments, for one county (fips5) or every assigned "
             + "county, and returns 202 with the job; use it after a new FLDOE grades load.")
     public ResponseEntity<ImportJobDTO> calculateAndSaveAllScores(

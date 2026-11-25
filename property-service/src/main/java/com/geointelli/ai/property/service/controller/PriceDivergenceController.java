@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Property price divergence. Property data is public, like the valuation endpoint, so no token is required and no
- * ownership applies.
+ * Property price divergence. Any signed-in user may read it, like the valuation endpoint (SCRUM-94 baseline
+ * property reads: a bearer token, no role); property data is public, so no ownership applies.
  */
 @RestController
 @RequiredArgsConstructor
