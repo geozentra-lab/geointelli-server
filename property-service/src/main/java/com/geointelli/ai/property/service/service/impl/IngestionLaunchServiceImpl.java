@@ -43,6 +43,8 @@ import com.geointelli.ai.property.service.service.IngestionJobService;
 import com.geointelli.ai.property.service.service.IngestionJobWorkerService;
 import com.geointelli.ai.property.service.service.IngestionLaunchService;
 import com.geointelli.ai.property.service.service.ReferenceDataScopeService;
+import com.geointelli.ai.property.service.service.SchoolAssignmentService;
+import com.geointelli.ai.property.service.service.SchoolScoreV2Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,6 +64,9 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     private static final java.util.regex.Pattern REFERENCE_FILE_NAME = java.util.regex.Pattern.compile("[A-Za-z0-9_.-]{1,120}\\.csv");
     /** FLDOE school grades are Florida's: their load must be for this state. */
     static final String FLORIDA_FIPS = "12";
+    private static final java.util.regex.Pattern FIPS5 = java.util.regex.Pattern.compile("[0-9]{5}");
+    /** Tables of migration V49 that the school scoring jobs write. */
+    static final List<String> SCHOOL_SCORING_TABLES = List.of("property_school_assignments", "property_school_scores");
 
     private final IngestionJobService jobService;
     private final IngestionInputStore inputStore;
@@ -71,6 +76,8 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
     private final IngestionProperties properties;
     private final ObjectMapper objectMapper;
     private final ReferenceDataScopeService referenceScopes;
+    private final SchoolAssignmentService schoolAssignments;
+    private final SchoolScoreV2Service schoolScores;
 
     @Override
     public InputSource upload(MultipartFile file, String name) {
@@ -214,6 +221,53 @@ public class IngestionLaunchServiceImpl implements IngestionLaunchService {
         job.setCounty(countyService.miamiDade());
         job.setSourceCounty("Miami-Dade");
         job.setSourceState("FL");
+        job.setInputStorage("NONE");
+        job.setCreatedBy(createdBy);
+        return queue(job);
+    }
+
+    @Override
+    public ImportJobDTO startSchoolScoring(IngestionDataset dataset, String fips5, String createdBy) {
+        if (dataset == null || !dataset.isSchoolScoring()) {
+            throw new IllegalArgumentException("Not a school scoring dataset: " + dataset);
+        }
+        String scope = fips5 == null || fips5.isBlank() ? null : fips5.trim();
+        if (scope != null && !FIPS5.matcher(scope).matches()) {
+            throw new IllegalArgumentException("fips5 must be the 5-digit FIPS code of a county, for example 12086");
+        }
+        for (String table : SCHOOL_SCORING_TABLES) {
+            if (!referenceScopes.hasTable(table)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The table " + table + " is missing: apply migration V49 first");
+            }
+        }
+        boolean assign = dataset == IngestionDataset.SCHOOL_ASSIGNMENT;
+        List<SchoolAssignmentService.SchoolCounty> counties = assign
+            ? schoolAssignments.countiesToAssign(scope) : schoolScores.countiesToScore(scope);
+        if (counties.isEmpty()) {
+            if (scope != null && !schoolAssignments.countyExists(scope)) {
+                throw new IllegalArgumentException("No county has the FIPS code " + scope);
+            }
+            throw new ResponseStatusException(HttpStatus.CONFLICT, assign
+                ? (scope == null ? "No county has both attendance zones and properties"
+                    : "The county " + scope + " has no attendance zones or no properties")
+                    + ": load school-zones (SCRUM-202) first"
+                : (scope == null ? "No county has school assignments" : "The county " + scope + " has no school assignments")
+                    + ": run POST /api/property-school-analysis/assign first");
+        }
+        requireNoActiveJob(dataset);
+
+        IngestionJob job = new IngestionJob();
+        job.setId(UUID.randomUUID());
+        job.setJobType(ImportJobType.SCHOOL_SCORING);
+        job.setDataset(dataset);
+        job.setStatus(IngestionJobStatus.QUEUED);
+        if (scope != null) {
+            SchoolAssignmentService.SchoolCounty county = counties.get(0);
+            job.setCounty(countyService.resolve(county.name(), county.state()));
+            job.setSourceCounty(county.name());
+            job.setSourceState(county.state());
+        }
         job.setInputStorage("NONE");
         job.setCreatedBy(createdBy);
         return queue(job);
