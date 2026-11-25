@@ -1,0 +1,11 @@
+state_school_id,district_number,school_number,school_name,school_year,letter_grade,is_baseline,fldoe_school_type,is_charter,is_title_i,alternative_ese_center,grade3_ela_achievement,ela_achievement,ela_learning_gains,ela_lowest25_gains,math_achievement,math_learning_gains,math_lowest25_gains,science_achievement,social_studies_achievement,middle_school_acceleration,graduation_rate,college_career_acceleration,total_points_earned,total_components,pct_total_points,pct_tested,pct_econ_disadvantaged
+13-0041,13,41,CORAL WAY K-8 CENTER,2026,A,false,Combination,false,true,No,71,68,60,55,72,66,59,61,74,,,,686,10,69,99,58
+13-7071,13,7071,MIAMI SENIOR HIGH SCHOOL,2026,B,false,High,false,true,No,,60,55,50,58,52,48,62,70,,92,55,652,10,65,98,80
+13-0999,13,999,OLD TOWN ELEMENTARY,2026,C,false,Elementary,false,true,No,48,50,52,50,49,51,50,50,,,,,400,8,50,97,90
+01-0021,1,21,DUVAL ELEMENTARY SCHOOL,2026,A,false,Elementary,false,true,No,72,70,68,70,71,69,70,70,,,,,560,8,70,99,91
+13-0050,13,50,PALM ELEMENTARY,2026,B,false,Elementary,false,false,No,60,61,59,60,60,59,61,60,,,,,480,8,60,98,40
+13-0060,13,60,TINY ELEMENTARY,2026,I,false,Elementary,false,false,No,,,,,,,,,,,,,,,,,
+13-0041,13,41,CORAL WAY K-8 CENTER,2025,B,false,,,,,,,,,,,,,,,,,,,,,
+13-7071,13,7071,MIAMI SENIOR HIGH SCHOOL,2025,C,false,,,,,,,,,,,,,,,,,,,,,
+01-0021,1,21,DUVAL ELEMENTARY SCHOOL,2025,A,false,,,,,,,,,,,,,,,,,,,,,
+13-0041,13,41,CORAL WAY ELEMENTARY,2003,N,false,,,,,,,,,,,,,,,,,,,,,

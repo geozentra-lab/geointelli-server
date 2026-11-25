@@ -1,0 +1,9 @@
+fips5,county,level,zone_school_name,school_key,school_match,source_school_id,source,source_type,zone_year,method_fr,note_fr,geom_wkt
+12086,Miami-Dade,ELEMENTARY,Coral Way K-8,13-0041,state_school_id,13-0041,Miami-Dade County GIS,OFFICIAL,2026-2027,,,"MULTIPOLYGON(((-80.23 25.74,-80.21 25.74,-80.21 25.76,-80.23 25.76,-80.23 25.74)))"
+12086,Miami-Dade,ELEMENTARY,Coral Way K-8 (part 2),13-0041,state_school_id,13-0041,Miami-Dade County GIS,OFFICIAL,2026-2027,,partie séparée,"MULTIPOLYGON(((-80.25 25.74,-80.24 25.74,-80.24 25.75,-80.25 25.75,-80.25 25.74)))"
+12086,Miami-Dade,MIDDLE,New Middle (NCES),12086-NEW MIDDLE,name,,NCES SABS 2015-16,NCES_SABS_2015_16,2015-2016,,,"MULTIPOLYGON(((-80.26 25.72,-80.18 25.72,-80.18 25.80,-80.26 25.80,-80.26 25.72)))"
+12086,Miami-Dade,MIDDLE,New Middle (official),12086-NEW MIDDLE,name,,Miami-Dade County GIS,OFFICIAL,2026-2027,,,"MULTIPOLYGON(((-80.24 25.73,-80.20 25.73,-80.20 25.77,-80.24 25.77,-80.24 25.73)))"
+12086,Miami-Dade,HIGH,Miami Senior High,13-7071,state_school_id,13-7071,Miami-Dade County GIS,OFFICIAL,2026-2027,,polygone invalide (noeud papillon),"MULTIPOLYGON(((-80.25 25.73,-80.20 25.78,-80.20 25.73,-80.25 25.78,-80.25 25.73)))"
+12086,Miami-Dade,ELEMENTARY,Old Town Elementary,13-0999,state_school_id,13-0999,Miami-Dade County GIS,OFFICIAL,2026-2027,,école fermée,"MULTIPOLYGON(((-80.205 25.765,-80.195 25.765,-80.195 25.775,-80.205 25.775,-80.205 25.765)))"
+12086,Miami-Dade,ELEMENTARY,Shadowlawn Elementary,,none,,Miami-Dade County GIS,OFFICIAL,2026-2027,,pas dans la liste 2024-25,"MULTIPOLYGON(((-80.20 25.83,-80.19 25.83,-80.19 25.84,-80.20 25.84,-80.20 25.83)))"
+12001,Alachua,ELEMENTARY,Duval Elementary,01-0021,state_school_id,01-0021,Alachua County Public Schools,OFFICIAL,2026-2027,,,"MULTIPOLYGON(((-82.35 29.64,-82.30 29.64,-82.30 29.68,-82.35 29.68,-82.35 29.64)))"

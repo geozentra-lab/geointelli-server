@@ -21,11 +21,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geointelli.ai.property.service.enums.IngestionDataset;
 
 /**
- * Turns one source row of an environmental reference file (SCRUM-201) into the values of its staging table.
- * Every value the source does not give becomes null (UNKNOWN): an empty cell, FEMA's -9999/-99999 "none", the NRI
- * ratings "No Rating", "Insufficient Data" and "Not Applicable" (and the 0 score FEMA puts next to "No Rating"),
- * an unrecognised NOAA time zone. Nothing is turned into a default or a low rating. A malformed value rejects the
- * row with a message naming the column.
+ * Turns one source row of a reference file, environmental (SCRUM-201) or school (SCRUM-202), into the values of its
+ * staging table. Every value the source does not give becomes null (UNKNOWN): an empty cell, FEMA's -9999/-99999
+ * "none", the NRI ratings "No Rating", "Insufficient Data" and "Not Applicable" (and the 0 score FEMA puts next to
+ * "No Rating"), an unrecognised NOAA time zone, an FLDOE grade code without a letter (I, N, P). Nothing is turned into
+ * a default or a low rating. A malformed value rejects the row with a message naming the column.
  */
 public final class ReferenceDataRows {
 
@@ -71,8 +71,243 @@ public final class ReferenceDataRows {
             case CENSUS_TRACTS -> new CensusTracts(scope);
             case NRI_TRACTS -> new NriTracts(scope, header, json);
             case STORM_EVENTS -> new StormEvents(scope);
+            case SCHOOLS -> new Schools(scope);
+            case SCHOOL_GRADES -> new SchoolGrades();
+            case SCHOOL_ZONES -> new SchoolZones(scope);
             default -> throw new IllegalArgumentException("Not a reference dataset: " + dataset);
         };
+    }
+
+    /** School sectors, levels and types of schools.csv (SCRUM-202). */
+    public static final Set<String> SCHOOL_SECTORS = Set.of("PUBLIC", "CHARTER");
+    public static final Set<String> SCHOOL_LEVELS = Set.of("PRE_K", "ELEMENTARY", "MIDDLE", "HIGH", "COMBINATION");
+    public static final Set<String> SCHOOL_TYPES = Set.of("REGULAR", "ALTERNATIVE", "SPECIAL_EDUCATION", "CAREER_TECHNICAL");
+    /** Levels an attendance zone can serve. */
+    public static final Set<String> ZONE_LEVELS = Set.of("ELEMENTARY", "MIDDLE", "HIGH", "COMBINATION");
+    /** How far a zone can be trusted, best first. */
+    public static final List<String> ZONE_SOURCE_TYPES = List.of("OFFICIAL", "OFFICIAL_RECONSTRUCTED",
+        "COUNTY_WIDE_SINGLE_SCHOOL", "NCES_SABS_2015_16", "UNOFFICIAL");
+    public static final Set<String> ZONE_SCHOOL_MATCHES = Set.of("state_school_id", "nces_id", "name", "none");
+    /** FLDOE letter grades; the other FLDOE codes give no letter (letter_grade NULL). */
+    public static final Set<String> LETTER_GRADES = Set.of("A", "B", "C", "D", "F");
+    /** FLDOE codes without a letter: I incomplete (too few students tested), N (2000-2003) and P (2004-2007). */
+    public static final Set<String> UNGRADED_CODES = Set.of("I", "N", "P");
+    public static final Set<String> FLDOE_SCHOOL_TYPES = Set.of("Elementary", "Middle", "High", "Combination");
+    /** Grade components of the newest FLDOE year, percent of students 0-100. */
+    public static final List<String> GRADE_COMPONENTS = List.of("grade3_ela_achievement", "ela_achievement",
+        "ela_learning_gains", "ela_lowest25_gains", "math_achievement", "math_learning_gains", "math_lowest25_gains",
+        "science_achievement", "social_studies_achievement", "middle_school_acceleration", "graduation_rate",
+        "college_career_acceleration");
+
+    private static final Pattern STATE_SCHOOL_ID = Pattern.compile("(\\d{2})-(\\d{4})");
+    private static final Pattern ZIP = Pattern.compile("\\d{5}(-\\d{4})?");
+
+    /** School locations (schools.csv): every row must be a county of the state of the import. */
+    static final class Schools implements RowMapper {
+        private static final List<Column> COLUMNS = columnList("source_row", "integer", "school_key", "text",
+            "state_school_id", "text", "nces_id", "text", "fips5", "text", "county", "text", "name", "text",
+            "sector", "text", "level", "text", "school_type", "text", "lowest_grade", "smallint",
+            "highest_grade", "smallint", "is_virtual", "boolean", "is_active", "boolean", "enrollment", "integer",
+            "free_reduced_lunch_pct", "numeric", "address", "text", "city", "text", "zip", "text",
+            "latitude", "numeric", "longitude", "numeric", "in_schools_zip", "boolean", "status_note", "text");
+        private final String stateFips;
+
+        Schools(String stateFips) { this.stateFips = stateFips; }
+
+        @Override public List<Column> columns() { return COLUMNS; }
+
+        @Override
+        public List<String> map(CSVRecord r) {
+            String key = required(r.get("school_key"), "school_key");
+            String lowest = gradeLevel(r.get("lowest_grade"), "lowest_grade");
+            String highest = gradeLevel(r.get("highest_grade"), "highest_grade");
+            if (lowest != null && highest != null && Integer.parseInt(lowest) > Integer.parseInt(highest)) {
+                throw new IllegalArgumentException("lowest_grade " + lowest + " is above highest_grade " + highest);
+            }
+            String enrollment = integer(r.get("enrollment"), "enrollment");
+            if (enrollment != null && Long.parseLong(enrollment) < 0) {
+                throw new IllegalArgumentException("enrollment is negative: " + enrollment);
+            }
+            String zip = text(r.get("zip"));
+            if (zip != null && !ZIP.matcher(zip).matches()) throw new IllegalArgumentException("zip is not a ZIP code: " + zip);
+            String latitude = coordinate(r.get("latitude"), 90, "latitude");
+            String longitude = coordinate(r.get("longitude"), 180, "longitude");
+            if (latitude == null || longitude == null) throw new IllegalArgumentException("latitude and longitude are required");
+            return values(r.getRecordNumber(), key, stateSchoolId(r.get("state_school_id"), false),
+                text(r.get("nces_id")), countyFips(r.get("fips5"), stateFips), text(r.get("county")),
+                required(r.get("name"), "name"), oneOf(r.get("sector"), SCHOOL_SECTORS, "sector"),
+                oneOf(r.get("level"), SCHOOL_LEVELS, "level"), oneOf(r.get("school_type"), SCHOOL_TYPES, "school_type"),
+                lowest, highest, bool(r.get("is_virtual"), "is_virtual"), required(bool(r.get("is_active"), "is_active"), "is_active"),
+                enrollment, percent(r.get("free_reduced_lunch_pct"), "free_reduced_lunch_pct"), text(r.get("address")),
+                text(r.get("city")), zip, latitude, longitude, bool(r.get("in_schools_zip"), "in_schools_zip"),
+                text(r.get("status_note")));
+        }
+    }
+
+    /**
+     * FLDOE school grades (school_grades.csv), statewide. letter_grade keeps A-F only: I (incomplete), N and P are
+     * kept in fldoe_grade and give no letter, so they never read as a low grade.
+     */
+    static final class SchoolGrades implements RowMapper {
+        private static final List<Column> COLUMNS;
+
+        static {
+            List<String> pairs = new ArrayList<>(List.of("source_row", "integer", "state_school_id", "text",
+                "school_year", "smallint", "district_number", "smallint", "school_number", "smallint",
+                "school_name", "text", "letter_grade", "text", "fldoe_grade", "text", "is_baseline", "boolean",
+                "fldoe_school_type", "text", "is_charter", "boolean", "is_title_i", "boolean",
+                "alternative_ese_center", "text"));
+            for (String component : GRADE_COMPONENTS) pairs.addAll(List.of(component, "numeric"));
+            pairs.addAll(List.of("total_points_earned", "numeric", "total_components", "smallint",
+                "pct_total_points", "numeric", "pct_tested", "numeric", "pct_econ_disadvantaged", "numeric"));
+            COLUMNS = columnList(pairs.toArray(String[]::new));
+        }
+
+        @Override public List<Column> columns() { return COLUMNS; }
+
+        @Override
+        public List<String> map(CSVRecord r) {
+            String id = stateSchoolId(r.get("state_school_id"), true);
+            String district = integer(r.get("district_number"), "district_number");
+            String school = integer(r.get("school_number"), "school_number");
+            if (district == null || school == null
+                    || !id.equals(String.format("%02d-%04d", Long.parseLong(district), Long.parseLong(school)))) {
+                throw new IllegalArgumentException("district_number " + district + " and school_number " + school
+                    + " do not match state_school_id " + id);
+            }
+            String year = integer(r.get("school_year"), "school_year");
+            if (year == null || Long.parseLong(year) < 1990 || Long.parseLong(year) > 2100) {
+                throw new IllegalArgumentException("school_year must be a year, not " + year);
+            }
+            String code = text(r.get("letter_grade"));
+            if (code != null) code = code.toUpperCase(Locale.ROOT);
+            if (code != null && !LETTER_GRADES.contains(code) && !UNGRADED_CODES.contains(code)) {
+                throw new IllegalArgumentException("letter_grade must be A-F, I, N or P, not " + code);
+            }
+            String letter = code != null && LETTER_GRADES.contains(code) ? code : null;
+            String components = integer(r.get("total_components"), "total_components");
+            if (components != null && Long.parseLong(components) < 0) {
+                throw new IllegalArgumentException("total_components is negative: " + components);
+            }
+            String earned = number(r.get("total_points_earned"), "total_points_earned");
+            if (earned != null && new BigDecimal(earned).signum() < 0) {
+                throw new IllegalArgumentException("total_points_earned is negative: " + earned);
+            }
+            List<String> values = new ArrayList<>(List.of(Long.toString(r.getRecordNumber()), id, year, district, school));
+            values.add(text(r.get("school_name")));
+            values.add(letter);
+            values.add(code);
+            values.add(required(bool(r.get("is_baseline"), "is_baseline"), "is_baseline"));
+            values.add(oneOf(r.get("fldoe_school_type"), FLDOE_SCHOOL_TYPES, "fldoe_school_type"));
+            values.add(bool(r.get("is_charter"), "is_charter"));
+            values.add(bool(r.get("is_title_i"), "is_title_i"));
+            values.add(text(r.get("alternative_ese_center")));
+            for (String component : GRADE_COMPONENTS) values.add(percent(r.get(component), component));
+            values.add(earned);
+            values.add(components);
+            values.add(percent(r.get("pct_total_points"), "pct_total_points"));
+            values.add(percent(r.get("pct_tested"), "pct_tested"));
+            values.add(percent(r.get("pct_econ_disadvantaged"), "pct_econ_disadvantaged"));
+            return values;
+        }
+    }
+
+    /** School attendance zones (school_zones.csv): every row must be a county of the state of the import. */
+    static final class SchoolZones implements RowMapper {
+        private static final List<Column> COLUMNS = columnList("source_row", "integer", "fips5", "text",
+            "county", "text", "level", "text", "zone_school_name", "text", "school_key", "text",
+            "school_match", "text", "source_school_id", "text", "source", "text", "source_type", "text",
+            "zone_year", "text", "method_fr", "text", "note_fr", "text", "geom_wkt", "text");
+        private final String stateFips;
+
+        SchoolZones(String stateFips) { this.stateFips = stateFips; }
+
+        @Override public List<Column> columns() { return COLUMNS; }
+
+        @Override
+        public List<String> map(CSVRecord r) {
+            String level = text(r.get("level"));
+            if (level == null || !ZONE_LEVELS.contains(level)) {
+                throw new IllegalArgumentException("level must be ELEMENTARY, MIDDLE, HIGH or COMBINATION, not " + level);
+            }
+            String sourceType = text(r.get("source_type"));
+            if (sourceType == null || !ZONE_SOURCE_TYPES.contains(sourceType)) {
+                throw new IllegalArgumentException("source_type must be one of " + ZONE_SOURCE_TYPES + ", not " + sourceType);
+            }
+            return values(r.getRecordNumber(), countyFips(r.get("fips5"), stateFips), text(r.get("county")), level,
+                text(r.get("zone_school_name")), text(r.get("school_key")),
+                oneOf(r.get("school_match"), ZONE_SCHOOL_MATCHES, "school_match"), text(r.get("source_school_id")),
+                text(r.get("source")), sourceType, text(r.get("zone_year")), text(r.get("method_fr")),
+                text(r.get("note_fr")), polygonWkt(r.get("geom_wkt"), true));
+        }
+    }
+
+    /** A required value; empty rejects the row. */
+    static String required(String value, String column) {
+        String text = text(value);
+        if (text == null) throw new IllegalArgumentException(column + " is required");
+        return text;
+    }
+
+    /** A value of a fixed set (case kept as published); empty is unknown. */
+    static String oneOf(String value, Set<String> allowed, String column) {
+        String text = text(value);
+        if (text == null) return null;
+        if (!allowed.contains(text)) throw new IllegalArgumentException(column + " must be one of " + allowed + ", not " + text);
+        return text;
+    }
+
+    /** true/false; empty is unknown. */
+    static String bool(String value, String column) {
+        String text = text(value);
+        if (text == null) return null;
+        return switch (text.toLowerCase(Locale.ROOT)) {
+            case "true" -> "true";
+            case "false" -> "false";
+            default -> throw new IllegalArgumentException(column + " must be true or false, not " + text);
+        };
+    }
+
+    /** A percent from 0 to 100; empty is unknown. */
+    static String percent(String value, String column) {
+        String text = number(value, column);
+        if (text == null) return null;
+        BigDecimal number = new BigDecimal(text);
+        if (number.signum() < 0 || number.compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new IllegalArgumentException(column + " must be between 0 and 100, not " + text);
+        }
+        return text;
+    }
+
+    /** A grade level: -1 = Pre-K, 0 = kindergarten, 1-12; empty is unknown. */
+    static String gradeLevel(String value, String column) {
+        String text = integer(value, column);
+        if (text == null) return null;
+        long grade = Long.parseLong(text);
+        if (grade < -1 || grade > 12) throw new IllegalArgumentException(column + " must be -1 (Pre-K) to 12, not " + text);
+        return text;
+    }
+
+    /** FLDOE id DD-SSSS (district + school number). */
+    static String stateSchoolId(String value, boolean required) {
+        String text = text(value);
+        if (text == null) {
+            if (required) throw new IllegalArgumentException("state_school_id is required");
+            return null;
+        }
+        if (!STATE_SCHOOL_ID.matcher(text).matches()) {
+            throw new IllegalArgumentException("state_school_id must be DD-SSSS, not " + text);
+        }
+        return text;
+    }
+
+    /** A 5-digit county FIPS of the state of the import. */
+    static String countyFips(String value, String stateFips) {
+        String text = text(value);
+        if (text == null || !text.matches("\\d{5}") || !text.startsWith(stateFips)) {
+            throw new IllegalArgumentException("fips5 " + text + " is not a county of the state " + stateFips);
+        }
+        return text;
     }
 
     private static List<Column> columnList(String... nameTypePairs) {
