@@ -93,7 +93,8 @@ Every error uses the service's standard body `{ "status", "error", "message", "t
 | `limit` < 1 or > 20 | `400` | `limit must be between 1 and 20, got 0` |
 | `limit` not a number | `400` | `limit: invalid value` |
 
-`limit` is validated before the user is resolved, so a bad `limit` returns 400 even without a token.
+Without a token the request is refused with 401 before `limit` is read (SCRUM-94); with a token, a bad `limit`
+returns 400 before the user is resolved.
 
 ## Verifying locally
 

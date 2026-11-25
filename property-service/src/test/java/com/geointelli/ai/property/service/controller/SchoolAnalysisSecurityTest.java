@@ -36,7 +36,7 @@ import com.geointelli.ai.property.service.service.SchoolAnalysisService;
 
 /**
  * The school assignment and school score v2 jobs (SCRUM-203) need the admin realm role, behind the real security
- * filter chain; calculate-all without a version (v1) stays open as before.
+ * filter chain. Since SCRUM-94 calculate-all is an admin route for every version, v1 included.
  */
 @WebMvcTest(SchoolAnalysisController.class)
 @Import({SecurityConfig.class, AuthoritiesConverter.class})
@@ -112,10 +112,17 @@ class SchoolAnalysisSecurityTest {
     }
 
     @Test
-    @DisplayName("When calculate-all is called without a version or with version 1, then the v1 score runs as before")
-    void scoreV1StaysOpen() throws Exception {
-        mockMvc.perform(post(CALCULATE_ALL)).andExpect(status().isNoContent());
-        mockMvc.perform(post(CALCULATE_ALL).param("version", "1").param("recalculateExisting", "true"))
+    @DisplayName("When calculate-all v1 is called without the admin role, then 401 or 403; an admin runs it as before")
+    void scoreV1NeedsAdmin() throws Exception {
+        mockMvc.perform(post(CALCULATE_ALL)).andExpect(status().isUnauthorized());
+        mockMvc.perform(post(CALCULATE_ALL).param("version", "1").header("Authorization", "Bearer user-token"))
+                .andExpect(status().isForbidden());
+        verify(schoolAnalysisService, never()).calculateAndSaveAllScores(anyBoolean());
+
+        mockMvc.perform(post(CALCULATE_ALL).header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(post(CALCULATE_ALL).param("version", "1").param("recalculateExisting", "true")
+                        .header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isNoContent());
         verify(schoolAnalysisService).calculateAndSaveAllScores(false);
         verify(schoolAnalysisService).calculateAndSaveAllScores(true);
@@ -127,7 +134,8 @@ class SchoolAnalysisSecurityTest {
     void invalidCombinations() throws Exception {
         mockMvc.perform(post(CALCULATE_ALL).param("version", "2").param("recalculateExisting", "true")
                 .header("Authorization", "Bearer admin-token")).andExpect(status().isBadRequest());
-        mockMvc.perform(post(CALCULATE_ALL).param("fips5", "12086")).andExpect(status().isBadRequest());
+        mockMvc.perform(post(CALCULATE_ALL).param("fips5", "12086").header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isBadRequest());
         mockMvc.perform(post(CALCULATE_ALL).param("version", "3").header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isBadRequest());
         verify(launchService, never()).startSchoolScoring(eq(IngestionDataset.SCHOOL_SCORE_V2), any(), any());

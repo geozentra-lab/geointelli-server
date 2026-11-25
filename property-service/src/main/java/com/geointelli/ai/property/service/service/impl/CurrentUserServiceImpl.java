@@ -32,11 +32,16 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         return getCurrentJwt().getSubject();
     }
 
+    /**
+     * Requires an authenticated JWT with a subject before resolving any owned data.
+     */
     public Jwt getCurrentJwt() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof Jwt jwt)
+                || jwt.getSubject() == null || jwt.getSubject().isBlank()) {
             throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED, "A bearer token is required to identify the current user");
+                    HttpStatus.UNAUTHORIZED, "A bearer token is required to identify the current user");
         }
         return jwt;
     }
@@ -49,5 +54,5 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         return userRepository.findByKeycloakUserId(keycloakId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
-    
+
 }

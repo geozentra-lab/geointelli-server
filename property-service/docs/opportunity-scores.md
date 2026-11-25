@@ -67,8 +67,9 @@ The scales are fixed, documented ranges, not fitted to the current data. For ref
 
 ## `GET /api/properties/id/{id}/opportunity-score` (SCRUM-167)
 
-Scores the property **now** from its current stored valuation, with the rules above. Public, like
-`GET /api/properties/id/{id}/valuation`; no token is needed and no ownership applies (property data is public).
+Scores the property **now** from its current stored valuation, with the rules above. A bearer token
+with the `investor` or `admin` realm role is required (SCRUM-94). Scores have no user ownership.
+The valuation endpoint remains available to every authenticated account.
 
 | Response | When |
 |---|---|
@@ -129,8 +130,7 @@ seven factors unavailable, `coveragePercent` 0.00 and `valuation: null`.
 
 ## `GET /api/opportunities` (SCRUM-168)
 
-Pages through the **stored** scores of the current `scoreVersion`, only `status = SCORED`. Public; no token is
-needed and no ownership applies.
+Pages through the **stored** scores of the current `scoreVersion`, only `status = SCORED`. Requires a bearer token with the `investor` or `admin` realm role (SCRUM-94). No user ownership applies.
 
 | Parameter | Type | Default | Rule |
 |---|---|---|---|
@@ -144,7 +144,7 @@ needed and no ownership applies.
 
 Every order ends with the property ID, so pages never overlap; the non-score orders use the score as the second key.
 
-Paging is limited to the first 10,000 results because the endpoint is public and an offset costs a scan of every
+Paging is limited to the first 10,000 results because an offset costs a scan of every
 skipped row (8 ms at offset 10,000, 4.3 s at 400,000 on the local data). `totalElements` still reports the full
 count, and the filters reach the rest.
 
@@ -276,7 +276,7 @@ Ownership: none applies — scores are derived from public property data and con
 | `service/OpportunityScoreRefreshService.java`, `impl/OpportunityScoreRefreshServiceImpl.java` | batch scoring (incremental or full), one run at a time |
 | `repository/OpportunityScoreJdbcRepository.java` | the evidence query (one for both paths), batch upsert, orphan removal |
 | `repository/PropertyOpportunityScoreRepository.java`, `entity/PropertyOpportunityScore.java` | read-only browse query and property details |
-| `controller/OpportunityController.java` | the two public endpoints |
+| `controller/OpportunityController.java` | the two investor/admin endpoints |
 | `controller/AdminOpportunityScoreController.java` | `POST /api/admin/opportunity-scores/refresh` |
 | `config/OpportunityScoreRefreshScheduler.java` | optional scheduled incremental refresh |
 | `dto/Opportunity*.java` | request and response records |

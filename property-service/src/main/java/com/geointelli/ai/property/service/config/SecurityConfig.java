@@ -1,7 +1,5 @@
 package com.geointelli.ai.property.service.config;
 
-import java.util.Arrays;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -12,35 +10,34 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.util.matcher.AndRequestMatcher;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.config.Customizer;
+import jakarta.servlet.DispatcherType;
+import io.swagger.v3.oas.annotations.OpenAPIDefinition;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
 
-import jakarta.servlet.http.HttpServletRequest;
-
+/**
+ * SCRUM-94 route matrix. Valid JWTs inherit baseline user access. Realm roles
+ * grant
+ * investment, realtor CRM, lender and admin features; private services retain
+ * their ownership checks. Subscription restrictions are not configured.
+ */
 @Configuration
 @EnableWebSecurity
+@OpenAPIDefinition(security = @SecurityRequirement(name = "bearerAuth"))
+@SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 public class SecurityConfig {
-
-    static final String SCHOOL_ASSIGN_PATH = "/api/property-school-analysis/assign";
-    static final String SCHOOL_CALCULATE_ALL_PATH = "/api/property-school-analysis/calculate-all";
-
-    /**
-     * Whether a calculate-all request names a score version other than exactly "1" (any value, also an invalid one,
-     * so a spelling the controller might still read as 2 is never let through without the admin role).
-     */
-    static boolean requestsScoreVersionOtherThanOne(HttpServletRequest request) {
-        String[] versions = request.getParameterValues("version");
-        return versions != null && Arrays.stream(versions).anyMatch(version -> !"1".equals(version));
-    }
 
     @Bean
     SecurityFilterChain resourceServerSecurityFilterChain(
-        HttpSecurity http,
-        Converter<Jwt, AbstractAuthenticationToken> authenticationConverter) throws Exception {
+            HttpSecurity http,
+            Converter<Jwt, AbstractAuthenticationToken> authenticationConverter) throws Exception {
         http.oauth2ResourceServer(resourceServer -> {
             resourceServer.jwt(jwtDecoder -> {
-            jwtDecoder.jwtAuthenticationConverter(authenticationConverter);
+                jwtDecoder.jwtAuthenticationConverter(authenticationConverter);
             });
         });
 
@@ -50,19 +47,51 @@ public class SecurityConfig {
             csrf.disable();
         });
 
+        // Uses the existing CorsConfig, including PATCH preflights, before
+        // authentication.
+        http.cors(Customizer.withDefaults());
+
         http.authorizeHttpRequests(requests -> {
-            // requests.requestMatchers("/api/properties/**", "/api/users/**").hasRole("USER");
-            // Market evidence (SCRUM-131) is licensed provider data: any signed-in user may read it, not the public
-            requests.requestMatchers("/api/market-evidence/**").authenticated();
-            // Admin endpoints need the Keycloak realm role "admin" (ROLE_admin): 401 without a token, 403 without the role
-            requests.requestMatchers("/api/admin/**").hasRole("admin");
-            // School assignment and school score v2 jobs (SCRUM-203) rewrite the school data of whole counties;
-            // calculate-all without a version (or version=1) keeps the open v1 behaviour
-            requests.requestMatchers(HttpMethod.POST, SCHOOL_ASSIGN_PATH).hasRole("admin");
-            requests.requestMatchers(new AndRequestMatcher(
-                AntPathRequestMatcher.antMatcher(HttpMethod.POST, SCHOOL_CALCULATE_ALL_PATH),
-                SecurityConfig::requestsScoreVersionOtherThanOne)).hasRole("admin");
-            requests.anyRequest().permitAll();
+            // Preserve the original status on internal servlet error dispatches.
+            requests.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll();
+            requests.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
+                    "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll();
+
+            // Operational routes must precede the general property-read rules.
+            requests.requestMatchers("/api/admin/**", "/api/ingestion/**", "/api/images/import/**",
+                    "/api/properties/images/backfill/**").hasRole(ApplicationRoles.ADMIN);
+            requests.requestMatchers(HttpMethod.POST, "/api/predictions/bulk",
+                    "/api/property-school-analysis/assign",
+                    "/api/property-school-analysis/calculate-all",
+                    "/api/property-school-analysis/*/calculate-property-score",
+                    "/api/property-transportation-analysis/calculate-all",
+                    "/api/property-transportation-analysis/*/calculate-property-score")
+                    .hasRole(ApplicationRoles.ADMIN);
+
+            requests.requestMatchers("/api/clients/**", "/api/leads/**", "/api/tasks/**", "/api/transactions/**",
+                    "/api/crm/**", "/api/dashboards/realtor/**")
+                    .hasAnyRole(ApplicationRoles.REALTOR, ApplicationRoles.ADMIN);
+            requests.requestMatchers("/api/lender/**", "/api/dashboards/lender/**")
+                    .hasAnyRole(ApplicationRoles.LENDER, ApplicationRoles.ADMIN);
+            requests.requestMatchers("/api/portfolios/**", "/api/scenarios/**", "/api/dashboards/investor/**",
+                    "/api/opportunities", "/api/properties/id/*/opportunity-score", "/api/calculations/investment")
+                    .hasAnyRole(ApplicationRoles.INVESTOR, ApplicationRoles.ADMIN);
+
+            // Every authenticated persona inherits normal-user features; no explicit user
+            // role is needed.
+            requests.requestMatchers("/api/users/me/**", "/api/saved-searches/**", "/api/alerts/**",
+                    "/api/contact-requests/**", "/api/recommendations/**", "/api/dashboards/user/**")
+                    .authenticated();
+            requests.requestMatchers(HttpMethod.GET, "/api/properties/**", "/api/addresses/**", "/api/parcels/**",
+                    "/api/locations/**", "/api/map/**", "/api/images/property/*", "/api/predictions/bypropertyid",
+                    "/api/market-evidence")
+                    .authenticated();
+            requests.requestMatchers(HttpMethod.POST, "/api/properties/*/favorite", "/api/properties/compare",
+                    "/api/calculations/mortgage", "/api/calculations/affordability",
+                    "/api/property-school-analysis/bulk", "/api/property-transportation-analysis/bulk")
+                    .authenticated();
+            requests.requestMatchers(HttpMethod.DELETE, "/api/properties/*/favorite").authenticated();
+            requests.anyRequest().denyAll();
         });
 
         return http.build();
@@ -72,6 +101,8 @@ public class SecurityConfig {
     JwtAuthenticationConverter authenticationConverter(AuthoritiesConverter authoritiesConverter) {
         var authenticationConverter = new JwtAuthenticationConverter();
         authenticationConverter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            if (jwt.getSubject() == null || jwt.getSubject().isBlank())
+                throw new InvalidBearerTokenException("The bearer token must identify a user");
             return authoritiesConverter.convert(jwt.getClaims());
         });
         return authenticationConverter;
