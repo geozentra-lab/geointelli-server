@@ -119,7 +119,7 @@ class SecurityPolicyTest {
     @ParameterizedTest
     @CsvSource({ "POST,/api/ingestion/run", "GET,/api/ingestion/jobs/1", "POST,/api/images/import/csv",
             "POST,/api/properties/images/backfill", "GET,/api/properties/images/backfill/jobs/1",
-            "POST,/api/predictions/bulk", "POST,/api/property-school-analysis/calculate-all",
+            "POST,/api/property-school-analysis/calculate-all",
             "POST,/api/property-school-analysis/7/calculate-property-score",
             "POST,/api/property-transportation-analysis/calculate-all",
             "POST,/api/property-transportation-analysis/7/calculate-property-score",
@@ -157,6 +157,10 @@ class SecurityPolicyTest {
                 .andExpect(status().isOk());
         mvc.perform(post("/api/property-transportation-analysis/bulk").header("Authorization", "Bearer user"))
                 .andExpect(status().isOk());
+        // reads stored predictions only, like GET /api/predictions/bypropertyid
+        mvc.perform(post("/api/predictions/bulk").header("Authorization", "Bearer user"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/predictions/bulk")).andExpect(status().isUnauthorized());
         mvc.perform(delete("/api/properties/id/7").header("Authorization", "Bearer admin"))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/new-unclassified-feature").header("Authorization", "Bearer admin"))

@@ -60,7 +60,7 @@ public class SecurityConfig {
             // Operational routes must precede the general property-read rules.
             requests.requestMatchers("/api/admin/**", "/api/ingestion/**", "/api/images/import/**",
                     "/api/properties/images/backfill/**").hasRole(ApplicationRoles.ADMIN);
-            requests.requestMatchers(HttpMethod.POST, "/api/predictions/bulk",
+            requests.requestMatchers(HttpMethod.POST,
                     "/api/property-school-analysis/assign",
                     "/api/property-school-analysis/calculate-all",
                     "/api/property-school-analysis/*/calculate-property-score",
@@ -88,7 +88,8 @@ public class SecurityConfig {
                     .authenticated();
             requests.requestMatchers(HttpMethod.POST, "/api/properties/*/favorite", "/api/properties/compare",
                     "/api/calculations/mortgage", "/api/calculations/affordability",
-                    "/api/property-school-analysis/bulk", "/api/property-transportation-analysis/bulk")
+                    "/api/property-school-analysis/bulk", "/api/property-transportation-analysis/bulk",
+                    "/api/predictions/bulk")
                     .authenticated();
             requests.requestMatchers(HttpMethod.DELETE, "/api/properties/*/favorite").authenticated();
             requests.anyRequest().denyAll();
