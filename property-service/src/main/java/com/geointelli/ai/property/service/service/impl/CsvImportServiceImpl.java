@@ -59,6 +59,30 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @AllArgsConstructor
 public class CsvImportServiceImpl implements CsvImportService {
+        /**
+         * The {@link com.geointelli.ai.property.service.util.YearBuilt} rule in SQL, for every property still
+         * holding the county's "Multiple (See Building Info.)": the actual year of its first building (latest roll
+         * year, then lowest building number, then lowest segment), among years from 1000 to the current year.
+         * Properties without such a building year keep their value. Migration V52 runs the same statement.
+         */
+        static final String FILL_YEAR_BUILT_FROM_BUILDINGS = """
+                UPDATE properties p
+                SET year_built = (
+                        SELECT CAST(b.actual AS VARCHAR)
+                        FROM buildings b
+                        WHERE b.property_id = p.id
+                          AND b.actual BETWEEN 1000 AND EXTRACT(YEAR FROM CURRENT_DATE)
+                        ORDER BY b.roll_year DESC NULLS LAST, b.building_no ASC NULLS LAST, b.seg_no ASC NULLS LAST, b.id
+                        LIMIT 1),
+                    updated_at = LOCALTIMESTAMP
+                WHERE LOWER(p.year_built) LIKE '%see building%'
+                  AND EXISTS (
+                        SELECT 1
+                        FROM buildings b
+                        WHERE b.property_id = p.id
+                          AND b.actual BETWEEN 1000 AND EXTRACT(YEAR FROM CURRENT_DATE))
+                """;
+
         private PropertyImportMappingRepository propertyImportMappingRepository;
         private EntityManager entityManager;
         private PlatformTransactionManager transactionManager;
@@ -191,6 +215,27 @@ public class CsvImportServiceImpl implements CsvImportService {
         @Transactional(rollbackOn = IOException.class)
         public void importBuildings(Path csvPath, String sourceCounty, String sourceState) throws IOException {
                 importRelatedRecords(csvPath, sourceCounty, sourceState, relatedImporter(IngestionDataset.BUILDINGS));
+                fillYearBuiltFromBuildings();
+        }
+
+        @Override
+        public int fillYearBuiltFromBuildings() {
+                if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                        return updateYearBuiltFromBuildings();
+                }
+                Integer updated = new TransactionTemplate(transactionManager)
+                        .execute(status -> updateYearBuiltFromBuildings());
+                return updated == null ? 0 : updated;
+        }
+
+        private int updateYearBuiltFromBuildings() {
+                // The buildings persisted so far must reach the database before the statement reads them.
+                entityManager.flush();
+                int updated = entityManager.createNativeQuery(FILL_YEAR_BUILT_FROM_BUILDINGS).executeUpdate();
+                // Loaded properties still hold the county's text; drop them so nothing reads the old value.
+                entityManager.clear();
+                log.info("year built taken from the first building for {} properties", updated);
+                return updated;
         }
 
         @Override

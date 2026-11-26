@@ -112,6 +112,10 @@ public class CsvIngestionJobWorker implements IngestionJobWorker {
                             rows.run(file, CsvCheckpoint.PARENTS, csvImportService.parentLinkImporter(county, state), false);
                         }
                     }
+                    case BUILDINGS -> {
+                        rows.run(file, CsvCheckpoint.ROWS, csvImportService.relatedRowImporter(step, county, state), true);
+                        fillYearBuilt(rows);
+                    }
                     case PROPERTY_IMAGES -> importImages(rows, file, county, state);
                     case MARKET_EVIDENCE -> rows.run(file, CsvCheckpoint.ROWS, marketEvidenceImportService.rowImporter(job.getId()), true);
                     default -> rows.run(file, CsvCheckpoint.ROWS, csvImportService.relatedRowImporter(step, county, state), true);
@@ -155,6 +159,22 @@ public class CsvIngestionJobWorker implements IngestionJobWorker {
             }, count);
         } catch (IllegalArgumentException | IllegalStateException invalid) {
             rows.fail(rowNumber(invalid.getMessage()), reasonFor(invalid), invalid.getMessage());
+        } catch (DataAccessException | PersistenceException databaseError) {
+            rows.fail(null, databaseReason(databaseError), databaseError.getMessage());
+        }
+    }
+
+    /**
+     * After every buildings row is committed: properties whose county year built reads "Multiple (See Building
+     * Info.)" get their first building's year. It counts no row and leaves the checkpoint where it is, so a resumed
+     * job runs it again, which changes nothing once the text is gone.
+     */
+    private void fillYearBuilt(Rows rows) throws InterruptedException {
+        try {
+            rows.commitRows(() -> {
+                csvImportService.fillYearBuiltFromBuildings();
+                return new Delta(0, 0);
+            }, 0);
         } catch (DataAccessException | PersistenceException databaseError) {
             rows.fail(null, databaseReason(databaseError), databaseError.getMessage());
         }
