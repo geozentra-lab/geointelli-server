@@ -6,13 +6,16 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.geointelli.ai.property.service.dto.LenderMemberLookupDTO;
 import com.geointelli.ai.property.service.dto.LenderOrganizationDTO;
 import com.geointelli.ai.property.service.entity.LenderOrganization;
 import com.geointelli.ai.property.service.entity.LenderOrganizationMember;
+import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.repository.LenderOrganizationMemberRepository;
 import com.geointelli.ai.property.service.repository.LenderOrganizationRepository;
 import com.geointelli.ai.property.service.repository.UserRepository;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
+import com.geointelli.ai.property.service.util.UserEmails;
 import lombok.RequiredArgsConstructor;
 
 /** Serializes membership changes and application writes for each organization, across application instances. */
@@ -65,6 +68,17 @@ public class LenderOrganizationServiceImpl implements LenderOrganizationService 
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public LenderMemberLookupDTO lookupMember(Long actor, Long organizationId, String email) {
+        LenderOrganization organization = requireOwner(actor, organizationId, false);
+        User user = users.findFirstByEmailIgnoreCaseOrderByIdDesc(UserEmails.forLookup(email))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No account uses this email"));
+        boolean member = organization.getOwnerUserId().equals(user.getId())
+            || memberships.existsByOrganizationIdAndUserId(organizationId, user.getId());
+        return new LenderMemberLookupDTO(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(), member);
+    }
+
+    @Override
     public void removeMember(Long actor, Long organizationId, Long userId) {
         LenderOrganization organization = requireOwner(actor, organizationId);
         if (organization.getOwnerUserId().equals(userId))
@@ -92,7 +106,12 @@ public class LenderOrganizationServiceImpl implements LenderOrganizationService 
     }
 
     private LenderOrganization requireOwner(Long actor, Long organizationId) {
-        LenderOrganization organization = requireAccess(actor, organizationId, true);
+        return requireOwner(actor, organizationId, true);
+    }
+
+    /** Membership changes lock the organization; reads such as the member lookup do not. */
+    private LenderOrganization requireOwner(Long actor, Long organizationId, boolean lock) {
+        LenderOrganization organization = requireAccess(actor, organizationId, lock);
         if (!organization.getOwnerUserId().equals(actor))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the organization owner may manage members");
         return organization;

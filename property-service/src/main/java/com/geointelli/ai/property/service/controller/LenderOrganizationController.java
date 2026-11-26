@@ -9,7 +9,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.geointelli.ai.property.service.dto.LenderMemberLookupDTO;
 import com.geointelli.ai.property.service.dto.LenderMemberRequest;
 import com.geointelli.ai.property.service.dto.LenderOrganizationDTO;
 import com.geointelli.ai.property.service.dto.LenderOrganizationRequest;
@@ -51,8 +53,17 @@ public class LenderOrganizationController {
         return organizations.members(actor(), organizationId);
     }
 
+    @GetMapping("/{organizationId}/members/lookup")
+    @Operation(summary = "Find a user to add by email", description = "Owner only. Exact email, case ignored. Returns "
+        + "userId (for the add-member call below), email, names and member (true when the account is already the owner "
+        + "or a member). The person must have signed in to GeoZentra at least once. 400 missing or malformed email, "
+        + "403 member who is not the owner, 404 outsider or no account uses the email.")
+    public LenderMemberLookupDTO lookupMember(@PathVariable Long organizationId, @RequestParam String email) {
+        return organizations.lookupMember(actor(), organizationId, email);
+    }
+
     @PostMapping("/{organizationId}/members")
-    @Operation(summary = "Grant access to an existing user", description = "Owner only. Body: userId. Repeating the same grant returns 204 without duplicating membership.")
+    @Operation(summary = "Grant access to an existing user", description = "Owner only. Body: userId (find it by email with GET /members/lookup). Repeating the same grant returns 204 without duplicating membership.")
     public ResponseEntity<Void> addMember(@PathVariable Long organizationId, @RequestBody LenderMemberRequest request) {
         Long actor = actor();
         if (request == null) throw new IllegalArgumentException("Request body is required");

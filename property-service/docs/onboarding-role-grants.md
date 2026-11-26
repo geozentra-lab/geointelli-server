@@ -160,11 +160,26 @@ The current user's requests, newest first; one of them (404 when missing or anot
 | `POST /api/admin/role-requests/{id}/approve` body optional `{"reason": "..."}` | Keycloak grant, history row, request `APPROVED` with the admin | 404, 409 decided, 503 Keycloak (stays PENDING) |
 | `POST /api/admin/role-requests/{id}/reject` `{"reason": "..."}` | request `REJECTED`; Keycloak not called | 400 no reason, 404, 409 decided |
 | `POST /api/admin/realtor-license-verifications/{id}/approve` (existing) | now also grants `realtor` first | adds 503 Keycloak (stays PENDING_REVIEW) |
+| `GET /api/admin/users?email=` | finds the account by exact email (case ignored): `id`, `keycloakUserId`, `username`, `email`, names, `realtorLicenseStatus`; the `id` goes into the two routes below. When old rows share the email (a Keycloak account deleted and signed up again), the newest one | 400 missing or malformed email, 404 no account uses it |
 | `GET /api/admin/users/{userId}/role-grants` | grant history of a user, newest first | 404 unknown user |
 | `POST /api/admin/users/{userId}/roles/{role}/revoke` `{"reason": "..."}` | Keycloak revocation, history row, the user's approved request for that role `REVOKED`; the way to change an account type | 400 role not investor/realtor/lender or no reason, 404, 503 |
 | `POST /api/admin/role-grants/realtor-license-expiry` | runs the expiry check now: `{"checkedOn", "candidates", "revoked", "failed"}` | failed revocations are retried by the next run |
 
 All routes are under `/api/users/me/**` and `/api/admin/**`, so the SCRUM-94 route rules cover them unchanged.
+
+## Adding a lender organization member by email
+
+The owner of an organization finds the colleague first, then adds them by id:
+
+1. `GET /api/lender/organizations/{organizationId}/members/lookup?email=` (owner only) answers
+   `{"userId", "email", "firstName", "lastName", "member"}`; `member` is true when the account is already the owner or
+   a member. 400 missing or malformed email, 403 a member who is not the owner, 404 an outsider or no account uses the
+   email.
+2. `POST /api/lender/organizations/{organizationId}/members` `{"userId": ...}` (unchanged, 204).
+
+Both lookups match the exact email, case ignored, and find an account only once its owner has signed in to GeoZentra
+at least once (the account row is created on the first call). The lender lookup is under `/api/lender/**` (lender or
+admin role).
 
 ## Files
 
