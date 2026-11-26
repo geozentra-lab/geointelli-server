@@ -1,0 +1,933 @@
+{
+  "info": {
+    "name": "SCRUM-204 Onboarding role grants",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Onboarding page and Keycloak role grants (docs/onboarding-role-grants.md). The account type is the professional realm role (investor, realtor or lender), one per account; the persona is gone.\n\nVariables: base_url; access_token = an ordinary account WITHOUT a professional role and without a realtor license; admin_token = an account with the realm role admin. Run the folders in order with the Collection Runner.\n\nBy default the lender request waits (PENDING) and the admin approves it in folder 4 (503 with keycloak.role-admin.enabled=false, and the request stays PENDING). With lender listed in ONBOARDING_SELF_SERVICE_ROLES it is APPROVED at once. Checks read lender_status, saved by 'Request lender', and expect the matching answer.\n\nFolder 6 revokes the lender role again (200, or 503 with role management off), so the collection can be re-run with the same account after refreshing access_token.\n\nData created: role requests and grant history of the ordinary account, kept as history."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "request_id",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "lender_status",
+      "value": ""
+    },
+    {
+      "key": "approve_code",
+      "value": ""
+    },
+    {
+      "key": "onboarded_at",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Onboarding state",
+      "item": [
+        {
+          "name": "Entitlements have the onboarding fields, no persona",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding fields', () => { pm.expect(r.onboardingCompleted).to.be.a('boolean'); pm.expect(r.pendingRoles).to.be.an('array'); pm.expect(r.roles).to.include('user'); });",
+                  "pm.test('no persona fields', () => { pm.expect(r).to.not.have.property('persona'); pm.expect(r).to.not.have.property('personaLocked'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/users/me ignores a persona",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"persona\": \"REALTOR\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('no persona in the profile', () => pm.expect(r).to.not.have.property('persona'));",
+                  "pm.collectionVariables.set('user_id', r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A persona grants nothing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('no realtor or lender feature', () => { pm.expect(r.features.realtorCrm).to.eql(false); pm.expect(r.features.lender).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Lender request",
+      "item": [
+        {
+          "name": "Realtor: 400, use the license submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"realtor\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('points to the license', () => pm.expect(pm.response.json().message).to.include('realtor-license'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin role: 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request lender (no organization): 201 PENDING",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"lender\",\n  \"note\": \"SCRUM-204 Postman run\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('PENDING by default, APPROVED when lender is self-service', () => pm.expect(r.status).to.be.oneOf(['PENDING', 'APPROVED']));",
+                  "if (r.status === 'APPROVED') pm.test('self-service reason and time', () => { pm.expect(r.decisionReason).to.include('self-service'); pm.expect(r.decidedAt).to.be.a('string'); });",
+                  "pm.test('Location header', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/users/me/role-requests/' + r.id));",
+                  "pm.collectionVariables.set('request_id', r.id);",
+                  "pm.collectionVariables.set('lender_status', r.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "The request answered the onboarding page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "pm.test('onboardingCompleted', () => pm.expect(r.onboardingCompleted).to.eql(true));",
+                  "pm.test('pendingRoles only while pending', () => granted ? pm.expect(r.pendingRoles).to.not.include('lender') : pm.expect(r.pendingRoles).to.include('lender'));",
+                  "pm.collectionVariables.set('onboarded_at', r.onboardingCompletedAt);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Second lender request: 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"lender\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "const message = (pm.response.json() || {}).message || '';",
+                  "pm.test('granted: refresh the token; pending: already pending', () => pm.expect(message).to.include(granted ? 'refresh' : 'pending'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. One professional role per account",
+      "item": [
+        {
+          "name": "Investor request: 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"investor\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "const message = (pm.response.json() || {}).message || '';",
+                  "pm.test('lender held, or lender pending', () => pm.expect(message).to.include(granted ? 'already a lender account' : 'lender request is pending'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Realtor license: 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/realtor-license",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"licenseHolderName\": \"Postman Tester\",\n  \"licensingState\": \"FL\",\n  \"licenseNumber\": \"SL204POSTMAN\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "const message = (pm.response.json() || {}).message || '';",
+                  "pm.test('lender held, or lender pending', () => pm.expect(message).to.include(granted ? 'already a lender account' : 'lender request is pending'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Not in the realtor directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/contact-requests/professionals?page=0&size=100"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('the account is not listed', () => pm.expect(pm.response.json().content.map(x => x.id)).to.not.include(Number(pm.collectionVariables.get('user_id'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/role-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('contains the request', () => pm.expect(pm.response.json().map(x => x.id)).to.include(Number(pm.collectionVariables.get('request_id'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown request: 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/role-requests/999999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Admin decisions",
+      "item": [
+        {
+          "name": "Ordinary account on the queue: 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/role-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Queue of lender requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/role-requests?role=lender",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('contains the request with its applicant', () => { const it = r.content.find(x => x.id == pm.collectionVariables.get('request_id')); pm.expect(it).to.exist; pm.expect(it.userId).to.be.a('number'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject without reason: 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/role-requests/{{request_id}}/reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400, or 409 when self-service already approved it', () => pm.expect(pm.response.code).to.be.oneOf([400, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve the lender request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/role-requests/{{request_id}}/approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman test approval\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 granted, 503 with role management off, or 409 when self-service already approved it', () => pm.expect(pm.response.code).to.be.oneOf([200, 409, 503]));",
+                  "pm.collectionVariables.set('approve_code', pm.response.code);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request status matches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/role-requests/{{request_id}}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "const expected = granted || pm.collectionVariables.get('approve_code') == 200 ? 'APPROVED' : 'PENDING';",
+                  "pm.test('APPROVED after a grant, still PENDING after 503', () => pm.expect(pm.response.json().status).to.eql(expected));",
+                  "pm.collectionVariables.set('lender_status', pm.response.json().status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject it (only while pending)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/role-requests/{{request_id}}/reject",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman test rejection\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "pm.test('200 REJECTED while pending, 409 once approved', () => pm.response.to.have.status(granted ? 409 : 200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Grant history of the account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/users/{{user_id}}/role-grants",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "const granted = pm.collectionVariables.get('lender_status') === 'APPROVED';",
+                  "pm.test('array', () => pm.expect(r).to.be.an('array'));",
+                  "const source = pm.collectionVariables.get('approve_code') == 200 ? 'ROLE_REQUEST' : 'SELF_SERVICE';",
+                  "if (granted) pm.test('lender grant recorded (admin approval or self-service)', () => pm.expect(r.some(e => e.role === 'lender' && e.action === 'GRANT' && e.source === source)).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke admin: 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/users/{{user_id}}/roles/admin/revoke",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"not allowed\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke without reason: 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/users/{{user_id}}/roles/lender/revoke",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown user: 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/users/999999999/role-grants",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Realtor license expiry run",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/admin/role-grants/realtor-license-expiry",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('counts add up', () => { pm.expect(r.candidates).to.eql(r.revoked + r.failed); pm.expect(r.checkedOn).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Home buyer choice",
+      "item": [
+        {
+          "name": "Continue as a home buyer: 200, first time kept",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/onboarding/complete"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarded', () => pm.expect(r.onboardingCompleted).to.eql(true));",
+                  "pm.test('first answer time kept', () => pm.expect(r.onboardingCompletedAt).to.eql(pm.collectionVariables.get('onboarded_at')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Clean up (re-run)",
+      "item": [
+        {
+          "name": "Revoke lender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/admin/users/{{user_id}}/roles/lender/revoke",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Postman test clean-up\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 revoked, or 503 with role management off', () => pm.expect(pm.response.code).to.be.oneOf([200, 503]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Missing token",
+      "item": [
+        {
+          "name": "Anonymous role request: 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"lender\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous onboarding: 401",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/users/me/onboarding/complete",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Anonymous admin queue: 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/role-requests",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

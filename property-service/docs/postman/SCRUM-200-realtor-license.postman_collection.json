@@ -239,7 +239,7 @@
               "pm.test('status 200', () => pm.response.to.have.status(200));",
               "const u = pm.response.json();",
               "pm.test('realtorLicenseStatus pending', () => pm.expect(u.realtorLicenseStatus).to.eql('PENDING_REVIEW'));",
-              "pm.test('persona still present and separate', () => pm.expect(u).to.have.property('persona'));"
+              "pm.test('no persona since SCRUM-204 (the account type is the realm role)', () => pm.expect(u).to.not.have.property('persona'));"
             ]
           }
         }

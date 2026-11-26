@@ -82,6 +82,15 @@ class SecurityPolicyTest {
                 "/api/properties/id/1/location-intelligence/risk", "/api/market-evidence")) {
             mvc.perform(get(path).header("Authorization", "Bearer " + token)).andExpect(status().isOk());
         }
+        // SCRUM-204: any account may request a role and follow its own requests
+        mvc.perform(post("/api/users/me/role-requests").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/users/me/role-requests").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/users/me/role-requests/7/cancel").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/users/me/onboarding/complete").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @ParameterizedTest
@@ -116,7 +125,10 @@ class SecurityPolicyTest {
             "GET,/api/admin/valuation-refresh-requests", "POST,/api/admin/opportunity-scores/refresh",
             "POST,/api/property-school-analysis/assign", "GET,/api/admin/coverage-health",
             "PATCH,/api/admin/data-quality/issues/DQ-1", "POST,/api/admin/market-evidence/import",
-            "GET,/api/admin/realtor-license-verifications", "POST,/api/admin/realtor-license-verifications/7/approve" })
+            "GET,/api/admin/realtor-license-verifications", "POST,/api/admin/realtor-license-verifications/7/approve",
+            "GET,/api/admin/role-requests", "POST,/api/admin/role-requests/7/approve",
+            "POST,/api/admin/role-requests/7/reject", "GET,/api/admin/users/7/role-grants",
+            "POST,/api/admin/users/7/roles/lender/revoke", "POST,/api/admin/role-grants/realtor-license-expiry" })
     void operationsRequireAdminIncludingLegacyRoutes(String method, String path) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         for (String role : List.of("user", "investor", "realtor", "lender")) {

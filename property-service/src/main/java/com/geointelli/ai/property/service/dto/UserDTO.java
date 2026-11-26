@@ -2,7 +2,6 @@ package com.geointelli.ai.property.service.dto;
 
 import lombok.Data;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
-import com.geointelli.ai.property.service.entity.UserPersona;
 
 @Data
 public class UserDTO {
@@ -18,8 +17,6 @@ public class UserDTO {
 
     private String lastName;
 
-    private UserPersona persona;
-
-    /** Status of the newest realtor license submission (SCRUM-200); null when none. Independent of persona. */
+    /** Status of the newest realtor license submission (SCRUM-200); null when none. */
     private RealtorLicenseVerificationStatus realtorLicenseStatus;
 }

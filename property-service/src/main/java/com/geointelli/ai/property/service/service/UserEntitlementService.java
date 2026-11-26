@@ -9,7 +9,7 @@ public interface UserEntitlementService {
     /**
      * Reads the current account's feature grants and visible lender organizations.
      *
-     * @return access for the validated bearer token; persona is display context
+     * @return access for the validated bearer token; the legacy persona is not read
      *         only
      */
     UserEntitlementsResponse getEntitlements();

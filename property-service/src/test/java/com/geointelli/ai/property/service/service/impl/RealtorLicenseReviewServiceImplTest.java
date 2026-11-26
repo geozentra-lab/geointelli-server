@@ -3,6 +3,8 @@ package com.geointelli.ai.property.service.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.time.LocalDate;
@@ -20,10 +22,13 @@ import com.geointelli.ai.property.service.dto.RealtorLicenseReviewDTO;
 import com.geointelli.ai.property.service.entity.RealtorLicenseDecisionMethod;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerification;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
+import com.geointelli.ai.property.service.entity.RoleGrantSource;
 import com.geointelli.ai.property.service.entity.User;
+import com.geointelli.ai.property.service.exception.KeycloakRoleException;
 import com.geointelli.ai.property.service.repository.RealtorLicenseVerificationRepository;
 import com.geointelli.ai.property.service.repository.UserRepository;
 import com.geointelli.ai.property.service.service.CurrentUserService;
+import com.geointelli.ai.property.service.service.RoleGrantService;
 
 /** Manual decisions on realtor license submissions, including a license that expired while pending. */
 class RealtorLicenseReviewServiceImplTest {
@@ -34,19 +39,26 @@ class RealtorLicenseReviewServiceImplTest {
         new RealtorLicenseDecisionRequest("Florida DBPR licensee search", "License expired before review.");
 
     private RealtorLicenseVerificationRepository repository;
+    private RoleGrantService roleGrants;
     private RealtorLicenseReviewServiceImpl service;
     private RealtorLicenseVerification row;
+    private User applicant;
 
     @BeforeEach
     void setUp() {
         repository = mock(RealtorLicenseVerificationRepository.class);
         UserRepository users = mock(UserRepository.class);
         CurrentUserService currentUser = mock(CurrentUserService.class);
+        roleGrants = mock(RoleGrantService.class);
         User admin = new User();
         admin.setId(8L);
         when(currentUser.getCurrentUserEntity()).thenReturn(admin);
+        applicant = new User();
+        applicant.setId(5L);
+        applicant.setKeycloakUserId("kc-applicant");
         when(users.findById(any())).thenReturn(Optional.empty());
-        service = new RealtorLicenseReviewServiceImpl(repository, users, currentUser);
+        when(users.findById(5L)).thenReturn(Optional.of(applicant));
+        service = new RealtorLicenseReviewServiceImpl(repository, users, currentUser, roleGrants);
 
         row = new RealtorLicenseVerification();
         row.setId(ID);
@@ -106,6 +118,38 @@ class RealtorLicenseReviewServiceImplTest {
 
         assertThat(decided.status()).isEqualTo(RealtorLicenseVerificationStatus.REJECTED);
         assertThat(decided.rejectionReason()).isEqualTo("License expired before review.");
+    }
+
+    @Test
+    @DisplayName("SCRUM-204: approval grants the realtor realm role before the decision is written")
+    void whenApproved_thenRealtorRoleGranted() {
+        service.approve(ID, APPROVE);
+
+        var order = inOrder(roleGrants, repository);
+        order.verify(roleGrants).grant(eq(applicant), eq("realtor"), eq(RoleGrantSource.REALTOR_LICENSE), eq(ID),
+            contains("Florida DBPR licensee search"), eq(8L));
+        order.verify(repository).saveAndFlush(row);
+    }
+
+    @Test
+    @DisplayName("SCRUM-204: when Keycloak fails the submission stays PENDING_REVIEW and nothing is written")
+    void whenKeycloakFails_thenStaysPending() {
+        when(roleGrants.grant(any(), any(), any(), any(), any(), any()))
+            .thenThrow(KeycloakRoleException.unavailable("Keycloak could not be reached; nothing was changed"));
+
+        assertThatThrownBy(() -> service.approve(ID, APPROVE))
+            .isInstanceOfSatisfying(KeycloakRoleException.class,
+                error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        verify(repository, never()).saveAndFlush(any());
+        assertThat(row.getStatus()).isEqualTo(RealtorLicenseVerificationStatus.PENDING_REVIEW);
+    }
+
+    @Test
+    @DisplayName("SCRUM-204: a rejection never touches Keycloak")
+    void whenRejected_thenNoRoleChange() {
+        service.reject(ID, REJECT);
+
+        verifyNoInteractions(roleGrants);
     }
 
     @Test

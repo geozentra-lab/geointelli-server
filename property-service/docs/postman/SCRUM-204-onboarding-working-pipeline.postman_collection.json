@@ -1,0 +1,1756 @@
+{
+  "info": {
+    "name": "SCRUM-204 Onboarding: working pipeline",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Success path only of the onboarding page and Keycloak role grants (docs/onboarding-role-grants.md); the error cases are in SCRUM-204-onboarding-role-grants.postman_collection.json. Run the folders in order with the Collection Runner: every token is fetched by the collection itself, including the new token after each grant.\n\nBefore running:\n- the service runs with KEYCLOAK_ROLE_ADMIN_ENABLED=true and KEYCLOAK_ROLE_ADMIN_CLIENT_SECRET set (client geozentra-role-admin), and ONBOARDING_SELF_SERVICE_ROLES empty (the default: the admin approves investor and lender requests, like realtor licenses);\n- five Keycloak accounts with a password and no pending required action: an admin (realm role admin) and four FRESH accounts that never answered the onboarding page and have no professional role: home buyer, investor, lender, realtor. An account keeps its role, so each run needs four new accounts.\n\nUsernames and passwords are left empty: set them in your local environment and never commit them.\n\nFolders: 0 admin login; 1 home buyer; 2 investor and 3 lender (request, admin approval); 4 realtor (license approved by the admin, then listed in the realtor directory); 5 the admin changes the investor account to lender (revoke, the user requests lender, the admin approves)."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://100.26.199.78:8090/realms/geozentra"
+    },
+    {
+      "key": "clientIdKc",
+      "value": "frontend-app"
+    },
+    {
+      "key": "adminUser",
+      "value": ""
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "homeBuyerUser",
+      "value": ""
+    },
+    {
+      "key": "homeBuyerPassword",
+      "value": ""
+    },
+    {
+      "key": "investorUser",
+      "value": ""
+    },
+    {
+      "key": "investorPassword",
+      "value": ""
+    },
+    {
+      "key": "lenderUser",
+      "value": ""
+    },
+    {
+      "key": "lenderPassword",
+      "value": ""
+    },
+    {
+      "key": "realtorUser",
+      "value": ""
+    },
+    {
+      "key": "realtorPassword",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "adminUserId",
+      "value": ""
+    },
+    {
+      "key": "homeBuyerToken",
+      "value": ""
+    },
+    {
+      "key": "investorToken",
+      "value": ""
+    },
+    {
+      "key": "lenderToken",
+      "value": ""
+    },
+    {
+      "key": "realtorToken",
+      "value": ""
+    },
+    {
+      "key": "investorUserId",
+      "value": ""
+    },
+    {
+      "key": "lenderUserId",
+      "value": ""
+    },
+    {
+      "key": "realtorUserId",
+      "value": ""
+    },
+    {
+      "key": "homeBuyerUserId",
+      "value": ""
+    },
+    {
+      "key": "investorRequestId",
+      "value": ""
+    },
+    {
+      "key": "lenderRequestId",
+      "value": ""
+    },
+    {
+      "key": "switchRequestId",
+      "value": ""
+    },
+    {
+      "key": "licenseId",
+      "value": ""
+    },
+    {
+      "key": "licenseNumber",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Admin login",
+      "item": [
+        {
+          "name": "Admin token",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{adminUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('token has the admin role', () => pm.expect(tokenRoles).to.include('admin'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin profile (user id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Home buyer",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{homeBuyerToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Log in",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{homeBuyerUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{homeBuyerPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('homeBuyerToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My profile (user id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('homeBuyerUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements before: onboarding page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('fresh account: onboarding page not answered yet', () => pm.expect(r.onboardingCompleted).to.eql(false));",
+                  "pm.test('no professional role yet', () => pm.expect(r.roles.filter(x => ['investor', 'realtor', 'lender'].includes(x))).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Continue as a home buyer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/onboarding/complete"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => { pm.expect(r.onboardingCompleted).to.eql(true); pm.expect(r.onboardingCompletedAt).to.be.a('string'); });",
+                  "pm.test('no professional role', () => pm.expect(r.roles.filter(x => ['investor', 'realtor', 'lender'].includes(x))).to.eql([]));",
+                  "pm.test('baseline features only', () => { pm.expect(r.features.investment).to.eql(false); pm.expect(r.features.realtorCrm).to.eql(false); pm.expect(r.features.lender).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Investor (approved by the admin)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{investorToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Log in",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{investorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{investorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('investorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('no professional role in the token', () => pm.expect(professional(tokenRoles)).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My profile (user id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('investorUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements before: onboarding page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('fresh account: onboarding page not answered yet', () => pm.expect(r.onboardingCompleted).to.eql(false));",
+                  "pm.test('no professional role yet', () => pm.expect(r.roles.filter(x => ['investor', 'realtor', 'lender'].includes(x))).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Choose investor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"investor\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('PENDING: waits for the admin (APPROVED instead means the role is listed in ONBOARDING_SELF_SERVICE_ROLES)', () => pm.expect(r.status).to.eql('PENDING'));",
+                  "pm.test('role investor', () => pm.expect(r.role).to.eql('investor'));",
+                  "pm.collectionVariables.set('investorRequestId', r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements: investor pending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => pm.expect(r.onboardingCompleted).to.eql(true));",
+                  "pm.test('investor pending', () => pm.expect(r.pendingRoles).to.eql(['investor']));",
+                  "pm.test('investment feature still off', () => pm.expect(r.features.investment).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: request in the queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/role-requests?status=PENDING&role=investor&page=0&size=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const it = pm.response.json().content.find(x => x.id == pm.collectionVariables.get('investorRequestId'));",
+                  "pm.test('request listed for the applicant', () => { pm.expect(it).to.be.an('object'); pm.expect(it.userId).to.eql(Number(pm.collectionVariables.get('investorUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: approve the investor request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/role-requests/{{investorRequestId}}/approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Checked by the GeoZentra admin\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('APPROVED by the admin (503 instead means role management is off)', () => { pm.expect(r.status).to.eql('APPROVED'); pm.expect(r.decidedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in again (new token with the role)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{investorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{investorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('investorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('token has investor only', () => pm.expect(professional(tokenRoles)).to.eql(['investor']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements after: investor account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => { pm.expect(r.onboardingCompleted).to.eql(true); pm.expect(r.onboardingCompletedAt).to.be.a('string'); });",
+                  "pm.test('roles include investor', () => pm.expect(r.roles).to.include('investor'));",
+                  "pm.test('investment feature on', () => pm.expect(r.features.investment).to.eql(true));",
+                  "pm.test('nothing pending', () => pm.expect(r.pendingRoles).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My role requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/role-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const mine = pm.response.json().find(x => x.id == pm.collectionVariables.get('investorRequestId'));",
+                  "pm.test('request listed as APPROVED', () => pm.expect(mine && mine.status).to.eql('APPROVED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Lender (approved by the admin)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{lenderToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Log in",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{lenderUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{lenderPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('lenderToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('no professional role in the token', () => pm.expect(professional(tokenRoles)).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My profile (user id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('lenderUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements before: onboarding page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('fresh account: onboarding page not answered yet', () => pm.expect(r.onboardingCompleted).to.eql(false));",
+                  "pm.test('no professional role yet', () => pm.expect(r.roles.filter(x => ['investor', 'realtor', 'lender'].includes(x))).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Choose lender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"lender\",\n  \"organizationName\": \"Acme Mortgage\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('PENDING: waits for the admin (APPROVED instead means the role is listed in ONBOARDING_SELF_SERVICE_ROLES)', () => pm.expect(r.status).to.eql('PENDING'));",
+                  "pm.test('role lender', () => pm.expect(r.role).to.eql('lender'));",
+                  "pm.collectionVariables.set('lenderRequestId', r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements: lender pending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => pm.expect(r.onboardingCompleted).to.eql(true));",
+                  "pm.test('lender pending', () => pm.expect(r.pendingRoles).to.eql(['lender']));",
+                  "pm.test('lender feature still off', () => pm.expect(r.features.lender).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: request in the queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/role-requests?status=PENDING&role=lender&page=0&size=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const it = pm.response.json().content.find(x => x.id == pm.collectionVariables.get('lenderRequestId'));",
+                  "pm.test('request listed for the applicant', () => { pm.expect(it).to.be.an('object'); pm.expect(it.userId).to.eql(Number(pm.collectionVariables.get('lenderUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: approve the lender request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/role-requests/{{lenderRequestId}}/approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Checked by the GeoZentra admin\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('APPROVED by the admin (503 instead means role management is off)', () => { pm.expect(r.status).to.eql('APPROVED'); pm.expect(r.decidedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in again (new token with the role)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{lenderUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{lenderPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('lenderToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('token has lender only', () => pm.expect(professional(tokenRoles)).to.eql(['lender']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements after: lender account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => { pm.expect(r.onboardingCompleted).to.eql(true); pm.expect(r.onboardingCompletedAt).to.be.a('string'); });",
+                  "pm.test('roles include lender', () => pm.expect(r.roles).to.include('lender'));",
+                  "pm.test('lender feature on', () => pm.expect(r.features.lender).to.eql(true));",
+                  "pm.test('nothing pending', () => pm.expect(r.pendingRoles).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My role requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/role-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const mine = pm.response.json().find(x => x.id == pm.collectionVariables.get('lenderRequestId'));",
+                  "pm.test('request listed as APPROVED', () => pm.expect(mine && mine.status).to.eql('APPROVED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Realtor (license approved by an admin)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{realtorToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Log in",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{realtorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{realtorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('realtorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('no professional role in the token', () => pm.expect(professional(tokenRoles)).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My profile (user id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('realtorUserId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements before: onboarding page",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('fresh account: onboarding page not answered yet', () => pm.expect(r.onboardingCompleted).to.eql(false));",
+                  "pm.test('no professional role yet', () => pm.expect(r.roles.filter(x => ['investor', 'realtor', 'lender'].includes(x))).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit the realtor license",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/me/realtor-license",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"licenseHolderName\": \"Jane Doe\",\n  \"licensingState\": \"FL\",\n  \"licenseNumber\": \"{{licenseNumber}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// a new license number on every run",
+                  "pm.collectionVariables.set('licenseNumber', 'SL' + Math.floor(1000000 + Math.random() * 9000000));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('PENDING_REVIEW', () => pm.expect(r.status).to.eql('PENDING_REVIEW'));",
+                  "pm.collectionVariables.set('licenseId', r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements: realtor pending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('onboarding completed', () => pm.expect(r.onboardingCompleted).to.eql(true));",
+                  "pm.test('realtor pending', () => pm.expect(r.pendingRoles).to.eql(['realtor']));",
+                  "pm.test('realtor features still off', () => pm.expect(r.features.realtorCrm).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: license in the review queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/realtor-license-verifications?status=PENDING_REVIEW&page=0&size=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const it = pm.response.json().content.find(x => x.id == pm.collectionVariables.get('licenseId'));",
+                  "pm.test('submission listed for the applicant', () => { pm.expect(it).to.be.an('object'); pm.expect(it.applicantUserId).to.eql(Number(pm.collectionVariables.get('realtorUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: approve the license",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/realtor-license-verifications/{{licenseId}}/approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrySource\": \"Florida DBPR licensee search\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('VERIFIED (503 instead means role management is off)', () => pm.expect(pm.response.json().status).to.eql('VERIFIED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in again (new token with the role)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{realtorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{realtorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('realtorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('token has realtor only', () => pm.expect(professional(tokenRoles)).to.eql(['realtor']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements after: realtor account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('roles include realtor', () => pm.expect(r.roles).to.include('realtor'));",
+                  "pm.test('realtorCrm feature on', () => pm.expect(r.features.realtorCrm).to.eql(true));",
+                  "pm.test('nothing pending', () => pm.expect(r.pendingRoles).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Home buyer sees the realtor in the directory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/contact-requests/professionals?page=0&size=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{homeBuyerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('realtor listed', () => pm.expect(pm.response.json().content.map(x => x.id)).to.include(Number(pm.collectionVariables.get('realtorUserId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: grant history of the realtor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/users/{{realtorUserId}}/role-grants",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const latest = pm.response.json()[0] || {};",
+                  "pm.test('realtor granted from the license', () => { pm.expect(latest.role).to.eql('realtor'); pm.expect(latest.action).to.eql('GRANT'); pm.expect(latest.source).to.eql('REALTOR_LICENSE'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Admin changes the investor account to lender",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{investorToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Admin: grant history before",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/users/{{investorUserId}}/role-grants",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const latest = pm.response.json()[0] || {};",
+                  "pm.test('investor granted on the approved request', () => { pm.expect(latest.role).to.eql('investor'); pm.expect(latest.action).to.eql('GRANT'); pm.expect(latest.source).to.eql('ROLE_REQUEST'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: revoke investor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/users/{{investorUserId}}/roles/investor/revoke",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer asked to switch to a lender account\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in again (investor removed)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{investorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{investorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('investorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('no professional role in the token', () => pm.expect(professional(tokenRoles)).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Choose lender",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/users/me/role-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"lender\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "pm.test('PENDING: waits for the admin (APPROVED instead means the role is listed in ONBOARDING_SELF_SERVICE_ROLES)', () => pm.expect(r.status).to.eql('PENDING'));",
+                  "pm.collectionVariables.set('switchRequestId', r.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: request in the queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/role-requests?status=PENDING&role=lender&page=0&size=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const it = pm.response.json().content.find(x => x.id == pm.collectionVariables.get('switchRequestId'));",
+                  "pm.test('request listed for the applicant', () => { pm.expect(it).to.be.an('object'); pm.expect(it.userId).to.eql(Number(pm.collectionVariables.get('investorUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: approve the lender request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/role-requests/{{switchRequestId}}/approve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Checked by the GeoZentra admin\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('APPROVED by the admin (503 instead means role management is off)', () => { pm.expect(r.status).to.eql('APPROVED'); pm.expect(r.decidedByUserId).to.eql(Number(pm.collectionVariables.get('adminUserId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in again (new token with lender)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{keycloakUrl}}/protocol/openid-connect/token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{investorUser}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{investorPassword}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('logged in', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('investorToken', pm.response.json().access_token);",
+                  "const jwt = pm.response.json().access_token;",
+                  "let part = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "while (part.length % 4) part += '=';",
+                  "const tokenRoles = (JSON.parse(atob(part)).realm_access || {}).roles || [];",
+                  "const professional = (roles) => roles.filter(r => ['investor', 'realtor', 'lender'].includes(r));",
+                  "pm.test('token has lender only', () => pm.expect(professional(tokenRoles)).to.eql(['lender']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entitlements: now a lender account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/me/entitlements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('lender on, investment off', () => { pm.expect(r.features.lender).to.eql(true); pm.expect(r.features.investment).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: grant history after",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admin/users/{{investorUserId}}/role-grants",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const steps = pm.response.json().slice(0, 3).map(e => e.role + ' ' + e.action + ' ' + e.source);",
+                  "pm.test('grant, revoke, grant (newest first)', () => pm.expect(steps).to.eql(['lender GRANT ROLE_REQUEST', 'investor REVOKE ADMIN_REVOCATION', 'investor GRANT ROLE_REQUEST']));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
