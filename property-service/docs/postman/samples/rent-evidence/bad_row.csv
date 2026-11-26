@@ -1,0 +1,3 @@
+source,evidence_type,geography_level,geography_code,state_code,period_start,period_end,rent_period,median_rent
+SAMPLE_LISTINGS,ASKING,ZIP,33130,FL,2026-10-01,2026-10-31,MONTHLY,2400
+SAMPLE_LISTINGS,ASKING,ZIP,33131,FL,2026-10-01,2026-10-31,WEEKLY,700

@@ -65,6 +65,14 @@ public enum IngestionDataset {
      */
     MARKET_EVIDENCE(ImportJobType.CSV_IMPORT, "market-evidence", "market_evidence.csv", List.of(
         "source", "evidence_type", "geography_level", "geography_code", "period_start", "period_end")),
+    /**
+     * Rent observations by geography, period and rent type (SCRUM-132). Not a county file: one file may cover
+     * many states, counties, ZIP codes and tracts, so the job carries no county. Started from
+     * {@code POST /api/admin/rent-evidence/import}, never from the generic county import endpoint.
+     */
+    RENT_EVIDENCE(ImportJobType.CSV_IMPORT, "rent-evidence", "rent_evidence.csv", List.of(
+        "source", "evidence_type", "geography_level", "geography_code", "period_start", "period_end",
+        "rent_period")),
     /** All county files in one job, in the order {@code CsvFolderImportService} uses. */
     FOLDER(ImportJobType.CSV_IMPORT, "folder", null, List.of()),
 
@@ -159,9 +167,9 @@ public enum IngestionDataset {
         return jobType == ImportJobType.CSV_IMPORT && this != FOLDER;
     }
 
-    /** Whether a job for this dataset must name the county its rows belong to; market files cover many. */
+    /** Whether a job for this dataset must name the county its rows belong to; market and rent files cover many. */
     public boolean requiresCounty() {
-        return this != MARKET_EVIDENCE;
+        return this != MARKET_EVIDENCE && this != RENT_EVIDENCE;
     }
 
     /** Whether this is a reference dataset loaded with COPY: environmental (SCRUM-201) or school (SCRUM-202). */

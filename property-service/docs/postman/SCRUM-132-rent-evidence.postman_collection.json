@@ -1,0 +1,1630 @@
+{
+  "info": {
+    "_postman_id": "1db8a32e-84da-5813-9e0e-7d856899887b",
+    "name": "SCRUM-132 Rent evidence ingestion",
+    "description": "Manual checks for POST /api/admin/rent-evidence/import and GET /api/rent-evidence. Run in order. Set adminPassword and password, sampleDir (absolute path of docs/postman/samples/rent-evidence) and acsStagedFile (path of the prepared Census file inside INGESTION_STAGING_DIRECTORY). Poll requests repeat themselves while the job is QUEUED or RUNNING. Contract: docs/rent-evidence-ingestion.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for the admin (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUser}}"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for a non-admin user",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{user}}"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('userToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Empty data: tract 12001000201 before any import (200, NO_COVERAGE)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001000201",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001000201"
+            }
+          ]
+        },
+        "description": "On a fresh database: NO_COVERAGE. On a database where the Census file is already loaded: PARTIAL (only the general checks apply)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('coverage reported, never a 404', () => pm.expect(['NO_COVERAGE','PARTIAL','AVAILABLE']).to.include(r.coverage));",
+              "if (r.observations.totalElements === 0) pm.test('nothing imported yet: NO_COVERAGE with both types missing', () => { pm.expect(r.coverage).to.eql('NO_COVERAGE'); pm.expect(r.missingTypes).to.eql(['ASKING','ACHIEVED']); pm.expect(r.note).to.include('No asking or achieved'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Admin imports the Census ACS file from the staging folder (202)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import?stagedFile={{acsStagedFile}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            }
+          ]
+        },
+        "description": "The real file (4,732 Florida tracts, ACS 2019-2023 table B25064) is not in git: stage it under INGESTION_STAGING_DIRECTORY and set acsStagedFile to its relative path."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for RENT_EVIDENCE', () => { pm.expect(job.dataset).to.eql('RENT_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+              "pm.collectionVariables.set('acsJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Second import while the Census job is queued or running (409 DATASET_JOB_ACTIVE)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import?stagedFile={{acsStagedFile}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            }
+          ]
+        },
+        "description": "Sent right after the Census import starts, while that job is still queued or running: only one rent evidence import at a time."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.test('names the active job rule', () => pm.expect(pm.response.json().message).to.include('DATASET_JOB_ACTIVE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Poll the Census job (200, COMPLETED, 4,732 rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{acsJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{acsJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "const tries = Number(pm.collectionVariables.get('pollTries') || 0);",
+              "if ((job.status === 'QUEUED' || job.status === 'RUNNING') && tries < 60) {",
+              "  pm.collectionVariables.set('pollTries', tries + 1);",
+              "  console.log('still ' + job.status + ', polling again');",
+              "  setTimeout(() => {}, 2000);",
+              "  pm.execution.setNextRequest(pm.info.requestName);",
+              "  return;",
+              "}",
+              "pm.collectionVariables.set('pollTries', 0);",
+              "pm.test('COMPLETED', () => pm.expect(job.status).to.eql('COMPLETED'));",
+              "pm.test('4,732 rows, none failed', () => { pm.expect(job.total).to.eql(4732); pm.expect(job.completed).to.eql(4732); pm.expect(job.failed).to.eql(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Read tract 12001000201 (200, PARTIAL: achieved Census rent, asking missing)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001000201",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001000201"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('PARTIAL, asking missing', () => { pm.expect(r.coverage).to.eql('PARTIAL'); pm.expect(r.availableTypes).to.eql(['ACHIEVED']); pm.expect(r.missingTypes).to.eql(['ASKING']); });",
+              "const o = r.observations.content[0];",
+              "pm.test('currency, period, geography and source recorded', () => { pm.expect(o.currency).to.eql('USD'); pm.expect(o.rentPeriod).to.eql('MONTHLY'); pm.expect(o.convertedFrom).to.eql(null); pm.expect(o.geographyLevel).to.eql('TRACT'); pm.expect(o.source).to.eql('US_CENSUS_ACS'); pm.expect(o.sourceReleaseDate).to.eql('2024-12-12'); pm.expect(o.periodStart).to.eql('2019-01-01'); pm.expect(o.periodEnd).to.eql('2023-12-31'); });",
+              "pm.test('median 1018 +/- 112, survey estimate', () => { pm.expect(Number(o.medianRent)).to.eql(1018); pm.expect(Number(o.medianRentMoe)).to.eql(112); pm.expect(o.observationKind).to.eql('ESTIMATE'); pm.expect(o.evidenceType).to.eql('ACHIEVED'); });",
+              "pm.collectionVariables.set('tractRows', r.observations.totalElements);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Read tract 12001001815, left out of the Census file (200, NO_COVERAGE)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001001815",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001001815"
+            }
+          ]
+        },
+        "description": "The Census publishes no estimate for this tract (-666666666), so the row was left out when the file was prepared."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('NO_COVERAGE, empty page, explicit note', () => { pm.expect(r.coverage).to.eql('NO_COVERAGE'); pm.expect(r.observations.content).to.have.length(0); pm.expect(r.note).to.include('12001001815'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Idempotency: admin imports the same Census file again (202)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import?stagedFile={{acsStagedFile}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for RENT_EVIDENCE', () => { pm.expect(job.dataset).to.eql('RENT_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+              "pm.collectionVariables.set('rerunJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Poll the re-import (200, COMPLETED, 4,732 rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{rerunJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{rerunJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "const tries = Number(pm.collectionVariables.get('pollTries') || 0);",
+              "if ((job.status === 'QUEUED' || job.status === 'RUNNING') && tries < 60) {",
+              "  pm.collectionVariables.set('pollTries', tries + 1);",
+              "  console.log('still ' + job.status + ', polling again');",
+              "  setTimeout(() => {}, 2000);",
+              "  pm.execution.setNextRequest(pm.info.requestName);",
+              "  return;",
+              "}",
+              "pm.collectionVariables.set('pollTries', 0);",
+              "pm.test('COMPLETED, 4,732 rows', () => { pm.expect(job.status).to.eql('COMPLETED'); pm.expect(job.completed).to.eql(4732); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Read tract 12001000201 again (200, same row count: updated, not duplicated)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001000201",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001000201"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('same number of rows as after the first import', () => pm.expect(r.observations.totalElements).to.eql(Number(pm.collectionVariables.get('tractRows'))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Admin uploads the SAMPLE asking + annual file (202)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/asking_and_annual.csv"
+            }
+          ]
+        },
+        "description": "SAMPLE data, not real: two asking rows (tract 12086000107, ZIP 33139) and two achieved county rows for 2025, one ANNUAL and one MONTHLY."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for RENT_EVIDENCE', () => { pm.expect(job.dataset).to.eql('RENT_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+              "pm.collectionVariables.set('sampleJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Poll the sample job (200, COMPLETED, 4 rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{sampleJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{sampleJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "const tries = Number(pm.collectionVariables.get('pollTries') || 0);",
+              "if ((job.status === 'QUEUED' || job.status === 'RUNNING') && tries < 60) {",
+              "  pm.collectionVariables.set('pollTries', tries + 1);",
+              "  console.log('still ' + job.status + ', polling again');",
+              "  setTimeout(() => {}, 2000);",
+              "  pm.execution.setNextRequest(pm.info.requestName);",
+              "  return;",
+              "}",
+              "pm.collectionVariables.set('pollTries', 0);",
+              "pm.test('COMPLETED, 4 rows', () => { pm.expect(job.status).to.eql('COMPLETED'); pm.expect(job.completed).to.eql(4); pm.expect(job.failed).to.eql(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Read tract 12086000107 (200, AVAILABLE: asking and achieved kept apart)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12086000107",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12086000107"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('AVAILABLE', () => { pm.expect(r.coverage).to.eql('AVAILABLE'); pm.expect(r.missingTypes).to.have.length(0); pm.expect(r.note).to.eql(null); });",
+              "const types = r.observations.content.map(o => o.evidenceType);",
+              "pm.test('one ASKING and one ACHIEVED row, never combined', () => { pm.expect(types).to.include('ASKING'); pm.expect(types).to.include('ACHIEVED'); });",
+              "const asking = r.observations.content.find(o => o.evidenceType === 'ASKING');",
+              "pm.test('asking row: 2 bedrooms, 2850 a month', () => { pm.expect(asking.bedrooms).to.eql(2); pm.expect(Number(asking.medianRent)).to.eql(2850); pm.expect(asking.rentPeriod).to.eql('MONTHLY'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Read county 12086 as published (200, ANNUAL and MONTHLY rows separate)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=COUNTY&code=12086&source=SAMPLE_LEASES",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "COUNTY"
+            },
+            {
+              "key": "code",
+              "value": "12086"
+            },
+            {
+              "key": "source",
+              "value": "SAMPLE_LEASES"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "const rows = r.observations.content;",
+              "const annual = rows.find(o => o.rentPeriod === 'ANNUAL'); const monthly = rows.find(o => o.rentPeriod === 'MONTHLY');",
+              "pm.test('two rows, nothing converted', () => { pm.expect(rows).to.have.length(2); rows.forEach(o => pm.expect(o.convertedFrom).to.eql(null)); });",
+              "pm.test('annual 30000 and monthly 2500 as published', () => { pm.expect(Number(annual.medianRent)).to.eql(30000); pm.expect(Number(monthly.medianRent)).to.eql(2500); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Read county 12086 with asMonthly=true (200, annual row converted and marked)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=COUNTY&code=12086&source=SAMPLE_LEASES&asMonthly=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "COUNTY"
+            },
+            {
+              "key": "code",
+              "value": "12086"
+            },
+            {
+              "key": "source",
+              "value": "SAMPLE_LEASES"
+            },
+            {
+              "key": "asMonthly",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "const rows = r.observations.content;",
+              "const converted = rows.find(o => o.convertedFrom === 'ANNUAL');",
+              "pm.test('every row is MONTHLY', () => rows.forEach(o => pm.expect(o.rentPeriod).to.eql('MONTHLY')));",
+              "pm.test('annual row divided by 12 and marked convertedFrom = ANNUAL', () => { pm.expect(converted).to.exist; pm.expect(Number(converted.medianRent)).to.eql(2500); pm.expect(Number(converted.averageRent)).to.eql(2625); });",
+              "pm.test('the published monthly row is not marked', () => pm.expect(rows.filter(o => o.convertedFrom === null)).to.have.length(1));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Read tract 12001000201 asking only (200, NO_COVERAGE: no asking source yet)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001000201&type=ASKING",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001000201"
+            },
+            {
+              "key": "type",
+              "value": "ASKING"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('NO_COVERAGE for ASKING', () => { pm.expect(r.coverage).to.eql('NO_COVERAGE'); pm.expect(r.missingTypes).to.eql(['ASKING']); pm.expect(r.note).to.include('asking'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Invalid input: file without rent_period (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/missing_column.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"missing the columns [rent_period]\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Invalid input: empty file (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/empty.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"is empty\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Invalid input: no file at all (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"Upload 'file' or name a staged file\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Invalid row: rent_period WEEKLY on data row 2 (202, job queued)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/bad_row.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for RENT_EVIDENCE', () => { pm.expect(job.dataset).to.eql('RENT_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+              "pm.collectionVariables.set('badRowJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Poll the bad-row job (200, FAILED INVALID_ROW at record 2)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{badRowJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{badRowJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "const tries = Number(pm.collectionVariables.get('pollTries') || 0);",
+              "if ((job.status === 'QUEUED' || job.status === 'RUNNING') && tries < 60) {",
+              "  pm.collectionVariables.set('pollTries', tries + 1);",
+              "  console.log('still ' + job.status + ', polling again');",
+              "  setTimeout(() => {}, 2000);",
+              "  pm.execution.setNextRequest(pm.info.requestName);",
+              "  return;",
+              "}",
+              "pm.collectionVariables.set('pollTries', 0);",
+              "pm.test('FAILED with INVALID_ROW', () => { pm.expect(job.status).to.eql('FAILED'); pm.expect(job.errorCode).to.eql('INVALID_ROW'); });",
+              "pm.test('names the record and the column', () => { pm.expect(job.errorMessage).to.include('rent_evidence.csv:2'); pm.expect(job.errorMessage).to.include('WEEKLY'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Read ZIP 33130 after the failed job (200, NO_COVERAGE: the batch was rolled back)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=ZIP&code=33130",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33130"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('valid row 1 was rolled back with the bad row', () => pm.expect(r.coverage).to.eql('NO_COVERAGE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Empty data: header-only file (202, job queued)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ]
+        },
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "{{sampleDir}}/header_only.csv"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 202', () => pm.response.to.have.status(202));",
+              "pm.test('Location points at the job', () => pm.expect(pm.response.headers.get('Location')).to.include('/api/ingestion/jobs/'));",
+              "const job = pm.response.json();",
+              "pm.test('job queued for RENT_EVIDENCE', () => { pm.expect(job.dataset).to.eql('RENT_EVIDENCE'); pm.expect(job.jobType).to.eql('CSV_IMPORT'); });",
+              "pm.collectionVariables.set('headerJobId', job.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 Poll the header-only job (200, COMPLETED, 0 rows)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/jobs/{{headerJobId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "jobs",
+            "{{headerJobId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const job = pm.response.json();",
+              "const tries = Number(pm.collectionVariables.get('pollTries') || 0);",
+              "if ((job.status === 'QUEUED' || job.status === 'RUNNING') && tries < 60) {",
+              "  pm.collectionVariables.set('pollTries', tries + 1);",
+              "  console.log('still ' + job.status + ', polling again');",
+              "  setTimeout(() => {}, 2000);",
+              "  pm.execution.setNextRequest(pm.info.requestName);",
+              "  return;",
+              "}",
+              "pm.collectionVariables.set('pollTries', 0);",
+              "pm.test('COMPLETED with 0 rows', () => { pm.expect(job.status).to.eql('COMPLETED'); pm.expect(job.total).to.eql(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 Invalid read: tract code with 10 digits (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=1208600010",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "1208600010"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"11-digit code\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 Invalid read: level CITY (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=CITY&code=Miami",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "CITY"
+            },
+            {
+              "key": "code",
+              "value": "Miami"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"level\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 Invalid read: to before from (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=ZIP&code=33139&from=2026-12-01&to=2026-01-01",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            },
+            {
+              "key": "from",
+              "value": "2026-12-01"
+            },
+            {
+              "key": "to",
+              "value": "2026-01-01"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"to must not be before from\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 Invalid read: size 500 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=ZIP&code=33139&size=500",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "ZIP"
+            },
+            {
+              "key": "code",
+              "value": "33139"
+            },
+            {
+              "key": "size",
+              "value": "500"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"size must be between 1 and 200\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 Ownership: non-admin user cannot import (403)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import?stagedFile={{acsStagedFile}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31 Ownership: no token cannot import (401)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/rent-evidence/import?stagedFile={{acsStagedFile}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "admin",
+            "rent-evidence",
+            "import"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "32 Ownership: read without a token (401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/rent-evidence?level=TRACT&code=12001000201",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "level",
+              "value": "TRACT"
+            },
+            {
+              "key": "code",
+              "value": "12001000201"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "33 Generic import endpoint refuses rent-evidence (400, points to the admin endpoint)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/ingestion/import/rent-evidence?stagedFile={{acsStagedFile}}&county=Miami-Dade&sourceState=FL",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "ingestion",
+            "import",
+            "rent-evidence"
+          ],
+          "query": [
+            {
+              "key": "stagedFile",
+              "value": "{{acsStagedFile}}"
+            },
+            {
+              "key": "county",
+              "value": "Miami-Dade"
+            },
+            {
+              "key": "sourceState",
+              "value": "FL"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"/api/admin/rent-evidence/import\"));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "adminUser",
+      "value": "lic_admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "user",
+      "value": "lic_user_a"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "sampleDir",
+      "value": "C:/path/to/property-service/docs/postman/samples/rent-evidence"
+    },
+    {
+      "key": "acsStagedFile",
+      "value": "rent_evidence/rent_evidence.csv"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "acsJobId",
+      "value": ""
+    },
+    {
+      "key": "rerunJobId",
+      "value": ""
+    },
+    {
+      "key": "sampleJobId",
+      "value": ""
+    },
+    {
+      "key": "badRowJobId",
+      "value": ""
+    },
+    {
+      "key": "headerJobId",
+      "value": ""
+    },
+    {
+      "key": "tractRows",
+      "value": ""
+    },
+    {
+      "key": "pollTries",
+      "value": "0"
+    }
+  ]
+}

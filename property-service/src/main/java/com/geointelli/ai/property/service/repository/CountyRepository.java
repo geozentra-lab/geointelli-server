@@ -41,4 +41,11 @@ public interface CountyRepository extends JpaRepository<County, Long> {
     /** ID of the county with this five-digit FIPS code ({@code counties.fips_code}, migration V42). */
     @Query(value = "SELECT id FROM counties WHERE fips_code = :fips", nativeQuery = true)
     Optional<Long> findIdByFipsCode(@Param("fips") String fips);
+
+    /**
+     * The county whose five-digit FIPS code ({@code counties.fips_code}, migration V42) is {@code fips}, used to
+     * link county- and tract-level reference rows (SCRUM-132). Empty when no county carries that code.
+     */
+    @Query(value = "SELECT * FROM counties WHERE fips_code = :fips", nativeQuery = true)
+    Optional<County> findByFipsCode(@Param("fips") String fips);
 }

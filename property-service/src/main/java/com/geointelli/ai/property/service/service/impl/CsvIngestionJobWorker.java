@@ -35,6 +35,7 @@ import com.geointelli.ai.property.service.service.IngestionJobService.Counters;
 import com.geointelli.ai.property.service.service.IngestionJobWorker;
 import com.geointelli.ai.property.service.service.MarketEvidenceImportService;
 import com.geointelli.ai.property.service.service.PropertyImageService;
+import com.geointelli.ai.property.service.service.RentEvidenceImportService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import lombok.extern.slf4j.Slf4j;
@@ -62,16 +63,18 @@ public class CsvIngestionJobWorker implements IngestionJobWorker {
 
     private final CsvImportService csvImportService;
     private final MarketEvidenceImportService marketEvidenceImportService;
+    private final RentEvidenceImportService rentEvidenceImportService;
     private final PropertyImageService propertyImageService;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final int batchSize;
 
     public CsvIngestionJobWorker(CsvImportService csvImportService, MarketEvidenceImportService marketEvidenceImportService,
-            PropertyImageService propertyImageService, EntityManager entityManager, ObjectMapper objectMapper,
-            IngestionProperties properties) {
+            RentEvidenceImportService rentEvidenceImportService, PropertyImageService propertyImageService,
+            EntityManager entityManager, ObjectMapper objectMapper, IngestionProperties properties) {
         this.csvImportService = csvImportService;
         this.marketEvidenceImportService = marketEvidenceImportService;
+        this.rentEvidenceImportService = rentEvidenceImportService;
         this.propertyImageService = propertyImageService;
         this.entityManager = entityManager;
         this.objectMapper = objectMapper;
@@ -118,6 +121,7 @@ public class CsvIngestionJobWorker implements IngestionJobWorker {
                     }
                     case PROPERTY_IMAGES -> importImages(rows, file, county, state);
                     case MARKET_EVIDENCE -> rows.run(file, CsvCheckpoint.ROWS, marketEvidenceImportService.rowImporter(job.getId()), true);
+                    case RENT_EVIDENCE -> rows.run(file, CsvCheckpoint.ROWS, rentEvidenceImportService.rowImporter(job.getId()), true);
                     default -> rows.run(file, CsvCheckpoint.ROWS, csvImportService.relatedRowImporter(step, county, state), true);
                 }
                 counters = rows.counters;
