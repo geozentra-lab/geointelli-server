@@ -1,0 +1,544 @@
+{
+  "info": {
+    "_postman_id": "1198d7d7-891b-5f85-99ea-5214f332dc1b",
+    "name": "SCRUM-128 Location intelligence",
+    "description": "Manual checks for GET /api/properties/id/{id}/location-intelligence (schools, transport and risk in one response). Run in order. Set password and adminPassword; set completePropertyId to a property with data and emptyPropertyId to one without any. The complete and partial responses are saved as examples on request 03. Contract: docs/location-intelligence.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Token for a normal user (Keycloak password grant)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{user}}"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('userToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Token for an admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+          "host": [
+            "{{keycloakUrl}}"
+          ],
+          "path": [
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "grant_type",
+              "value": "password"
+            },
+            {
+              "key": "username",
+              "value": "{{adminUser}}"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Complete: property with school, transport and risk data (200, COMPLETE)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{completePropertyId}}/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{completePropertyId}}",
+            "location-intelligence"
+          ]
+        },
+        "description": "Property with data in the three sections. Saved examples: \"Complete\" (this request) and \"Partial\" (the same property while the school table could not be read and the transport source was down; it cannot be reproduced without breaking the database, so it is documented as an example only)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('the three sections and an errors list', () => { pm.expect(r).to.have.property('schools'); pm.expect(r).to.have.property('transport'); pm.expect(r).to.have.property('risk'); pm.expect(r.errors).to.be.an('array'); });",
+              "pm.test('COMPLETE, no section error', () => { pm.expect(r.status).to.eql('COMPLETE'); pm.expect(r.errors).to.have.length(0); });",
+              "pm.test('same property in every section', () => { pm.expect(r.schools.propertyId).to.eql(r.propertyId); pm.expect(r.transport.propertyId).to.eql(r.propertyId); pm.expect(r.risk.propertyId).to.eql(r.propertyId); });",
+              "pm.test('sections answered with their own statuses', () => { pm.expect(['AVAILABLE','NO_NEARBY_RESULTS','NO_COVERAGE']).to.include(r.schools.status); pm.expect(['AVAILABLE','NO_COVERAGE']).to.include(r.transport.status); pm.expect(['AVAILABLE','NO_COVERAGE']).to.include(r.risk.status); });",
+              "pm.test('every section names its source or blocks', () => { pm.expect(r.schools.source).to.be.a('string'); pm.expect(r.transport.source).to.be.a('string'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Complete (property 1, local verification database)",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/id/{{completePropertyId}}/location-intelligence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "id",
+                "{{completePropertyId}}",
+                "location-intelligence"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ]
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"propertyId\": 1,\n  \"status\": \"COMPLETE\",\n  \"schools\": {\n    \"propertyId\": 1,\n    \"status\": \"AVAILABLE\",\n    \"distanceUnit\": \"m\",\n    \"assignedSchools\": [],\n    \"schoolScoreV2\": null,\n    \"schoolScoreV2Label\": null,\n    \"qualityScore\": null,\n    \"accessScore\": null,\n    \"choiceScore\": null,\n    \"gradeYear\": null,\n    \"scoreVersion\": null,\n    \"nearestPublicSchoolDistance\": 640.0,\n    \"nearestCharterSchoolDistance\": 1850.0,\n    \"schoolsWithin1km\": 3,\n    \"schoolScore\": 65,\n    \"schoolScoreLabel\": \"Good\",\n    \"publicSchoolDistanceScore\": 80,\n    \"charterSchoolDistanceScore\": 45,\n    \"schoolDensityScore\": 60,\n    \"source\": \"GeoZentra school analysis (sales ML dataset)\",\n    \"note\": null\n  },\n  \"transport\": {\n    \"propertyId\": 1,\n    \"status\": \"AVAILABLE\",\n    \"distanceUnit\": \"m\",\n    \"transport\": [\n      {\n        \"category\": \"RAIL\",\n        \"nearestDistance\": 2400.0\n      },\n      {\n        \"category\": \"BUS\",\n        \"nearestDistance\": 180.0\n      },\n      {\n        \"category\": \"HIGHWAY\",\n        \"nearestDistance\": 1300.0\n      }\n    ],\n    \"busStopsWithin500m\": 4,\n    \"transportationScore\": 56,\n    \"transportationScoreLabel\": \"Fair\",\n    \"source\": \"GeoZentra transportation analysis (sales ML dataset)\",\n    \"error\": null,\n    \"note\": \"Score based on known values only, unknown values: PEOPLE_MOVER\"\n  },\n  \"risk\": {\n    \"propertyId\": 1,\n    \"status\": \"AVAILABLE\",\n    \"distanceUnit\": \"m\",\n    \"flood\": {\n      \"status\": \"AVAILABLE\",\n      \"zone\": \"AE\",\n      \"zoneSubtype\": null,\n      \"specialFloodHazardArea\": true,\n      \"baseFloodElevationFt\": 9.0,\n      \"depthFt\": null,\n      \"studyType\": \"NP\",\n      \"firmId\": \"12086C\",\n      \"source\": \"FEMA National Flood Hazard Layer (NFHL), flood hazard zones\",\n      \"dataAsOf\": \"2026-11-14\",\n      \"note\": null\n    },\n    \"hazards\": {\n      \"status\": \"AVAILABLE\",\n      \"tractFips\": \"12086010201\",\n      \"tractName\": \"Census Tract 102.01\",\n      \"nriVersion\": \"December 2025\",\n      \"overallScore\": 91.897066,\n      \"overallRating\": \"Relatively High\",\n      \"ratings\": [\n        {\n          \"code\": \"HRCN\",\n          \"name\": \"Hurricane\",\n          \"score\": 96.288486,\n          \"rating\": \"Relatively High\"\n        },\n        {\n          \"code\": \"CFLD\",\n          \"name\": \"Coastal flooding\",\n          \"score\": 85.783711,\n          \"rating\": \"Relatively Low\"\n        },\n        {\n          \"code\": \"IFLD\",\n          \"name\": \"Inland (riverine) flooding\",\n          \"score\": 91.443997,\n          \"rating\": \"Relatively High\"\n        },\n        {\n          \"code\": \"TRND\",\n          \"name\": \"Tornado\",\n          \"score\": 42.555266,\n          \"rating\": \"Relatively Low\"\n        },\n        {\n          \"code\": \"WFIR\",\n          \"name\": \"Wildfire\",\n          \"score\": 93.379948,\n          \"rating\": \"Relatively Moderate\"\n        },\n        {\n          \"code\": \"SWND\",\n          \"name\": \"Strong wind\",\n          \"score\": 12.588444,\n          \"rating\": \"Very Low\"\n        },\n        {\n          \"code\": \"LTNG\",\n          \"name\": \"Lightning\",\n          \"score\": 52.7095,\n          \"rating\": \"Relatively Moderate\"\n        },\n        {\n          \"code\": \"HWAV\",\n          \"name\": \"Heat wave\",\n          \"score\": 57.8805,\n          \"rating\": \"Relatively Moderate\"\n        }\n      ],\n      \"source\": \"FEMA National Risk Index (NRI), census tract\",\n      \"dataAsOf\": \"2026-11-11\",\n      \"note\": null\n    },\n    \"storms\": {\n      \"status\": \"AVAILABLE\",\n      \"radius\": 10000,\n      \"fromYear\": 1996,\n      \"eventsWithinRadius\": 39,\n      \"eventsInCounty\": 1025,\n      \"lastEventDate\": \"2026-06-26\",\n      \"byType\": [\n        {\n          \"eventType\": \"Thunderstorm Wind\",\n          \"count\": 13,\n          \"lastEventDate\": \"2025-03-25\",\n          \"propertyDamageUsd\": 46000\n        },\n        {\n          \"eventType\": \"Funnel Cloud\",\n          \"count\": 7,\n          \"lastEventDate\": \"2025-06-01\",\n          \"propertyDamageUsd\": 0\n        },\n        {\n          \"eventType\": \"Hail\",\n          \"count\": 7,\n          \"lastEventDate\": \"2022-05-15\",\n          \"propertyDamageUsd\": 0\n        },\n        {\n          \"eventType\": \"Tornado\",\n          \"count\": 6,\n          \"lastEventDate\": \"2023-05-25\",\n          \"propertyDamageUsd\": 60000\n        },\n        {\n          \"eventType\": \"Lightning\",\n          \"count\": 3,\n          \"lastEventDate\": \"2026-06-26\",\n          \"propertyDamageUsd\": 50000\n        },\n        {\n          \"eventType\": \"Flash Flood\",\n          \"count\": 2,\n          \"lastEventDate\": \"2023-05-26\",\n          \"propertyDamageUsd\": 30000\n        },\n        {\n          \"eventType\": \"Flood\",\n          \"count\": 1,\n          \"lastEventDate\": \"2024-04-30\",\n          \"propertyDamageUsd\": 0\n        }\n      ],\n      \"notCountedEventTypes\": [\n        \"Drought\",\n        \"Tropical Storm\",\n        \"Frost/Freeze\",\n        \"Dense Fog\",\n        \"Rip Current\",\n        \"Hurricane (Typhoon)\",\n        \"Coastal Flood\",\n        \"Storm Surge/Tide\",\n        \"Wildfire\",\n        \"Excessive Heat\",\n        \"High Wind\",\n        \"Flood\",\n        \"Extreme Cold/Wind Chill\",\n        \"High Surf\",\n        \"Tropical Depression\",\n        \"Strong Wind\",\n        \"Cold/Wind Chill\",\n        \"Heat\",\n        \"Winter Storm\",\n        \"Winter Weather\",\n        \"Heavy Snow\",\n        \"Sleet\",\n        \"Astronomical Low Tide\",\n        \"Dense Smoke\",\n        \"Ice Storm\",\n        \"Heavy Rain\",\n        \"Seiche\"\n      ],\n      \"source\": \"NOAA NCEI Storm Events Database\",\n      \"dataAsOf\": \"2026-11-11\",\n      \"note\": \"Only events with coordinates are counted within the radius; eventsInCounty also counts the county's events without coordinates. Events NOAA records by forecast zone (the types in notCountedEventTypes, such as hurricanes, tropical storms and storm surge) have no location and no county, so neither count includes them; this is not evidence that they did not occur here\"\n    },\n    \"note\": null,\n    \"error\": null\n  },\n  \"errors\": []\n}"
+        },
+        {
+          "name": "Partial (schools failed, transport source down, risk returned)",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/properties/id/{{completePropertyId}}/location-intelligence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "properties",
+                "id",
+                "{{completePropertyId}}",
+                "location-intelligence"
+              ]
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ]
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"propertyId\": 1,\n  \"status\": \"PARTIAL\",\n  \"schools\": null,\n  \"transport\": {\n    \"propertyId\": 1,\n    \"status\": \"UNAVAILABLE\",\n    \"distanceUnit\": \"m\",\n    \"transport\": [],\n    \"busStopsWithin500m\": null,\n    \"transportationScore\": null,\n    \"transportationScoreLabel\": null,\n    \"source\": \"GeoZentra transportation analysis (sales ML dataset)\",\n    \"error\": \"Transport data source unavailable\",\n    \"note\": null\n  },\n  \"risk\": {\n    \"propertyId\": 1,\n    \"status\": \"AVAILABLE\",\n    \"distanceUnit\": \"m\",\n    \"flood\": {\n      \"status\": \"AVAILABLE\",\n      \"zone\": \"AE\",\n      \"zoneSubtype\": null,\n      \"specialFloodHazardArea\": true,\n      \"baseFloodElevationFt\": 9.0,\n      \"depthFt\": null,\n      \"studyType\": \"NP\",\n      \"firmId\": \"12086C\",\n      \"source\": \"FEMA National Flood Hazard Layer (NFHL), flood hazard zones\",\n      \"dataAsOf\": \"2026-11-14\",\n      \"note\": null\n    },\n    \"hazards\": {\n      \"status\": \"AVAILABLE\",\n      \"tractFips\": \"12086010201\",\n      \"tractName\": \"Census Tract 102.01\",\n      \"nriVersion\": \"December 2025\",\n      \"overallScore\": 91.897066,\n      \"overallRating\": \"Relatively High\",\n      \"ratings\": [\n        {\n          \"code\": \"HRCN\",\n          \"name\": \"Hurricane\",\n          \"score\": 96.288486,\n          \"rating\": \"Relatively High\"\n        },\n        {\n          \"code\": \"CFLD\",\n          \"name\": \"Coastal flooding\",\n          \"score\": 85.783711,\n          \"rating\": \"Relatively Low\"\n        },\n        {\n          \"code\": \"IFLD\",\n          \"name\": \"Inland (riverine) flooding\",\n          \"score\": 91.443997,\n          \"rating\": \"Relatively High\"\n        },\n        {\n          \"code\": \"TRND\",\n          \"name\": \"Tornado\",\n          \"score\": 42.555266,\n          \"rating\": \"Relatively Low\"\n        },\n        {\n          \"code\": \"WFIR\",\n          \"name\": \"Wildfire\",\n          \"score\": 93.379948,\n          \"rating\": \"Relatively Moderate\"\n        },\n        {\n          \"code\": \"SWND\",\n          \"name\": \"Strong wind\",\n          \"score\": 12.588444,\n          \"rating\": \"Very Low\"\n        },\n        {\n          \"code\": \"LTNG\",\n          \"name\": \"Lightning\",\n          \"score\": 52.7095,\n          \"rating\": \"Relatively Moderate\"\n        },\n        {\n          \"code\": \"HWAV\",\n          \"name\": \"Heat wave\",\n          \"score\": 57.8805,\n          \"rating\": \"Relatively Moderate\"\n        }\n      ],\n      \"source\": \"FEMA National Risk Index (NRI), census tract\",\n      \"dataAsOf\": \"2026-11-11\",\n      \"note\": null\n    },\n    \"storms\": {\n      \"status\": \"AVAILABLE\",\n      \"radius\": 10000,\n      \"fromYear\": 1996,\n      \"eventsWithinRadius\": 39,\n      \"eventsInCounty\": 1025,\n      \"lastEventDate\": \"2026-06-26\",\n      \"byType\": [\n        {\n          \"eventType\": \"Thunderstorm Wind\",\n          \"count\": 13,\n          \"lastEventDate\": \"2025-03-25\",\n          \"propertyDamageUsd\": 46000\n        },\n        {\n          \"eventType\": \"Funnel Cloud\",\n          \"count\": 7,\n          \"lastEventDate\": \"2025-06-01\",\n          \"propertyDamageUsd\": 0\n        },\n        {\n          \"eventType\": \"Hail\",\n          \"count\": 7,\n          \"lastEventDate\": \"2022-05-15\",\n          \"propertyDamageUsd\": 0\n        },\n        {\n          \"eventType\": \"Tornado\",\n          \"count\": 6,\n          \"lastEventDate\": \"2023-05-25\",\n          \"propertyDamageUsd\": 60000\n        },\n        {\n          \"eventType\": \"Lightning\",\n          \"count\": 3,\n          \"lastEventDate\": \"2026-06-26\",\n          \"propertyDamageUsd\": 50000\n        },\n        {\n          \"eventType\": \"Flash Flood\",\n          \"count\": 2,\n          \"lastEventDate\": \"2023-05-26\",\n          \"propertyDamageUsd\": 30000\n        },\n        {\n          \"eventType\": \"Flood\",\n          \"count\": 1,\n          \"lastEventDate\": \"2024-04-30\",\n          \"propertyDamageUsd\": 0\n        }\n      ],\n      \"notCountedEventTypes\": [\n        \"Drought\",\n        \"Tropical Storm\",\n        \"Frost/Freeze\",\n        \"Dense Fog\",\n        \"Rip Current\",\n        \"Hurricane (Typhoon)\",\n        \"Coastal Flood\",\n        \"Storm Surge/Tide\",\n        \"Wildfire\",\n        \"Excessive Heat\",\n        \"High Wind\",\n        \"Flood\",\n        \"Extreme Cold/Wind Chill\",\n        \"High Surf\",\n        \"Tropical Depression\",\n        \"Strong Wind\",\n        \"Cold/Wind Chill\",\n        \"Heat\",\n        \"Winter Storm\",\n        \"Winter Weather\",\n        \"Heavy Snow\",\n        \"Sleet\",\n        \"Astronomical Low Tide\",\n        \"Dense Smoke\",\n        \"Ice Storm\",\n        \"Heavy Rain\",\n        \"Seiche\"\n      ],\n      \"source\": \"NOAA NCEI Storm Events Database\",\n      \"dataAsOf\": \"2026-11-11\",\n      \"note\": \"Only events with coordinates are counted within the radius; eventsInCounty also counts the county's events without coordinates. Events NOAA records by forecast zone (the types in notCountedEventTypes, such as hurricanes, tropical storms and storm surge) have no location and no county, so neither count includes them; this is not evidence that they did not occur here\"\n    },\n    \"note\": null,\n    \"error\": null\n  },\n  \"errors\": [\n    {\n      \"section\": \"schools\",\n      \"code\": \"SECTION_FAILED\",\n      \"message\": \"The schools section could not be read\"\n    },\n    {\n      \"section\": \"transport\",\n      \"code\": \"SECTION_UNAVAILABLE\",\n      \"message\": \"Transport data source unavailable\"\n    }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "04 Empty data: property without school, transport or parcel data (200, COMPLETE with NO_COVERAGE sections)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{emptyPropertyId}}/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{emptyPropertyId}}",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('the three sections and an errors list', () => { pm.expect(r).to.have.property('schools'); pm.expect(r).to.have.property('transport'); pm.expect(r).to.have.property('risk'); pm.expect(r.errors).to.be.an('array'); });",
+              "pm.test('COMPLETE: no data is an answer, not an error', () => { pm.expect(r.status).to.eql('COMPLETE'); pm.expect(r.errors).to.have.length(0); });",
+              "pm.test('each section says NO_COVERAGE with a note', () => { ['schools','transport','risk'].forEach(s => { pm.expect(r[s].status).to.eql('NO_COVERAGE'); pm.expect(r[s].note).to.be.a('string'); }); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Any role: the admin reads the same property (200)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{completePropertyId}}/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{completePropertyId}}",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test('same answer as for the normal user', () => pm.expect(r.status).to.eql('COMPLETE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Unknown property (404)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{unknownPropertyId}}/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{unknownPropertyId}}",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 404', () => pm.response.to.have.status(404));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"No property found with id\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Invalid input: id 0 (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/0/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "0",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"id must be a positive number\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Invalid input: negative id (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/-5/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "-5",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"id must be a positive number\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Invalid input: id is not a number (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{userToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/abc/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "abc",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('message explains', () => pm.expect(pm.response.json().message).to.include(\"id\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 No token (401)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/properties/id/{{completePropertyId}}/location-intelligence",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "properties",
+            "id",
+            "{{completePropertyId}}",
+            "location-intelligence"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8090/realms/geozentra"
+    },
+    {
+      "key": "clientId",
+      "value": "geozentra-postman"
+    },
+    {
+      "key": "user",
+      "value": "lic_user_a"
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "adminUser",
+      "value": "lic_admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "completePropertyId",
+      "value": "1"
+    },
+    {
+      "key": "emptyPropertyId",
+      "value": "5"
+    },
+    {
+      "key": "unknownPropertyId",
+      "value": "999999999"
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    }
+  ]
+}

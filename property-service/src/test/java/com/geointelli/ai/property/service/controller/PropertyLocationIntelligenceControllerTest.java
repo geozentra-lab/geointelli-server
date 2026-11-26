@@ -2,6 +2,7 @@ package com.geointelli.ai.property.service.controller;
 
 import com.geointelli.ai.property.service.dto.SchoolContextDTO;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
+import com.geointelli.ai.property.service.service.PropertyLocationIntelligenceService;
 import com.geointelli.ai.property.service.service.PropertySchoolContextService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -27,6 +28,9 @@ public class PropertyLocationIntelligenceControllerTest {
 
     @MockBean
     PropertySchoolContextService propertySchoolContextService;
+
+    @MockBean
+    PropertyLocationIntelligenceService locationIntelligenceService;
 
     private static SchoolContextDTO context(String status, Double distPublic, Integer within1km, String note) {
         SchoolContextDTO context = new SchoolContextDTO();
