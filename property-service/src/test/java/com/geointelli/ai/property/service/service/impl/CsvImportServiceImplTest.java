@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -23,6 +24,7 @@ import com.geointelli.ai.property.service.repository.*;
 import com.geointelli.ai.property.service.service.CountyService;
 import com.geointelli.ai.property.service.service.PropertyImageService;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 
 class CsvImportServiceImplTest {
     @TempDir Path directory;
@@ -353,6 +355,28 @@ class CsvImportServiceImplTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.importOwners(path, directory.resolve("links.csv"), "county", "state"));
         verify(entityManager, never()).persist(any());
+    }
+
+    @Test
+    void importsBuildingsThenFillsYearBuiltFromThem() throws Exception {
+        Query fill = mock(Query.class);
+        when(entityManager.createNativeQuery(CsvImportServiceImpl.FILL_YEAR_BUILT_FROM_BUILDINGS)).thenReturn(fill);
+        when(fill.executeUpdate()).thenReturn(1);
+
+        service.importBuildings(csv("property_id,actual,actual_area,adjusted_base_price,building_no,depreciated_value,"
+                + "effective,effective_area,gross_area,heated_area,improvement_model_desc,message,percent_comp,"
+                + "percentage_good,replacement_cost_new,roll_year,seg_no,total_adjusted_points,traverse_points\n"
+                + "12,1970,1407,,1,,1970,,,,Single Family Residential,,,,,2025,1,,\n"), "county", "state");
+
+        ArgumentCaptor<Building> captor = ArgumentCaptor.forClass(Building.class);
+        InOrder order = inOrder(entityManager, fill);
+        order.verify(entityManager).persist(captor.capture());
+        order.verify(entityManager).flush();
+        order.verify(entityManager).createNativeQuery(CsvImportServiceImpl.FILL_YEAR_BUILT_FROM_BUILDINGS);
+        order.verify(fill).executeUpdate();
+        order.verify(entityManager).clear();
+        assertEquals(1970, captor.getValue().getActual());
+        assertSame(property, captor.getValue().getProperty());
     }
 
     @Test
