@@ -47,7 +47,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
         nativeQuery = true)
     boolean isActiveRealtor(@Param("userId") Long userId, @Param("today") java.time.LocalDate today);
     Optional<User> findByKeycloakUserId(String keycloakUserId);
-    Optional<User> findByEmail(String email);
+    /**
+     * The account that uses this email, ignoring case. Emails are not unique here: deleting a Keycloak account and
+     * signing up again with the same email leaves the old row behind, so the newest row (the live account) wins.
+     */
+    Optional<User> findFirstByEmailIgnoreCaseOrderByIdDesc(String email);
     boolean existsByKeycloakUserId(String keycloakUserId);
 
     /**

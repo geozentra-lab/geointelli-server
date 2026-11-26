@@ -101,7 +101,8 @@ class SecurityPolicyTest {
             "GET,/api/properties/id/7/opportunity-score,investor", "POST,/api/calculations/investment,investor",
             "GET,/api/dashboards/investor,investor", "GET,/api/dashboards/investor/opportunities,investor",
             "GET,/api/dashboards/investor/income-expenses-returns,investor", "POST,/api/scenarios/7/calculate,investor",
-            "GET,/api/dashboards/lender/application-pipeline,lender" })
+            "GET,/api/dashboards/lender/application-pipeline,lender",
+            "GET,/api/lender/organizations/7/members/lookup?email=a@b.co,lender" })
     void professionalFeatureRequiresItsOwnRoleOrAdmin(String method, String path, String role) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         mvc.perform(request(HttpMethod.valueOf(method), path).header("Authorization", "Bearer user"))
@@ -128,7 +129,8 @@ class SecurityPolicyTest {
             "GET,/api/admin/realtor-license-verifications", "POST,/api/admin/realtor-license-verifications/7/approve",
             "GET,/api/admin/role-requests", "POST,/api/admin/role-requests/7/approve",
             "POST,/api/admin/role-requests/7/reject", "GET,/api/admin/users/7/role-grants",
-            "POST,/api/admin/users/7/roles/lender/revoke", "POST,/api/admin/role-grants/realtor-license-expiry" })
+            "POST,/api/admin/users/7/roles/lender/revoke", "POST,/api/admin/role-grants/realtor-license-expiry",
+            "GET,/api/admin/users?email=a@b.co" })
     void operationsRequireAdminIncludingLegacyRoutes(String method, String path) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         for (String role : List.of("user", "investor", "realtor", "lender")) {

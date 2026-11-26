@@ -1,6 +1,7 @@
 package com.geointelli.ai.property.service.service;
 
 import java.util.List;
+import com.geointelli.ai.property.service.dto.LenderMemberLookupDTO;
 import com.geointelli.ai.property.service.dto.LenderOrganizationDTO;
 import com.geointelli.ai.property.service.entity.LenderOrganization;
 
@@ -10,6 +11,12 @@ public interface LenderOrganizationService {
     List<LenderOrganizationDTO> list(Long actor);
     List<Long> members(Long actor, Long organizationId);
     void addMember(Long actor, Long organizationId, Long userId);
+    /**
+     * Owner only: the account that uses this email (ignoring case), so the owner can add it as a member. 400 for a
+     * missing or malformed email, 403 for a member who is not the owner, 404 for an outsider or when no account uses
+     * the email.
+     */
+    LenderMemberLookupDTO lookupMember(Long actor, Long organizationId, String email);
     void removeMember(Long actor, Long organizationId, Long userId);
     /** Verifies membership. Writers lock the organization and recheck access until their transaction commits. */
     LenderOrganization requireAccess(Long actor, Long organizationId, boolean lock);
