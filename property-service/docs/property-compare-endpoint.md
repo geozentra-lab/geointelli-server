@@ -40,7 +40,7 @@ Each item of `properties` is a `PropertyComparisonDTO`:
 | Field | Source | Meaning |
 |---|---|---|
 | `propertyId`, `folio`, `address`, `countyName`, `stateCode` | property | identity of the column |
-| `facts` | property | `bedrooms`, `bathrooms`, `livingAreaSqft`, `lotSizeSqft`, `yearBuilt`, `propertyType` (DOR code + description), `floors`, `units` |
+| `facts` | property | `bedrooms`, `bathrooms`, `livingAreaSqft`, `lotSizeSqft`, `yearBuilt` (for several buildings, where the county says "Multiple (See Building Info.)", the first building's year), `propertyType` (DOR code + description), `floors`, `units` |
 | `assessment` | property assessments | `year`, `totalValue`, `landValue`, `buildingValue`, `assessedValue` for the common year, or the property's own latest year when there is no common year |
 | `lastSale` | property sales | `date`, `price` of the most recent sale |
 | `valuation` | stored prediction | `predictedPrice`, `low`, `high`, `growthPercentage`, `confidenceScore`, `predictionDate` |
@@ -101,7 +101,7 @@ A property without valuation, sale or scores (column for id 10 of `[1, 2, 10]`):
       "address": "13670 SW 75 ST, Unincorporated County, FL 33183-0000",
       "countyName": "Miami-Dade", "stateCode": "FL",
       "facts": { "bedrooms": 4, "bathrooms": 2.0, "livingAreaSqft": 2215, "lotSizeSqft": 11884.0,
-                 "yearBuilt": "Multiple (See Building Info.)",
+                 "yearBuilt": "1970",
                  "propertyType": "0101 RESIDENTIAL - SINGLE FAMILY : 1 UNIT", "floors": 1, "units": 1 },
       "assessment": { "year": 2025, "totalValue": 631132.0, "landValue": 436140.0,
                       "buildingValue": 190600.0, "assessedValue": 204662.0 },

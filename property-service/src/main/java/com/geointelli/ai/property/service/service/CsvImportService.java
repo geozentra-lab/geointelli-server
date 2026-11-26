@@ -20,7 +20,15 @@ public interface CsvImportService {
 
     void importAssessments(Path csvPath, String sourceCounty, String sourceState) throws IOException;
 
+    /** Imports buildings.csv, then runs {@link #fillYearBuiltFromBuildings()} in the same transaction. */
     void importBuildings(Path csvPath, String sourceCounty, String sourceState) throws IOException;
+
+    /**
+     * Replaces the county's "Multiple (See Building Info.)" year built with the first building's actual year, for
+     * every property still holding that text whose buildings carry a year. Runs in the caller's transaction (or its
+     * own when there is none) after buildings were imported; returns the number of properties updated.
+     */
+    int fillYearBuiltFromBuildings();
 
     void importOwners(Path ownersCsvPath, Path propertyOwnersCsvPath, String sourceCounty, String sourceState) throws IOException;
 

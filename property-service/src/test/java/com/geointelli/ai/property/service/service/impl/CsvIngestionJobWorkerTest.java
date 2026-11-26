@@ -269,6 +269,48 @@ class CsvIngestionJobWorkerTest {
     }
 
     @Test
+    @DisplayName("When buildings are imported, then the year built is filled from them once, after every row committed")
+    void whenImportingBuildings_thenYearBuiltIsFilledAfterTheRows() throws Exception {
+        job.setDataset(IngestionDataset.BUILDINGS);
+        Files.writeString(directory.resolve("buildings.csv"), "property_id,actual\n12,1970\n12,1994\n12,2013\n");
+        List<String> order = new ArrayList<>();
+        when(csvImportService.relatedRowImporter(IngestionDataset.BUILDINGS, "Baker", "FL"))
+            .thenReturn(record -> order.add("building " + record.getRecordNumber()));
+        when(csvImportService.fillYearBuiltFromBuildings()).thenAnswer(invocation -> {
+            order.add("fill");
+            return 1;
+        });
+
+        Result result = worker.run(context());
+
+        assertEquals("COMPLETED", result.status());
+        assertEquals(List.of("building 1", "building 2", "building 3", "fill"), order);
+        // count, two batches (2 + 1), the fill, then the final write
+        verify(transactionManager, times(5)).commit(any());
+        List<Counters> counters = recordedCounters();
+        assertEquals(new Counters(3, 3, 0, 0), counters.get(counters.size() - 1));
+    }
+
+    @Test
+    @DisplayName("When filling the year built fails in the database, then it rolls back and the job fails after the rows")
+    void whenYearBuiltFillFails_thenJobFails() throws Exception {
+        job.setDataset(IngestionDataset.BUILDINGS);
+        Files.writeString(directory.resolve("buildings.csv"), "property_id,actual\n12,1970\n");
+        when(csvImportService.relatedRowImporter(IngestionDataset.BUILDINGS, "Baker", "FL")).thenReturn(recordingImporter(-1));
+        when(csvImportService.fillYearBuiltFromBuildings())
+            .thenThrow(new org.springframework.dao.QueryTimeoutException("statement timeout"));
+
+        Result result = worker.run(context());
+
+        assertEquals("FAILED", result.status());
+        assertEquals("DATABASE_ERROR", result.errorCode());
+        assertEquals(List.of(1L), importedRows);
+        verify(transactionManager, times(1)).rollback(any());
+        verify(jobService).addItem(job.getId(), "buildings.csv", "FAILED", "DATABASE_ERROR", "statement timeout");
+        assertTrue(recordedCheckpoints().get(recordedCheckpoints().size() - 1).contains("\"committedRows\":1"));
+    }
+
+    @Test
     @DisplayName("When a message contains a server path, then the stored text replaces it")
     void whenMessageHasPath_thenItIsRemoved() {
         assertEquals("Invalid CSV record 3 in <path>: bad", CsvIngestionJobWorker.sanitize("Invalid CSV record 3 in C:\\data\\in.csv: bad"));

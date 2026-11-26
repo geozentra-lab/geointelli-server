@@ -3,6 +3,7 @@ package com.geointelli.ai.property.service.service.impl;
 import com.geointelli.ai.property.service.enums.IngestionDataset;
 import com.geointelli.ai.property.service.service.CountyService;
 
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,6 +50,7 @@ import com.geointelli.ai.property.service.repository.ParcelRepository;
 import com.geointelli.ai.property.service.repository.PropertyRepository;
 import com.geointelli.ai.property.service.service.PropertyIngestionService;
 import com.geointelli.ai.property.service.service.PropertyService;
+import com.geointelli.ai.property.service.util.YearBuilt;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -189,6 +191,7 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
         Property property = mapProperty(api);
         property.setCounty(countyService.miamiDade());
         linkEntities(property, api);
+        fillYearBuiltFromBuildings(property);
 
         log.info("-------------------saving the property-----------------------");
         Property savedProperty = propertyService.saveProperty(property);
@@ -358,6 +361,12 @@ public class PropertyIngestionServiceImpl implements PropertyIngestionService {
         if(property.getBuildings() == null)
             property.setBuildings(new ArrayList<>());
         property.getBuildings().addAll(buildings);
+        fillYearBuiltFromBuildings(property);
+    }
+
+    /** "Multiple (See Building Info.)" from the county becomes the first building's year ({@link YearBuilt}). */
+    private void fillYearBuiltFromBuildings(Property property) {
+        property.setYearBuilt(YearBuilt.resolve(property.getYearBuilt(), property.getBuildings(), Year.now().getValue()));
     }
 
     @Override
