@@ -160,7 +160,8 @@ The current user's requests, newest first; one of them (404 when missing or anot
 | `POST /api/admin/role-requests/{id}/approve` body optional `{"reason": "..."}` | Keycloak grant, history row, request `APPROVED` with the admin | 404, 409 decided, 503 Keycloak (stays PENDING) |
 | `POST /api/admin/role-requests/{id}/reject` `{"reason": "..."}` | request `REJECTED`; Keycloak not called | 400 no reason, 404, 409 decided |
 | `POST /api/admin/realtor-license-verifications/{id}/approve` (existing) | now also grants `realtor` first | adds 503 Keycloak (stays PENDING_REVIEW) |
-| `GET /api/admin/users?email=` | finds the account by exact email (case ignored): `id`, `keycloakUserId`, `username`, `email`, names, `realtorLicenseStatus`; the `id` goes into the two routes below. When old rows share the email (a Keycloak account deleted and signed up again), the newest one | 400 missing or malformed email, 404 no account uses it |
+| `GET /api/admin/users?email=` | finds the account by exact email (case ignored): `id`, `keycloakUserId`, `username`, `email`, names, `realtorLicenseStatus`; the `id` goes into the two routes below. When old rows share the email (a Keycloak account deleted and signed up again), the newest one is returned | 400 missing or malformed email, 404 no account uses it |
+| `GET /api/admin/users/search?q=&size=10` | suggestions while typing: accounts whose email, full name ("first last") or last name starts with `q`, case ignored, as `[{"id", "email", "firstName", "lastName"}]` by email (no email last), at most `size` (default 10, max 25), `[]` when none; newest row of each email only. See [Admin user search](#admin-user-search) | 400 `q` missing, under 2 or over 254 characters, `size` outside 1-25 |
 | `GET /api/admin/users/{userId}/role-grants` | grant history of a user, newest first | 404 unknown user |
 | `POST /api/admin/users/{userId}/roles/{role}/revoke` `{"reason": "..."}` | Keycloak revocation, history row, the user's approved request for that role `REVOKED`; the way to change an account type | 400 role not investor/realtor/lender or no reason, 404, 503 |
 | `POST /api/admin/role-grants/realtor-license-expiry` | runs the expiry check now: `{"checkedOn", "candidates", "revoked", "failed"}` | failed revocations are retried by the next run |
@@ -180,6 +181,34 @@ The owner of an organization finds the colleague first, then adds them by id:
 Both lookups match the exact email, case ignored, and find an account only once its owner has signed in to GeoZentra
 at least once (the account row is created on the first call). The lender lookup is under `/api/lender/**` (lender or
 admin role).
+
+The lender lookup deliberately has no suggestions: with "starts with" matching, any organization owner could list
+other users' names and emails a few letters at a time. Suggestions are for admins only.
+
+## Admin user search
+
+`GET /api/admin/users/search?q=dan&size=10` (admin) feeds a type-ahead on the admin screens:
+
+- `q` is trimmed, runs of spaces count as one, and case is ignored. `_`, `%` and `\` match themselves.
+- It matches the start of the email (`dan` finds `dana@bank.example`), of the full name "first last" (`jane do`
+  finds Jane Doe) or of the last name (`doe` finds Jane Doe). It does not match the middle of a word (`ane`).
+- At least 2 characters. The frontend should wait for 2 characters and about 250 ms without typing before calling,
+  and ignore answers to older requests.
+- When several rows share an email, only the newest is listed, as in the lookup by email; an old row whose name
+  matches while the newest row's does not is not listed.
+- Picking a suggestion gives the `id` for the role grant history and revoke routes;
+  `GET /api/admin/users?email=` gives the full account with its realtor license status.
+
+Migration `V53__add_user_search_columns.sql` adds three columns that Postgres computes on every insert and update,
+`email_search` (`lower(email)`), `full_name_search` (lowercased "first last") and `last_name_search`, in collation
+"C", each with an index. In code point order the values that start with a prefix are one range, so
+`UserRepository.SEARCH` asks `prefix <= column < UserSearch.upperBound(prefix)` instead of `LIKE`. A range keeps using
+the index when Postgres switches the prepared statement to a generic plan, which LIKE with a bound parameter does not.
+The matches are sorted first, and the newest-row check runs only on the rows the limit takes.
+
+Apply V53 by hand like the other migrations; it can run again safely. Adding stored columns rewrites `users` once
+under a lock that also blocks reads (`users` is small). `UserSearchDatabaseTest` runs V53 and the query on a real
+PostgreSQL when `ENVIRONMENTAL_TEST_DB_URL` points to a local `*_test` database, like the other database tests.
 
 ## Files
 
