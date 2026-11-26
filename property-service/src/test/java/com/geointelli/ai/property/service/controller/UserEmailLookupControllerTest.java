@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import com.geointelli.ai.property.service.advice.GlobalExceptionHandler;
 import com.geointelli.ai.property.service.advice.LenderExceptionHandler;
 import com.geointelli.ai.property.service.dto.LenderMemberLookupDTO;
 import com.geointelli.ai.property.service.dto.UserDTO;
+import com.geointelli.ai.property.service.dto.UserSuggestionDTO;
 import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
 import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.service.CurrentUserService;
@@ -30,7 +32,7 @@ import com.geointelli.ai.property.service.service.LenderOrganizationService;
 import com.geointelli.ai.property.service.service.RealtorLicenseVerificationService;
 import com.geointelli.ai.property.service.service.UserService;
 
-/** HTTP binding of the two email lookups; the route rules are in SecurityPolicyTest. */
+/** HTTP binding of the two email lookups and the admin search; the route rules are in SecurityPolicyTest. */
 class UserEmailLookupControllerTest {
     private final UserService users = mock(UserService.class);
     private final RealtorLicenseVerificationService licenses = mock(RealtorLicenseVerificationService.class);
@@ -75,6 +77,34 @@ class UserEmailLookupControllerTest {
         when(users.findByEmail("nobody")).thenThrow(new IllegalArgumentException("email must be an email address"));
         mvc.perform(get("/api/admin/users").param("email", "nobody")).andExpect(status().isBadRequest());
         verify(licenses, never()).latestStatusOf(org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void adminGetsSuggestionsTenByDefault() throws Exception {
+        when(users.search("dan", 10)).thenReturn(List.of(new UserSuggestionDTO(9L, "dana@bank.example", "Dana", "Jonas")));
+        when(users.search("dan", 3)).thenReturn(List.of());
+
+        mvc.perform(get("/api/admin/users/search").param("q", "dan"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].id").value(9))
+            .andExpect(jsonPath("$[0].email").value("dana@bank.example"))
+            .andExpect(jsonPath("$[0].firstName").value("Dana"))
+            .andExpect(jsonPath("$[0].lastName").value("Jonas"))
+            .andExpect(jsonPath("$[0].keycloakUserId").doesNotExist());
+        mvc.perform(get("/api/admin/users/search").param("q", "dan").param("size", "3"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void adminSearchErrors() throws Exception {
+        mvc.perform(get("/api/admin/users/search")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/admin/users/search").param("q", "dan").param("size", "many"))
+            .andExpect(status().isBadRequest());
+        when(users.search("d", 10)).thenThrow(new IllegalArgumentException("q must have at least 2 characters"));
+        mvc.perform(get("/api/admin/users/search").param("q", "d"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("q must have at least 2 characters"));
     }
 
     @Test

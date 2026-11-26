@@ -130,7 +130,7 @@ class SecurityPolicyTest {
             "GET,/api/admin/role-requests", "POST,/api/admin/role-requests/7/approve",
             "POST,/api/admin/role-requests/7/reject", "GET,/api/admin/users/7/role-grants",
             "POST,/api/admin/users/7/roles/lender/revoke", "POST,/api/admin/role-grants/realtor-license-expiry",
-            "GET,/api/admin/users?email=a@b.co" })
+            "GET,/api/admin/users?email=a@b.co", "GET,/api/admin/users/search?q=da" })
     void operationsRequireAdminIncludingLegacyRoutes(String method, String path) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         for (String role : List.of("user", "investor", "realtor", "lender")) {
