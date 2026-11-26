@@ -26,7 +26,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/contact-requests")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@Tag(name = "Property contact requests", description = "Authenticated requests to a selected REALTOR account. "
+@Tag(name = "Property contact requests", description = "Authenticated requests to a selected active realtor (SCRUM-204). "
     + "No listing-agent association is inferred. Missing token 401; invalid input 400; missing property/professional "
     + "or foreign request 404; changed idempotency input or concurrent reference conflict 409.")
 public class ContactRequestController {
@@ -54,9 +54,10 @@ public class ContactRequestController {
     }
 
     @GetMapping("/professionals")
-    @Operation(summary = "List selectable registered professionals", description = "Authenticated, paginated REALTOR "
-        + "accounts, newest ID first; page >=0, size 1-100. Returns only local user ID and display name; no private "
-        + "email, phone or Keycloak subject. Account category does not imply professional credential verification.")
+    @Operation(summary = "List selectable registered professionals", description = "Authenticated, paginated active "
+        + "realtors, newest ID first: a VERIFIED license valid today and a realtor role GeoZentra has not revoked "
+        + "since (SCRUM-204); page >=0, size 1-100. Returns only local user ID and display name; no private "
+        + "email, phone or Keycloak subject.")
     public CrmPageDTO<ContactProfessionalDTO> professionals(@RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         currentUser.getCurrentUserEntity();

@@ -32,8 +32,10 @@ public class RealtorLicenseVerificationController {
     @Operation(summary = "Submit my license for verification", description = "licenseHolderName (1-160), licensingState "
         + "(two letters, only FL accepted) and licenseNumber (1-40) are required; licenseExpirationDate (yyyy-MM-dd, "
         + "from today to 9999-12-31), brokerageName (max 160) and workEmail (valid e-mail) are optional. Creates a PENDING_REVIEW "
-        + "submission (201). Refused with 409 while a submission is pending or verified; allowed again after a rejection, "
-        + "as a new record that keeps the rejected one in history.")
+        + "submission (201). Refused with 409 while a submission is pending or a verified license is still valid; "
+        + "allowed again after a rejection or once it expired, as a new record that keeps the old one in history. Also "
+        + "409 when the account has, or waits for, the investor or lender role (one professional role per account, "
+        + "SCRUM-204). Answers the onboarding page.")
     public ResponseEntity<RealtorLicenseVerificationDTO> submit(@Valid @RequestBody RealtorLicenseSubmissionRequest request) {
         var result = verifications.submit(request);
         return ResponseEntity.created(URI.create("/api/users/me/realtor-license")).body(result);

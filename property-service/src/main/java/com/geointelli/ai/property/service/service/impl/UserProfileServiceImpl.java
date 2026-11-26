@@ -43,9 +43,6 @@ public class UserProfileServiceImpl implements UserProfileService {
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName().trim());
         }
-        if (request.getPersona() != null) {
-            user.setPersona(request.getPersona());
-        }
         return userMapper.toDTO(userRepository.save(user));
     }
 

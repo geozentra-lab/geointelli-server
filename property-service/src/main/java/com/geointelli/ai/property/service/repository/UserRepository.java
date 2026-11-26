@@ -3,7 +3,6 @@ package com.geointelli.ai.property.service.repository;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import com.geointelli.ai.property.service.entity.UserPersona;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,7 +18,34 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT * FROM users WHERE id = :id FOR NO KEY UPDATE", nativeQuery = true)
     Optional<User> lockForContact(@Param("id") Long id);
 
-    Page<User> findByPersona(UserPersona persona, Pageable pageable);
+    /**
+     * Condition of an active realtor (SCRUM-204), on users alias u: a VERIFIED license valid on :today (no expiration
+     * date, or expiring today or later), and GeoZentra's latest realtor event, if any, is not a revocation (the
+     * newest REVOKE is not after the newest GRANT; no event at all counts as not revoked).
+     */
+    String ACTIVE_REALTOR = """
+        btrim(u.keycloak_user_id) <> ''
+        AND EXISTS (SELECT 1 FROM realtor_license_verifications v
+                    WHERE v.user_id = u.id AND v.status = 'VERIFIED'
+                      AND (v.license_expiration_date IS NULL OR v.license_expiration_date >= :today))
+        AND COALESCE((SELECT MAX(e.id) FROM role_grant_events e
+                      WHERE e.user_id = u.id AND e.role = 'realtor' AND e.action = 'REVOKE'), 0)
+            <= COALESCE((SELECT MAX(g.id) FROM role_grant_events g
+                         WHERE g.user_id = u.id AND g.role = 'realtor' AND g.action = 'GRANT'), 0)
+        """;
+
+    /**
+     * Realtors a user can contact, newest first: the active realtors (see {@link #ACTIVE_REALTOR}); the persona is not
+     * read. Pass an unsorted page: the order is part of the query.
+     */
+    @Query(value = "SELECT u.* FROM users u WHERE " + ACTIVE_REALTOR + " ORDER BY u.id DESC",
+        countQuery = "SELECT COUNT(*) FROM users u WHERE " + ACTIVE_REALTOR, nativeQuery = true)
+    Page<User> findActiveRealtors(@Param("today") java.time.LocalDate today, Pageable pageable);
+
+    /** Whether the user is an active realtor (see {@link #ACTIVE_REALTOR}). */
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM users u WHERE u.id = :userId AND " + ACTIVE_REALTOR + ")",
+        nativeQuery = true)
+    boolean isActiveRealtor(@Param("userId") Long userId, @Param("today") java.time.LocalDate today);
     Optional<User> findByKeycloakUserId(String keycloakUserId);
     Optional<User> findByEmail(String email);
     boolean existsByKeycloakUserId(String keycloakUserId);

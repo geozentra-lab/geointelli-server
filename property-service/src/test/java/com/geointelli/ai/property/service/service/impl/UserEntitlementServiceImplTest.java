@@ -1,10 +1,13 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -15,15 +18,23 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.geointelli.ai.property.service.config.AuthoritiesConverter;
 import com.geointelli.ai.property.service.dto.LenderOrganizationDTO;
+import com.geointelli.ai.property.service.entity.RealtorLicenseVerificationStatus;
+import com.geointelli.ai.property.service.entity.RoleRequestStatus;
 import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.entity.UserPersona;
+import com.geointelli.ai.property.service.repository.RoleRequestRepository;
 import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
+import com.geointelli.ai.property.service.service.RealtorLicenseVerificationService;
 
 class UserEntitlementServiceImplTest {
     private final CurrentUserService current = mock(CurrentUserService.class);
     private final LenderOrganizationService organizations = mock(LenderOrganizationService.class);
-    private final UserEntitlementServiceImpl service = new UserEntitlementServiceImpl(current, organizations);
+    private final RoleRequestRepository roleRequests = mock(RoleRequestRepository.class);
+    private final RealtorLicenseVerificationService licenses = mock(RealtorLicenseVerificationService.class);
+    private final UserEntitlementServiceImpl service =
+            new UserEntitlementServiceImpl(current, organizations, roleRequests, licenses);
+    private User user;
 
     private void login(String... roles) {
         var claims = Map.<String, Object>of("realm_access", Map.of("roles", List.of(roles)));
@@ -31,10 +42,37 @@ class UserEntitlementServiceImplTest {
                 .build();
         SecurityContextHolder.getContext()
                 .setAuthentication(new JwtAuthenticationToken(jwt, new AuthoritiesConverter().convert(claims)));
-        User user = new User();
+        user = new User();
         user.setId(7L);
         user.setPersona(UserPersona.REALTOR);
         when(current.getCurrentUserEntity()).thenReturn(user);
+        when(licenses.latestStatusOf(7L)).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void onboardingNotAnsweredTellsTheFrontendToShowThePage() {
+        login();
+        user.setOnboardingCompletedAt(null);
+        var result = service.getEntitlements();
+        assertThat(result.onboardingCompleted()).isFalse();
+        assertThat(result.onboardingCompletedAt()).isNull();
+        assertThat(result.pendingRoles()).isEmpty();
+    }
+
+    @Test
+    void pendingRequestsAndPendingLicenseAreListedAsPendingRoles() {
+        login();
+        Instant chosen = Instant.parse("2026-11-25T10:00:00Z");
+        user.setOnboardingCompletedAt(chosen);
+        when(roleRequests.findRolesByUserIdAndStatus(7L, RoleRequestStatus.PENDING)).thenReturn(List.of("lender"));
+        when(licenses.latestStatusOf(7L)).thenReturn(Optional.of(RealtorLicenseVerificationStatus.PENDING_REVIEW));
+        var result = service.getEntitlements();
+        assertThat(result.onboardingCompleted()).isTrue();
+        assertThat(result.onboardingCompletedAt()).isEqualTo(chosen);
+        assertThat(result.pendingRoles()).containsExactly("lender", "realtor");
+        // pending is not granted: the features stay off until the role is in the token
+        assertThat(result.features().lender()).isFalse();
+        assertThat(result.features().realtorCrm()).isFalse();
     }
 
     @AfterEach
@@ -43,10 +81,9 @@ class UserEntitlementServiceImplTest {
     }
 
     @Test
-    void selectedPersonaDoesNotGrantProfessionalAccess() {
+    void legacyPersonaColumnDoesNotGrantProfessionalAccess() {
         login();
         var result = service.getEntitlements();
-        assertThat(result.persona()).isEqualTo(UserPersona.REALTOR);
         assertThat(result.roles()).containsExactly("user");
         assertThat(result.features().normalUser()).isTrue();
         assertThat(result.features().investment()).isFalse();

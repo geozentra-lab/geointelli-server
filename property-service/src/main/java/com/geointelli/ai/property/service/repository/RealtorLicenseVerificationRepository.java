@@ -20,8 +20,25 @@ public interface RealtorLicenseVerificationRepository extends JpaRepository<Real
     /** All submissions of the owner, newest first; rejected rows are kept as history. */
     List<RealtorLicenseVerification> findByUserIdOrderByIdDesc(Long userId);
 
-    /** True when the owner already has a row in one of the given statuses (PENDING_REVIEW or VERIFIED blocks a new POST). */
+    /** True when the owner already has a row in one of the given statuses. */
     boolean existsByUserIdAndStatusIn(Long userId, List<RealtorLicenseVerificationStatus> statuses);
+
+    /**
+     * True when a new submission of the owner is blocked: a submission is pending, or a verified license is still
+     * valid on {@code today} (no expiration date, or expiring today or later). Since SCRUM-204 an expired verified
+     * license no longer blocks, so the realtor can submit the renewed one after the realtor role was revoked.
+     */
+    @Query("""
+            SELECT COUNT(v) > 0 FROM RealtorLicenseVerification v
+            WHERE v.userId = :userId
+              AND (v.status = :pending
+                   OR (v.status = :verified
+                       AND (v.licenseExpirationDate IS NULL OR v.licenseExpirationDate >= :today)))
+            """)
+    boolean existsBlockingSubmission(@Param("userId") Long userId,
+                                     @Param("pending") RealtorLicenseVerificationStatus pending,
+                                     @Param("verified") RealtorLicenseVerificationStatus verified,
+                                     @Param("today") java.time.LocalDate today);
 
     /** Admin listing by status, newest first (SCRUM-199). */
     Page<RealtorLicenseVerification> findByStatusOrderByIdDesc(RealtorLicenseVerificationStatus status, Pageable pageable);

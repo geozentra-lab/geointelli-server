@@ -8,10 +8,10 @@ A signed-in user who works as a real estate agent submits the details of their l
 checks the state registry (for Florida, the DBPR licensee search) and records a decision. The user
 can read their status at any time and, after a rejection, submit corrected details as a new record.
 
-The feature is independent of the persona: `PATCH /api/users/me` with `persona: REALTOR` selects
-the dashboard; the license submission is a separate record, and a user may submit before or after
-choosing the persona. Nothing is unlocked by a verified license yet (permission configuration is
-deferred by the epic).
+Since SCRUM-204 the submission is the realtor choice of the onboarding page: it marks the page as answered, and
+an approved license grants the `realtor` realm role in Keycloak, which is the account type (the persona is no longer
+used). An account has one professional role: a user who holds, or waits for, the investor or lender role gets 409
+(docs/onboarding-role-grants.md).
 
 ## Data model
 
@@ -63,7 +63,7 @@ Responses:
 | 201 | created; body is the submission (see below), `Location: /api/users/me/realtor-license` |
 | 400 | missing or invalid field, unsupported state, expiration date in the past or after 9999-12-31, unreadable JSON, a value the database cannot store (for example a NUL character) |
 | 401 | no bearer token |
-| 409 | the user already has a PENDING_REVIEW or VERIFIED submission (also when two submissions race) |
+| 409 | the user already has a PENDING_REVIEW submission, or a VERIFIED one whose license has not expired (also when two submissions race) |
 
 Example:
 
@@ -110,8 +110,8 @@ the automatic check are never exposed to the applicant.
 ### Profile: `GET /api/users/me` and `PATCH /api/users/me`
 
 The profile response gains `realtorLicenseStatus`: `PENDING_REVIEW`, `VERIFIED`, `REJECTED` or `null`
-when the user never submitted. It is the status of the newest submission. `persona` is unchanged and
-independent.
+when the user never submitted. It is the status of the newest submission. The profile no longer has `persona`
+(SCRUM-204).
 
 ## Status lifecycle
 
@@ -121,8 +121,11 @@ POST ──> PENDING_REVIEW ──(SCRUM-199 approve / automatic MATCH)──> V
               └──(SCRUM-199 reject with reason / automatic NO_MATCH)──> REJECTED ──(new POST)──> PENDING_REVIEW (new row)
 ```
 
-An inconclusive check leaves the row PENDING_REVIEW. A VERIFIED row blocks new submissions; when a
-license expires, a future job may require a new submission (the expiration date is stored for that).
+An inconclusive check leaves the row PENDING_REVIEW. A VERIFIED row blocks new submissions while its
+license is valid (no expiration date, or expiring today or later, UTC). Since SCRUM-204 an expired
+verified license no longer blocks: the realtor submits the renewed license as a new row. Approval also
+grants the Keycloak realm role `realtor`, and the daily expiry run revokes it once no verified license is
+valid any more (`docs/onboarding-role-grants.md`).
 
 ## Files
 
@@ -149,7 +152,7 @@ the request description, that rejects user A's pending row the way the admin end
 | 02 | GET history before any submission | 200, `[]` |
 | 03 | POST valid submission | 201, status PENDING_REVIEW, trimmed values, `decidedAt` null |
 | 04 | GET latest | 200, same id as 03 |
-| 05 | GET /api/users/me | 200, `realtorLicenseStatus` = PENDING_REVIEW, `persona` unchanged |
+| 05 | GET /api/users/me | 200, `realtorLicenseStatus` = PENDING_REVIEW, no `persona` (SCRUM-204) |
 | 06 | POST again while pending | 409 |
 | 07 | POST missing required fields | 400, message names the fields |
 | 08 | POST state `NY` | 400 |
