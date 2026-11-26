@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.repository;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +53,46 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * signing up again with the same email leaves the old row behind, so the newest row (the live account) wins.
      */
     Optional<User> findFirstByEmailIgnoreCaseOrderByIdDesc(String email);
+
+    /**
+     * Admin search (see {@link #searchByPrefix}). The matches are sorted first, and the newest-row check runs only
+     * on the rows the LIMIT takes: as a filter over the sorted subquery, written as a scalar subquery so Postgres
+     * probes the email index row by row instead of hashing the whole table. Ranges, not LIKE, so a generic plan of
+     * the prepared statement still uses the indexes. UserSearchDatabaseTest checks this on PostgreSQL; timings are in
+     * its class comment.
+     */
+    String SEARCH = """
+        SELECT s.id AS "id", s.email AS "email", s.first_name AS "firstName", s.last_name AS "lastName"
+        FROM (SELECT u.id, u.email, u.first_name, u.last_name, u.email_search
+              FROM users u
+              WHERE (u.email_search >= :prefix AND u.email_search < :prefixEnd)
+                 OR (u.full_name_search >= :prefix AND u.full_name_search < :prefixEnd)
+                 OR (u.last_name_search >= :prefix AND u.last_name_search < :prefixEnd)
+              ORDER BY u.email_search NULLS LAST, u.id DESC) s
+        WHERE s.email_search IS NULL
+           OR s.id = (SELECT max(n.id) FROM users n WHERE n.email_search = s.email_search)
+        ORDER BY s.email_search NULLS LAST, s.id DESC
+        LIMIT :size
+        """;
+
+    /** Account suggested by {@link #searchByPrefix}. */
+    interface SuggestionRow {
+        Long getId();
+        String getEmail();
+        String getFirstName();
+        String getLastName();
+    }
+
+    /**
+     * Accounts whose email, full name ("first last") or last name starts with {@code prefix}, case ignored, for the
+     * admin search: {@code prefix} is lowercase and {@code prefixEnd} is
+     * {@link com.geointelli.ai.property.service.util.UserSearch#upperBound} of it; the search columns come from V53.
+     * Only the newest row of each email is returned, as in {@link #findFirstByEmailIgnoreCaseOrderByIdDesc}; by
+     * email, code point order, rows without one last.
+     */
+    @Query(value = SEARCH, nativeQuery = true)
+    List<SuggestionRow> searchByPrefix(@Param("prefix") String prefix, @Param("prefixEnd") String prefixEnd,
+                                       @Param("size") int size);
     boolean existsByKeycloakUserId(String keycloakUserId);
 
     /**
