@@ -9,6 +9,7 @@ import com.geointelli.ai.property.service.dto.ValuationResponse.Reason;
 import com.geointelli.ai.property.service.entity.LenderApplication;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.repository.LenderApplicationRepository;
+import com.geointelli.ai.property.service.service.LenderCollateralGeographyService;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
 import com.geointelli.ai.property.service.service.ValuationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,8 +39,9 @@ class LenderCollateralAnalysisServiceImplTest {
     private final LenderOrganizationService organizations = mock(LenderOrganizationService.class);
     private final LenderApplicationRepository applications = mock(LenderApplicationRepository.class);
     private final ValuationService valuations = mock(ValuationService.class);
+    private final LenderCollateralGeographyService geographies = mock(LenderCollateralGeographyService.class);
     private final LenderCollateralAnalysisServiceImpl service =
-            new LenderCollateralAnalysisServiceImpl(organizations, applications, valuations);
+            new LenderCollateralAnalysisServiceImpl(organizations, applications, valuations, geographies);
 
     private LenderApplication application;
 

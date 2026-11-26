@@ -16,6 +16,26 @@ import com.geointelli.ai.property.service.entity.Property;
 
 @Repository
 public interface PropertyRepository extends JpaRepository<Property, Long>{
+
+    /** Location of a property for the lender collateral analysis (SCRUM-181); empty when no property has this ID. */
+    @Query("""
+            SELECT p.folio AS folio, a.address AS address, a.city AS city, a.zip AS zip,
+                   c.name AS countyName, s.code AS stateCode
+            FROM Property p LEFT JOIN p.address a LEFT JOIN p.county c LEFT JOIN c.state s
+            WHERE p.id = :id
+            """)
+    Optional<CollateralLocationView> findCollateralLocation(@Param("id") Long id);
+
+    /** Columns of {@link #findCollateralLocation}; any of them may be null. */
+    interface CollateralLocationView {
+        String getFolio();
+        String getAddress();
+        String getCity();
+        String getZip();
+        String getCountyName();
+        String getStateCode();
+    }
+
     Optional<Property> findByFolioAndCounty_Id(String folio, Long countyId);
 
     @Query("SELECT p.folio FROM Property p WHERE p.county.id = :countyId")

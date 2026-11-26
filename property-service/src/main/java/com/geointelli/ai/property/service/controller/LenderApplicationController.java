@@ -72,13 +72,16 @@ public class LenderApplicationController {
     }
 
     @GetMapping("/applications/{id}/collateral-analysis")
-    @Operation(summary = "Collateral value and LTV of an application", description = "Read-only. Loan amount is "
-        + "fundedAmount, else approvedAmount, else requestedAmount (loanAmountBasis). Collateral is the stored model "
-        + "valuation of the linked property (SCRUM-58), unchanged, with its prediction date and confidence. "
-        + "LTV = loanAmount / value x 100, two decimals: AVAILABLE for a supported valuation, LIMITED for a limited one "
-        + "(with the model reasons), UNAVAILABLE with a null percent and a reason (NO_COLLATERAL_PROPERTY, "
-        + "COLLATERAL_PROPERTY_NOT_FOUND, VALUATION_UNAVAILABLE, INVALID_VALUATION) otherwise. "
-        + "Informational only; not a credit decision or approval.")
+    @Operation(summary = "Collateral value, LTV and geographic risk of an application", description = "Read-only. Loan amount is "
+            + "fundedAmount, else approvedAmount, else requestedAmount (loanAmountBasis). Collateral is the stored model "
+            + "valuation of the linked property (SCRUM-58), unchanged, with its prediction date and confidence. "
+            + "LTV = loanAmount / value x 100, two decimals: AVAILABLE for a supported valuation, LIMITED for a limited one "
+            + "(with the model reasons), UNAVAILABLE with a null percent and a reason (NO_COLLATERAL_PROPERTY, "
+            + "COLLATERAL_PROPERTY_NOT_FOUND, VALUATION_UNAVAILABLE, INVALID_VALUATION) otherwise. "
+            + "geography: location of the property and its risk sources (FEMA flood zones, FEMA National Risk Index, "
+            + "NOAA storm events, SCRUM-127) with their status and data date; status AVAILABLE, PARTIAL (missingCoverage "
+            + "lists the missing sources), NO_COVERAGE or UNAVAILABLE (reasons). No risk score is computed. "
+            + "Informational only; not a credit decision or approval.")
     public LenderCollateralAnalysisDTO collateralAnalysis(@RequestParam Long organizationId, @PathVariable Long id) {
         return collateralAnalysis.analyze(actor(), organizationId, id);
     }

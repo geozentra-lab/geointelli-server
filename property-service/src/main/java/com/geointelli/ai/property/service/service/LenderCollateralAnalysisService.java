@@ -3,16 +3,19 @@ package com.geointelli.ai.property.service.service;
 import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO;
 
 /**
- * Collateral value and loan-to-value of a lender application (SCRUM-180). Reads the application of an organization
- * the user belongs to and the stored model valuation of its property (SCRUM-58); nothing is changed and no credit
- * decision is made.
+ * Collateral value, loan-to-value and geographic risk context of a lender application (SCRUM-180 / SCRUM-181).
+ * Reads the application of an organization the user belongs to, the stored model valuation of its property
+ * (SCRUM-58) and its risk context (SCRUM-127); nothing is changed, no risk score is computed and no credit decision
+ * is made.
  */
 public interface LenderCollateralAnalysisService {
 
     /**
      * Returns the loan amount (funded, else approved, else requested), the collateral valuation with its date and
      * confidence, and the LTV. The LTV is LIMITED for a limited valuation and UNAVAILABLE, with a null percent and a
-     * reason, when there is no property, no property found or no usable valuation.
+     * reason, when there is no property, no property found or no usable valuation. The geography gives the
+     * location and each risk source with its status; a missing source is listed in missingCoverage and never hides
+     * the valuation or the LTV.
      *
      * @param actor          the authenticated user
      * @param organizationId the organization the application belongs to

@@ -1,0 +1,1214 @@
+{
+  "info": {
+    "name": "SCRUM-181 Lender collateral analysis: geographic risk context",
+    "description": "Manual checks for the geography section of GET /api/lender/applications/{id}/collateral-analysis. See docs/lender-collateral-analysis.md. Run the folders in order with the Collection Runner. Needs a running service (baseUrl), a Keycloak realm (keycloakUrl, clientIdKc) and three users: A and B have the lender realm role, A creates a new organization and its applications, B is not a member; C is signed in without the lender role (folder 5 only). Users must have logged in to GeoZentra once. The property ids are those of the SCRUM-127 checks (docs/location-intelligence-risk.md): idFull every source loaded, idPartial county flood map not loaded, idNoParcel property without parcel; on another database pick them with the SELECTs of that doc. Every run creates a new organization, so the collection can be repeated. Passwords are left empty: set them in your local environment and never commit them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": ""
+    },
+    {
+      "key": "clientIdKc",
+      "value": ""
+    },
+    {
+      "key": "userA",
+      "value": ""
+    },
+    {
+      "key": "passwordA",
+      "value": ""
+    },
+    {
+      "key": "userB",
+      "value": ""
+    },
+    {
+      "key": "passwordB",
+      "value": ""
+    },
+    {
+      "key": "userC",
+      "value": ""
+    },
+    {
+      "key": "passwordC",
+      "value": ""
+    },
+    {
+      "key": "tokenA",
+      "value": ""
+    },
+    {
+      "key": "tokenB",
+      "value": ""
+    },
+    {
+      "key": "tokenC",
+      "value": ""
+    },
+    {
+      "key": "idFull",
+      "value": "1"
+    },
+    {
+      "key": "idPartial",
+      "value": "7"
+    },
+    {
+      "key": "idNoParcel",
+      "value": "5"
+    },
+    {
+      "key": "idUnknownProperty",
+      "value": "999999999"
+    },
+    {
+      "key": "organizationId",
+      "value": ""
+    },
+    {
+      "key": "appFull",
+      "value": ""
+    },
+    {
+      "key": "appPartial",
+      "value": ""
+    },
+    {
+      "key": "appNoParcel",
+      "value": ""
+    },
+    {
+      "key": "appNoProperty",
+      "value": ""
+    },
+    {
+      "key": "appUnknownProperty",
+      "value": ""
+    },
+    {
+      "key": "unknownOrganizationId",
+      "value": "999999999"
+    },
+    {
+      "key": "unknownApplicationId",
+      "value": "999999999"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Tokens",
+      "item": [
+        {
+          "name": "Token for user A (lender)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userA}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordA}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token for user B (lender, not a member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenB', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userB}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordB}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token for user C (no lender role)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('tokenC', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloakUrl}}"
+              ],
+              "path": [
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{clientIdKc}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{userC}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{passwordC}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Setup: organization and one application per case",
+      "item": [
+        {
+          "name": "A creates a new organization",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('organizationId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/organizations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "organizations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"SCRUM-181 Postman organization\"}"
+            }
+          }
+        },
+        {
+          "name": "Create application: property with every source",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('appFull', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"SCRUM-181 property with every source\",\"requestedAmount\":300000,\"currency\":\"USD\",\"loanType\":\"CONVENTIONAL\",\"propertyId\":{{idFull}}}"
+            }
+          }
+        },
+        {
+          "name": "Create application: property with a missing source",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('appPartial', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"SCRUM-181 property with a missing source\",\"requestedAmount\":300000,\"currency\":\"USD\",\"loanType\":\"CONVENTIONAL\",\"propertyId\":{{idPartial}}}"
+            }
+          }
+        },
+        {
+          "name": "Create application: property without parcel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('appNoParcel', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"SCRUM-181 property without parcel\",\"requestedAmount\":300000,\"currency\":\"USD\",\"loanType\":\"CONVENTIONAL\",\"propertyId\":{{idNoParcel}}}"
+            }
+          }
+        },
+        {
+          "name": "Create application: no property",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('appNoProperty', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"SCRUM-181 no property\",\"requestedAmount\":300000,\"currency\":\"USD\",\"loanType\":\"CONVENTIONAL\"}"
+            }
+          }
+        },
+        {
+          "name": "Create application: unknown property",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('appUnknownProperty', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"applicantName\":\"SCRUM-181 unknown property\",\"requestedAmount\":300000,\"currency\":\"USD\",\"loanType\":\"CONVENTIONAL\",\"propertyId\":{{idUnknownProperty}}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Success",
+      "item": [
+        {
+          "name": "Every source covers the property: 200, geography AVAILABLE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const g = d.geography;",
+                  "pm.test('disclaimer, LTV and geography sections', () => { pm.expect(d.disclaimer).to.be.a('string'); pm.expect(d.ltv).to.be.an('object'); pm.expect(g).to.be.an('object'); });",
+                  "pm.test('no risk score added by GeoZentra', () => { pm.expect(g).to.not.have.property('score'); pm.expect(d).to.not.have.property('riskScore'); });",
+                  "pm.test('three sources in order, each with its provider name', () => { pm.expect(g.sources.map(s => s.section)).to.eql(['FLOOD', 'HAZARDS', 'STORMS']); g.sources.forEach(s => pm.expect(s.source, s.section).to.be.a('string')); });",
+                  "pm.test('missingCoverage lists exactly the NO_COVERAGE / UNAVAILABLE sources', () => pm.expect(g.missingCoverage).to.eql(g.sources.filter(s => ['NO_COVERAGE', 'UNAVAILABLE'].includes(s.status)).map(s => s.section)));",
+                  "pm.test('location of the collateral', () => pm.expect(g.location.folio).to.be.a('string'));",
+                  "pm.test('SCRUM-127 risk context included unchanged', () => pm.expect(g.riskContext.propertyId).to.eql(d.propertyId));",
+                  "pm.test('status AVAILABLE, no reason, nothing missing', () => { pm.expect(g.status).to.eql('AVAILABLE'); pm.expect(g.reasons).to.eql([]); pm.expect(g.missingCoverage).to.eql([]); });",
+                  "pm.test('every source has a data date', () => g.sources.forEach(s => pm.expect(s.dataAsOf, s.section).to.be.a('string')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "One source does not cover the property: 200, geography PARTIAL, valuation and LTV still there",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const g = d.geography;",
+                  "pm.test('disclaimer, LTV and geography sections', () => { pm.expect(d.disclaimer).to.be.a('string'); pm.expect(d.ltv).to.be.an('object'); pm.expect(g).to.be.an('object'); });",
+                  "pm.test('no risk score added by GeoZentra', () => { pm.expect(g).to.not.have.property('score'); pm.expect(d).to.not.have.property('riskScore'); });",
+                  "pm.test('three sources in order, each with its provider name', () => { pm.expect(g.sources.map(s => s.section)).to.eql(['FLOOD', 'HAZARDS', 'STORMS']); g.sources.forEach(s => pm.expect(s.source, s.section).to.be.a('string')); });",
+                  "pm.test('missingCoverage lists exactly the NO_COVERAGE / UNAVAILABLE sources', () => pm.expect(g.missingCoverage).to.eql(g.sources.filter(s => ['NO_COVERAGE', 'UNAVAILABLE'].includes(s.status)).map(s => s.section)));",
+                  "pm.test('location of the collateral', () => pm.expect(g.location.folio).to.be.a('string'));",
+                  "pm.test('SCRUM-127 risk context included unchanged', () => pm.expect(g.riskContext.propertyId).to.eql(d.propertyId));",
+                  "pm.test('status PARTIAL', () => pm.expect(g.status).to.eql('PARTIAL'));",
+                  "pm.test('FLOOD listed as missing, the others kept', () => { pm.expect(g.missingCoverage).to.include('FLOOD'); pm.expect(g.missingCoverage.length).to.be.below(3); });",
+                  "pm.test('missing source keeps its explanation', () => pm.expect(g.sources.find(s => s.section === 'FLOOD').note).to.be.a('string'));",
+                  "pm.test('LTV section not hidden by the missing source', () => pm.expect(d.ltv.status).to.be.oneOf(['AVAILABLE', 'LIMITED', 'UNAVAILABLE']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appPartial}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appPartial}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Empty and missing data",
+      "item": [
+        {
+          "name": "Property without parcel: 200, geography NO_COVERAGE, every source missing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const g = d.geography;",
+                  "pm.test('disclaimer, LTV and geography sections', () => { pm.expect(d.disclaimer).to.be.a('string'); pm.expect(d.ltv).to.be.an('object'); pm.expect(g).to.be.an('object'); });",
+                  "pm.test('no risk score added by GeoZentra', () => { pm.expect(g).to.not.have.property('score'); pm.expect(d).to.not.have.property('riskScore'); });",
+                  "pm.test('location kept, no source evaluated', () => { pm.expect(g.location).to.be.an('object'); pm.expect(g.sources).to.eql([]); });",
+                  "pm.test('SCRUM-127 risk context NO_COVERAGE', () => pm.expect(g.riskContext.status).to.eql('NO_COVERAGE'));",
+                  "pm.test('status NO_COVERAGE, reason NO_PARCEL_POLYGON', () => { pm.expect(g.status).to.eql('NO_COVERAGE'); pm.expect(g.reasons).to.eql(['NO_PARCEL_POLYGON']); });",
+                  "pm.test('all three sections missing', () => pm.expect(g.missingCoverage).to.eql(['FLOOD', 'HAZARDS', 'STORMS']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appNoParcel}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appNoParcel}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Application without property: 200, geography UNAVAILABLE NO_COLLATERAL_PROPERTY",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const g = d.geography;",
+                  "pm.test('disclaimer, LTV and geography sections', () => { pm.expect(d.disclaimer).to.be.a('string'); pm.expect(d.ltv).to.be.an('object'); pm.expect(g).to.be.an('object'); });",
+                  "pm.test('no risk score added by GeoZentra', () => { pm.expect(g).to.not.have.property('score'); pm.expect(d).to.not.have.property('riskScore'); });",
+                  "pm.test('no property', () => pm.expect(d.propertyId).to.eql(null));",
+                  "pm.test('geography UNAVAILABLE with its reason, no location, no source', () => { pm.expect(g.status).to.eql('UNAVAILABLE'); pm.expect(g.reasons).to.eql(['NO_COLLATERAL_PROPERTY']); pm.expect(g.location).to.eql(null); pm.expect(g.sources).to.eql([]); pm.expect(g.riskContext).to.eql(null); });",
+                  "pm.test('LTV UNAVAILABLE for the same reason', () => { pm.expect(d.ltv.status).to.eql('UNAVAILABLE'); pm.expect(d.ltv.percent).to.eql(null); pm.expect(d.ltv.reasons).to.eql(['NO_COLLATERAL_PROPERTY']); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appNoProperty}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appNoProperty}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Linked property does not exist: 200, geography UNAVAILABLE COLLATERAL_PROPERTY_NOT_FOUND",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "const g = d.geography;",
+                  "pm.test('disclaimer, LTV and geography sections', () => { pm.expect(d.disclaimer).to.be.a('string'); pm.expect(d.ltv).to.be.an('object'); pm.expect(g).to.be.an('object'); });",
+                  "pm.test('no risk score added by GeoZentra', () => { pm.expect(g).to.not.have.property('score'); pm.expect(d).to.not.have.property('riskScore'); });",
+                  "pm.test('geography UNAVAILABLE with its reason, no location', () => { pm.expect(g.status).to.eql('UNAVAILABLE'); pm.expect(g.reasons).to.eql(['COLLATERAL_PROPERTY_NOT_FOUND']); pm.expect(g.location).to.eql(null); pm.expect(g.sources).to.eql([]); });",
+                  "pm.test('LTV UNAVAILABLE', () => pm.expect(d.ltv.status).to.eql('UNAVAILABLE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appUnknownProperty}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appUnknownProperty}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Invalid input",
+      "item": [
+        {
+          "name": "organizationId missing: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ]
+            }
+          }
+        },
+        {
+          "name": "organizationId 0: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "application id 0: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/0/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "0",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "application id not a number: 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/abc/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "abc",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Ownership and roles",
+      "item": [
+        {
+          "name": "No token: 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "User C without the lender role: 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenC}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "User B is not a member: 404, no risk data returned",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('no geography in the body', () => pm.expect(pm.response.text()).to.not.include('geography'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown organization: 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{appFull}}/collateral-analysis?organizationId={{unknownOrganizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{appFull}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{unknownOrganizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown application in A's organization: 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenA}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/lender/applications/{{unknownApplicationId}}/collateral-analysis?organizationId={{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lender",
+                "applications",
+                "{{unknownApplicationId}}",
+                "collateral-analysis"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
