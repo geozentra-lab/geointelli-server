@@ -2,12 +2,14 @@ package com.geointelli.ai.property.service.service.impl;
 
 import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO;
 import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO.Collateral;
+import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO.Geography;
 import com.geointelli.ai.property.service.dto.LenderCollateralAnalysisDTO.Ltv;
 import com.geointelli.ai.property.service.dto.ValuationResponse;
 import com.geointelli.ai.property.service.entity.LenderApplication;
 import com.geointelli.ai.property.service.exception.PropertyNotFoundException;
 import com.geointelli.ai.property.service.repository.LenderApplicationRepository;
 import com.geointelli.ai.property.service.service.LenderCollateralAnalysisService;
+import com.geointelli.ai.property.service.service.LenderCollateralGeographyService;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
 import com.geointelli.ai.property.service.service.ValuationService;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +22,10 @@ import java.math.RoundingMode;
 import java.util.List;
 
 /**
- * Divides the loan amount by the stored model value of the linked property. The valuation is read without its
- * supporting comparable sales: the analysis does not show them, and searching them made every call take about two
- * seconds instead of a few milliseconds. Each repository read runs in its own read-only transaction.
+ * Divides the loan amount by the stored model value of the linked property, then adds its geographic risk context
+ * (SCRUM-181). The valuation is read without its supporting comparable sales: the analysis does not show them, and
+ * searching them made every call take about two seconds instead of a few milliseconds. Each repository read runs in
+ * its own read-only transaction.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,6 +34,7 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
     private final LenderOrganizationService organizations;
     private final LenderApplicationRepository applications;
     private final ValuationService valuations;
+    private final LenderCollateralGeographyService geographies;
 
     @Override
     public LenderCollateralAnalysisDTO analyze(Long actor, Long organizationId, Long applicationId) {
@@ -59,7 +63,8 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
         Long propertyId = application.getPropertyId();
         if (propertyId == null) {
             return result(application, loanAmount, basis, null,
-                    unavailable(LenderCollateralAnalysisDTO.NO_COLLATERAL_PROPERTY));
+                    unavailable(LenderCollateralAnalysisDTO.NO_COLLATERAL_PROPERTY),
+                    Geography.unavailable(LenderCollateralAnalysisDTO.NO_COLLATERAL_PROPERTY, null));
         }
 
         // Collateral: the stored valuation, unchanged (its figures only; no comparable search)
@@ -68,7 +73,8 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
             valuation = valuations.getValuationWithoutComparables(propertyId);
         } catch (PropertyNotFoundException e) {
             return result(application, loanAmount, basis, null,
-                    unavailable(LenderCollateralAnalysisDTO.COLLATERAL_PROPERTY_NOT_FOUND));
+                    unavailable(LenderCollateralAnalysisDTO.COLLATERAL_PROPERTY_NOT_FOUND),
+                    Geography.unavailable(LenderCollateralAnalysisDTO.COLLATERAL_PROPERTY_NOT_FOUND, null));
         }
         Collateral collateral = collateral(valuation);
 
@@ -87,7 +93,8 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
                 ltv = new Ltv(LenderCollateralAnalysisDTO.LTV_AVAILABLE, percent, List.of());
             }
         }
-        return result(application, loanAmount, basis, collateral, ltv);
+        // Geography: location and risk sources of the property; never fails the analysis
+        return result(application, loanAmount, basis, collateral, ltv, geographies.describe(propertyId));
     }
 
     /** Copies the stored valuation without changing it; value fields stay null when there is no estimate. */
@@ -114,9 +121,10 @@ public class LenderCollateralAnalysisServiceImpl implements LenderCollateralAnal
     }
 
     private static LenderCollateralAnalysisDTO result(LenderApplication application, BigDecimal loanAmount,
-                                                      String basis, Collateral collateral, Ltv ltv) {
+                                                      String basis, Collateral collateral, Ltv ltv,
+                                                      Geography geography) {
         return new LenderCollateralAnalysisDTO(application.getId(), application.getOrganizationId(),
                 application.getPropertyId(), application.getCurrency(), loanAmount, basis, collateral, ltv,
-                LenderCollateralAnalysisDTO.DISCLAIMER);
+                geography, LenderCollateralAnalysisDTO.DISCLAIMER);
     }
 }
