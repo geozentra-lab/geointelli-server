@@ -64,12 +64,38 @@ class CsvImportServiceImplTest {
     }
 
     @Test
+    void importsLandAdjustmentsWithoutIntegerCoercion() throws Exception {
+        Path path = csv("property_id,adjusted_unit_price,calculated_value,depth,front_feet,land_use,landline_type,message,muni_zone,muni_zone_description,pa_zone_description,percent_condition,roll_year,total_adjustments,unit_type,units,use_code,zone\n"
+                + "12,10.5,100,10,20,Residential,Primary,,,,,90,2025,107.52,SF,20,RES,A\n");
+
+        service.importLands(path, "county", "state");
+
+        ArgumentCaptor<Land> captor = ArgumentCaptor.forClass(Land.class);
+        verify(entityManager).persist(captor.capture());
+        assertEquals("107.52", captor.getValue().getTotalAdjustments());
+        assertSame(property, captor.getValue().getProperty());
+    }
+
+    @Test
+    void importsFractionalExtraFeatureUnitsWithoutTruncation() throws Exception {
+        Path path = csv("property_id,actual_year_built,adjusted_unit_price,depreciated_value,description,message,percent_condition,roll_year,units,use_code\n"
+                + "12,2020,10.5,100,Fence,,90,2025,107.52,FENCE\n");
+
+        service.importExtraFeatures(path, "county", "state");
+
+        ArgumentCaptor<ExtraFeature> captor = ArgumentCaptor.forClass(ExtraFeature.class);
+        verify(entityManager).persist(captor.capture());
+        assertEquals(107.52, captor.getValue().getUnits(), 0.000001);
+        assertSame(property, captor.getValue().getProperty());
+    }
+
+    @Test
     void importsSalesUsingDatabaseCsvHeaders() throws Exception {
         Path path = csv("property_id,sale_id,sale_date,sale_price,sale_type,instrument_number,"
                 + "official_record_book,official_record_page,encoded_record_book_and_page,sale_instrument,"
                 + "document_stamps,qualified_flag,qualification_description,qualifiedsyear,qualified_source_code,"
                 + "reason_code,review_code,grantor_name1,grantor_name2,grantee_name1,grantee_name2,vacant_flag,message\n"
-                + "12,7,2025-01-02,125000.50, Residential , 000123 ,100,20,100/20,WD,100,Y,Qualified,2025,PA,"
+                + "12,0007-A,2025-01-02,125000.50, Residential , 000123 ,100,20,100/20,WD,100,Y,Qualified,2025,PA,"
                 + "R,V,Seller,,Buyer,,false,Imported\n");
 
         service.importSales(path, "county", "state");
@@ -77,6 +103,7 @@ class CsvImportServiceImplTest {
         ArgumentCaptor<Sale> captor = ArgumentCaptor.forClass(Sale.class);
         verify(entityManager).persist(captor.capture());
         Sale sale = captor.getValue();
+        assertEquals("0007-A", sale.getSaleId());
         assertSame(property, sale.getProperty());
         assertEquals("Residential", sale.getSaleType());
         assertEquals("000123", sale.getInstrumentNumber());
@@ -288,6 +315,21 @@ class CsvImportServiceImplTest {
         assertTrue(owners.getAllValues().get(0).getMarriedFlag());
         assertEquals(java.util.List.of(800L, 801L), property.getOwners().stream().map(Owner::getId).toList());
         assertEquals(java.util.List.of(800L), other.getOwners().stream().map(Owner::getId).toList());
+    }
+
+    @Test
+    void importsFractionalOwnershipWithoutTruncation() throws Exception {
+        assignOwnerIds();
+        Path owners = directory.resolve("owners.csv");
+        Files.writeString(owners, "id,name,description,role,percentage_own,short_description,tenancy_cd,married_flag,message\n"
+                + "1,Jane Doe,,OWNER,33.33,short,JT,Y,\n");
+        Path links = csv("property_id,owner_id\n12,1\n");
+
+        service.importOwners(owners, links, "county", "state");
+
+        ArgumentCaptor<Owner> captor = ArgumentCaptor.forClass(Owner.class);
+        verify(entityManager).persist(captor.capture());
+        assertEquals(new java.math.BigDecimal("33.33"), captor.getValue().getPercentageOwn());
     }
 
     @Test

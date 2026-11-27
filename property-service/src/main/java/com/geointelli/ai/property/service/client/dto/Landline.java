@@ -48,7 +48,7 @@ public class Landline {
     private Integer rollYear;
 
     @JsonProperty("TotalAdjustments")
-    private Integer totalAdjustments;
+    private String totalAdjustments;
 
     @JsonProperty("UnitType")
     private String unitType;

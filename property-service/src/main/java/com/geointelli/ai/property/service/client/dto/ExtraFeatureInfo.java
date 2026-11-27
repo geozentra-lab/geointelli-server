@@ -35,7 +35,7 @@ public class ExtraFeatureInfo {
     private Integer rollYear;
 
     @JsonProperty("Units")
-    private Integer units;
+    private Double units;
 
     @JsonProperty("UseCode")
     private String useCode;

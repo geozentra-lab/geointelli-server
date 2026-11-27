@@ -10,7 +10,7 @@ public class SaleDTO {
     private Long id;
 
     // Sale information
-    private Integer saleId;
+    private String saleId;
     private LocalDate saleDate;
     private BigDecimal salePrice;
 

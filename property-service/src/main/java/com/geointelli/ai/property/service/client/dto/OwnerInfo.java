@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.client.dto;
 
+import java.math.BigDecimal;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -20,7 +22,7 @@ public class OwnerInfo {
     private String role;
 
     @JsonProperty("PercentageOwn")
-    private Integer percentageOwn;
+    private BigDecimal percentageOwn;
 
     @JsonProperty("ShortDescription")
     private String shortDescription;

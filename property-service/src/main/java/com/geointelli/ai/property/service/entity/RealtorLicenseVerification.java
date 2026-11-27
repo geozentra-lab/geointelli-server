@@ -10,6 +10,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -37,7 +39,11 @@ public class RealtorLicenseVerification extends AuditableEntity {
     @Column(name = "license_holder_name", nullable = false, updatable = false, length = 160)
     private String licenseHolderName;
 
-    /** Two-letter US state code; only FL is accepted for now. */
+    /**
+     * Two-letter US state code; only FL is accepted for now. V37 made the column CHAR(2), so it is mapped as CHAR:
+     * as a plain String, ddl-auto=validate expects varchar(2) and refuses to start.
+     */
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(name = "licensing_state", nullable = false, updatable = false, length = 2)
     private String licensingState;
 
