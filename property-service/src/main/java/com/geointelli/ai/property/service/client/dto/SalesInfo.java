@@ -61,7 +61,7 @@ public class SalesInfo {
     private String reviewCode;
 
     @JsonProperty("SaleId")
-    private int saleId;
+    private String saleId;
 
     @JsonProperty("SaleInstrument")
     private String saleInstrument;

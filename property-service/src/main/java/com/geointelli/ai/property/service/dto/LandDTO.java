@@ -33,7 +33,7 @@ public class LandDTO {
 
     private Integer rollYear;
 
-    private Integer totalAdjustments;
+    private String totalAdjustments;
 
     private String unitType;
 

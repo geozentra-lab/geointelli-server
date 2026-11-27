@@ -46,7 +46,7 @@ public class Land extends AuditableEntity {
 
     private Integer rollYear;
 
-    private Integer totalAdjustments;
+    private String totalAdjustments;
 
     private String unitType;
 
