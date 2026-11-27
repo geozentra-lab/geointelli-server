@@ -15,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -70,7 +71,7 @@ public class AdminCoverageHealthServiceImplTest {
     private static final Instant NOV_12 = Instant.parse("2026-11-12T02:00:00Z");
     private static final ProviderJobStats NO_JOB = new ProviderJobStats(null, null, null, null, 0);
 
-    private static DataQualityRuleSummaryDTO rule(DataQualityRule rule, long count) {
+    private static DataQualityRuleSummaryDTO rule(DataQualityRule rule, Long count) {
         DataQualityRuleSummaryDTO summary = new DataQualityRuleSummaryDTO();
         summary.setRule(rule);
         summary.setIssueCount(count);
@@ -81,7 +82,7 @@ public class AdminCoverageHealthServiceImplTest {
     void setUp() {
         DataQualityReportDTO report = new DataQualityReportDTO();
         report.setGeneratedAt(GENERATED_AT);
-        report.setSummary(List.of(rule(DataQualityRule.SALE_DUPLICATE, 12), rule(DataQualityRule.ASSESSMENT_STALE, 340)));
+        report.setSummary(List.of(rule(DataQualityRule.SALE_DUPLICATE, 12L), rule(DataQualityRule.ASSESSMENT_STALE, 340L)));
         when(dataQualityService.getReport(null, 0, 1)).thenReturn(report);
         when(coverageHealthReader.countCoverage()).thenReturn(new CoverageCounts(1000, 990, 700, 950, 900, 400, 800));
         when(coverageHealthReader.ingestionJobStats(ImportJobType.PROPERTY_INGESTION))
@@ -167,6 +168,60 @@ public class AdminCoverageHealthServiceImplTest {
             assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.coverage().status());
             assertNull(dto.coverage().totalProperties());
             assertEquals(AdminCoverageHealthDTO.HEALTHY, provider(dto, AdminCoverageHealthServiceImpl.MIAMI_DADE_API).status());
+        }
+
+        @Test
+        @DisplayName("When no database connection can be had for the quality report, then only quality is unavailable")
+        void whenNoConnectionForQuality_thenOnlyQualityUnavailable() {
+            // Arrange
+            when(dataQualityService.getReport(null, 0, 1))
+                    .thenThrow(new CannotCreateTransactionException("Connection is not available"));
+
+            // Act
+            AdminCoverageHealthDTO dto = service.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.quality().status());
+            assertEquals("Data-quality findings could not be read", dto.quality().reason());
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.coverage().status());
+        }
+
+        @Test
+        @DisplayName("When the data-quality rules have no counts yet, then quality is unavailable as being calculated")
+        void whenNoQualityCountsYet_thenQualityCalculating() {
+            // Arrange
+            DataQualityReportDTO counting = new DataQualityReportDTO();
+            counting.setCalculating(true);
+            counting.setSummary(List.of(rule(DataQualityRule.SALE_DUPLICATE, null)));
+            when(dataQualityService.getReport(null, 0, 1)).thenReturn(counting);
+
+            // Act
+            AdminCoverageHealthDTO dto = service.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.quality().status());
+            assertEquals(AdminCoverageHealthServiceImpl.CALCULATING, dto.quality().reason());
+            assertNull(dto.quality().totalIssues());
+        }
+
+        @Test
+        @DisplayName("When a rule has no count, then the total is null instead of a partial sum and the rules are listed")
+        void whenRuleWithoutCount_thenTotalIsNull() {
+            // Arrange
+            DataQualityReportDTO partial = new DataQualityReportDTO();
+            partial.setGeneratedAt(GENERATED_AT);
+            partial.setSummary(List.of(rule(DataQualityRule.SALE_DUPLICATE, 12L),
+                    rule(DataQualityRule.LOT_SIZE_CONFLICT, null)));
+            when(dataQualityService.getReport(null, 0, 1)).thenReturn(partial);
+
+            // Act
+            AdminCoverageHealthDTO dto = service.getDashboard();
+
+            // Assert
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.quality().status());
+            assertNull(dto.quality().totalIssues());
+            assertEquals(2, dto.quality().rules().size());
+            assertEquals(GENERATED_AT, dto.quality().generatedAt());
         }
     }
 
@@ -254,21 +309,21 @@ public class AdminCoverageHealthServiceImplTest {
                 coverageHealthReader, 600, clock, background);
 
         @Test
-        @DisplayName("Before the first calculation ends, quality and coverage are unavailable with the reason, at once")
+        @DisplayName("Before the first coverage count ends, coverage is unavailable with the reason, at once; quality "
+                + "is read live from the data-quality counts")
         void whenFirstCalculationRunning_thenCalculatingWithoutWaiting() {
             // Act
             AdminCoverageHealthDTO dto = deferred.getDashboard();
 
             // Assert
-            assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.quality().status());
-            assertEquals(AdminCoverageHealthServiceImpl.CALCULATING, dto.quality().reason());
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.quality().status());
+            assertEquals(GENERATED_AT, dto.quality().generatedAt());
             assertEquals(AdminCoverageHealthDTO.UNAVAILABLE, dto.coverage().status());
             assertEquals(AdminCoverageHealthServiceImpl.CALCULATING, dto.coverage().reason());
             assertNull(dto.coverage().countedAt());
             assertEquals(AdminCoverageHealthDTO.HEALTHY, provider(dto, AdminCoverageHealthServiceImpl.MIAMI_DADE_API).status(),
                     "provider health is read live");
             assertEquals(1, background.queued.size());
-            verifyNoInteractions(dataQualityService);
             verify(coverageHealthReader, never()).countCoverage();
         }
 
@@ -304,7 +359,8 @@ public class AdminCoverageHealthServiceImplTest {
             assertEquals(clock.instant(), dto.observedAt());
             assertTrue(background.queued.isEmpty(), "no refresh within the period");
             verify(coverageHealthReader, times(1)).countCoverage();
-            verify(dataQualityService, times(1)).getReport(null, 0, 1);
+            // quality is read on each call from the counts the data-quality service keeps in memory
+            verify(dataQualityService, times(3)).getReport(null, 0, 1);
         }
 
         @Test
@@ -331,14 +387,13 @@ public class AdminCoverageHealthServiceImplTest {
         }
 
         @Test
-        @DisplayName("A refresh that cannot read the records keeps the last good counts with their older time")
+        @DisplayName("A coverage refresh that cannot read the records keeps the last good counts with their older time")
         void whenRefreshFails_thenLastGoodCountsKept() {
             // Arrange
             Instant firstCount = clock.instant();
             deferred.getDashboard();
             background.runAll();
             clock.advance(Duration.ofSeconds(700));
-            when(dataQualityService.getReport(null, 0, 1)).thenThrow(new DataAccessResourceFailureException("down"));
             when(coverageHealthReader.countCoverage()).thenThrow(new DataAccessResourceFailureException("down"));
 
             // Act
@@ -347,10 +402,9 @@ public class AdminCoverageHealthServiceImplTest {
             AdminCoverageHealthDTO dto = deferred.getDashboard();
 
             // Assert
-            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.quality().status());
-            assertEquals(GENERATED_AT, dto.quality().generatedAt());
             assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.coverage().status());
             assertEquals(firstCount, dto.coverage().countedAt());
+            assertEquals(AdminCoverageHealthDTO.AVAILABLE, dto.quality().status());
         }
 
         @Test

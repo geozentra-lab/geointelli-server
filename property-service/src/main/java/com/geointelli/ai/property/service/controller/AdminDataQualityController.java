@@ -14,7 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Admin data-quality issues (SCRUM-92 / SCRUM-189). Issues are detected by read-only rules: rule counts are
- * reused for a few minutes, issue pages are read on each request. Review and resolution are added by SCRUM-190.
+ * counted in the background and reused for a few minutes (SCRUM-206), issue pages are read on each request. Review
+ * and resolution are added by SCRUM-190.
  */
 @RestController
 @RequestMapping("/api/admin/data-quality")
@@ -31,15 +32,18 @@ public class AdminDataQualityController {
      * @param page zero-based page number of the issues
      * @param size page size, between 1 and 100
      * @return 200 with the summary of every rule and, when a rule is given, one page of its issues;
-     *         400 if the rule, page or size is invalid
+     *         400 if the rule, page or size is invalid; 503 if the issue page is not read within its time limit
      */
     @GetMapping("/issues")
     @Operation(summary = "Data-quality issues", description = "Always returns every rule with its category, source, "
             + "description and issue count. With rule, also returns one page of that rule's issues ordered by entity "
             + "ID, each with a reproducible reference RULE:entityType:entityId, the property folio and its provenance "
-            + "from property_import_mapping. Rule counts are reused for a few minutes (10 by default; "
-            + "generatedAt shows when they were calculated); the issue page is read on each request, so it can "
-            + "differ slightly from a reused count. No issue returns zero counts and an empty page.")
+            + "from property_import_mapping. Rule counts are counted in the background and reused for a few minutes "
+            + "(10 by default; generatedAt shows when they were calculated), so the answer never waits for them: "
+            + "while the first count runs, calculating is true and every issueCount is null; a rule whose count "
+            + "failed or took longer than its limit has a null issueCount and an unavailableReason. The issue page "
+            + "is read on each request within 30 seconds (503 otherwise), so it can differ slightly from a reused "
+            + "count. No issue returns zero counts and an empty page.")
     public ResponseEntity<DataQualityReportDTO> getIssues(@RequestParam(required = false) DataQualityRule rule,
                                                           @RequestParam(defaultValue = "0") int page,
                                                           @RequestParam(defaultValue = "20") int size) {
