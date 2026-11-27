@@ -1,9 +1,12 @@
 package com.geointelli.ai.property.service.controller;
 
 
+import com.geointelli.ai.property.service.dto.LocationIntelligenceDTO;
 import com.geointelli.ai.property.service.dto.SchoolContextDTO;
+import com.geointelli.ai.property.service.service.PropertyLocationIntelligenceService;
 import com.geointelli.ai.property.service.service.PropertySchoolContextService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Location intelligence of a property (SCRUM-53). Each section has its own endpoint so it can be verified
- * alone; the composed {@code GET /api/properties/id/{id}/location-intelligence} is added by SCRUM-128.
+ * alone; {@code GET /api/properties/id/{id}/location-intelligence} (SCRUM-128) returns the school, transport and
+ * risk sections together. The data describes places, not users: any authenticated caller may read any property.
  */
 @RestController
 @RequestMapping("/api/properties")
@@ -23,6 +27,29 @@ import org.springframework.web.bind.annotation.RestController;
 public class PropertyLocationIntelligenceController {
 
     private final PropertySchoolContextService propertySchoolContextService;
+    private final PropertyLocationIntelligenceService locationIntelligenceService;
+
+    /**
+     * Location intelligence of a property: the school, transport and risk sections in one response.
+     *
+     * @param id internal property ID
+     * @return 200 with status COMPLETE, PARTIAL (failed sections listed in errors, the others returned) or
+     *         UNAVAILABLE (no section could be read); 400 if the ID is invalid; 404 if the property does not exist
+     */
+    @GetMapping("/id/{id}/location-intelligence")
+    @Operation(summary = "Location intelligence of a property", description = "Returns the schools, transport and "
+            + "risk sections, each exactly as its own endpoint (/location-intelligence/schools, /transport, /risk). "
+            + "The sections are read independently: a section that fails is null and listed in errors with code "
+            + "SECTION_FAILED; a section whose data source is down keeps its UNAVAILABLE status and is listed with "
+            + "code SECTION_UNAVAILABLE. status is COMPLETE, PARTIAL or UNAVAILABLE. NO_COVERAGE inside a section "
+            + "is an answer, not an error. The neighborhood section is not built yet.")
+    @ApiResponse(responseCode = "200", description = "The sections, complete or partial")
+    @ApiResponse(responseCode = "400", description = "The ID is not a positive number")
+    @ApiResponse(responseCode = "401", description = "No token")
+    @ApiResponse(responseCode = "404", description = "No property has this ID")
+    public ResponseEntity<LocationIntelligenceDTO> getLocationIntelligence(@PathVariable Long id) {
+        return ResponseEntity.ok(locationIntelligenceService.getLocationIntelligence(id));
+    }
 
     /**
      * School section of the location intelligence of a property.
