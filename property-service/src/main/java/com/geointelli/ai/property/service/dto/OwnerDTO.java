@@ -1,5 +1,7 @@
 package com.geointelli.ai.property.service.dto;
 
+import java.math.BigDecimal;
+
 import lombok.Data;
 
 @Data
@@ -13,7 +15,7 @@ public class OwnerDTO {
 
     private String role;
 
-    private Integer percentageOwn;
+    private BigDecimal percentageOwn;
 
     private String shortDescription;
 

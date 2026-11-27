@@ -252,7 +252,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                         entity.setName(emptyToNull(record.get("name")));
                         entity.setDescription(emptyToNull(record.get("description")));
                         entity.setRole(emptyToNull(record.get("role")));
-                        entity.setPercentageOwn(parseInteger(record.get("percentage_own")));
+                        entity.setPercentageOwn(parseBigDecimal(record.get("percentage_own")));
                         entity.setShortDescription(emptyToNull(record.get("short_description")));
                         entity.setTenancyCd(emptyToNull(record.get("tenancy_cd")));
                         entity.setMarriedFlag(parseBoolean(record.get("married_flag")));
@@ -404,7 +404,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                                 entity.setPaZoneDescription(emptyToNull(record.get("pa_zone_description")));
                                 entity.setPercentCondition(parseDouble(record.get("percent_condition")));
                                 entity.setRollYear(parseInteger(record.get("roll_year")));
-                                entity.setTotalAdjustments(parseInteger(record.get("total_adjustments")));
+                                entity.setTotalAdjustments(emptyToNull(record.get("total_adjustments")));
                                 entity.setUnitType(emptyToNull(record.get("unit_type")));
                                 entity.setUnits(parseDouble(record.get("units")));
                                 entity.setUseCode(emptyToNull(record.get("use_code")));
@@ -414,7 +414,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                         };
                         case SALES -> (record, property) -> {
                                 Sale entity = new Sale();
-                                entity.setSaleId(parseInteger(record.get("sale_id")));
+                                entity.setSaleId(emptyToNull(record.get("sale_id")));
                                 entity.setSaleDate(parseLocalDate(record.get("sale_date")));
                                 entity.setSalePrice(parseBigDecimal(record.get("sale_price")));
                                 entity.setSaleType(emptyToNull(record.get("sale_type")));
@@ -463,7 +463,7 @@ public class CsvImportServiceImpl implements CsvImportService {
                                 entity.setMessage(emptyToNull(record.get("message")));
                                 entity.setPercentCondition(parseDouble(record.get("percent_condition")));
                                 entity.setRollYear(parseInteger(record.get("roll_year")));
-                                entity.setUnits(parseInteger(record.get("units")));
+                                entity.setUnits(parseDouble(record.get("units")));
                                 entity.setUseCode(emptyToNull(record.get("use_code")));
                                 entity.setProperty(property);
                                 entityManager.persist(entity);

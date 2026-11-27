@@ -4,7 +4,6 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        ddl-auto: validate
         dialect: org.hibernate.spatial.dialect.postgis.PostgisPG95Dialect
         jdbc:
           fetch_size: 10

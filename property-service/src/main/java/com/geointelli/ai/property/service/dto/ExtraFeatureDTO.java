@@ -22,7 +22,7 @@ public class ExtraFeatureDTO {
 
     private Integer rollYear;
 
-    private Integer units;
+    private Double units;
 
     private String useCode;
 }

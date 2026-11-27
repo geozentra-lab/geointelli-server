@@ -36,7 +36,7 @@ public class ExtraFeature extends AuditableEntity {
 
     private Integer rollYear;
 
-    private Integer units;
+    private Double units;
 
     private String useCode;
 

@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.entity;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import jakarta.persistence.Entity;
@@ -32,7 +33,7 @@ public class Owner extends AuditableEntity {
 
     private String role;
 
-    private Integer percentageOwn;
+    private BigDecimal percentageOwn;
 
     private String shortDescription;
 
