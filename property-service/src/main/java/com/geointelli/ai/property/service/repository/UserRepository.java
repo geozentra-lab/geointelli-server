@@ -55,11 +55,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findFirstByEmailIgnoreCaseOrderByIdDesc(String email);
 
     /**
-     * Admin search (see {@link #searchByPrefix}). The matches are sorted first, and the newest-row check runs only
-     * on the rows the LIMIT takes: as a filter over the sorted subquery, written as a scalar subquery so Postgres
-     * probes the email index row by row instead of hashing the whole table. Ranges, not LIKE, so a generic plan of
-     * the prepared statement still uses the indexes. UserSearchDatabaseTest checks this on PostgreSQL; timings are in
-     * its class comment.
+     * Admin search and lender organization owner search (see {@link #searchByPrefix}). The matches are sorted
+     * first, and the newest-row check runs only on the rows the LIMIT takes: as a filter over the sorted subquery,
+     * written as a scalar subquery so Postgres probes the email index row by row instead of hashing the whole table.
+     * Ranges, not LIKE, so a generic plan of the prepared statement still uses the indexes. UserSearchDatabaseTest
+     * checks this on PostgreSQL; timings are in its class comment.
      */
     String SEARCH = """
         SELECT s.id AS "id", s.email AS "email", s.first_name AS "firstName", s.last_name AS "lastName"
@@ -85,7 +85,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
      * Accounts whose email, full name ("first last") or last name starts with {@code prefix}, case ignored, for the
-     * admin search: {@code prefix} is lowercase and {@code prefixEnd} is
+     * admin search and the lender organization owner's search (GET .../members/search), which list the same accounts:
+     * {@code prefix} is lowercase and {@code prefixEnd} is
      * {@link com.geointelli.ai.property.service.util.UserSearch#upperBound} of it; the search columns come from V53.
      * Only the newest row of each email is returned, as in {@link #findFirstByEmailIgnoreCaseOrderByIdDesc}; by
      * email, code point order, rows without one last.

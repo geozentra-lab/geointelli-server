@@ -168,22 +168,27 @@ The current user's requests, newest first; one of them (404 when missing or anot
 
 All routes are under `/api/users/me/**` and `/api/admin/**`, so the SCRUM-94 route rules cover them unchanged.
 
-## Adding a lender organization member by email
+## Adding a lender organization member
 
 The owner of an organization finds the colleague first, then adds them by id:
 
-1. `GET /api/lender/organizations/{organizationId}/members/lookup?email=` (owner only) answers
-   `{"userId", "email", "firstName", "lastName", "member"}`; `member` is true when the account is already the owner or
-   a member. 400 missing or malformed email, 403 a member who is not the owner, 404 an outsider or no account uses the
-   email.
+1. Either of these (owner only); both answer `{"userId", "email", "firstName", "lastName", "member"}`, where `member`
+   is true when the account is already the owner or a member:
+   - `GET /api/lender/organizations/{organizationId}/members/search?q=jo&size=10`: suggestions while typing, an array
+     with the same accounts in the same order as the [admin user search](#admin-user-search) (same `q` and `size`
+     rules, `[]` when none). 400 `q` missing, under 2 or over 254 characters, `size` outside 1-25; 403 a member who is
+     not the owner; 404 an outsider.
+   - `GET /api/lender/organizations/{organizationId}/members/lookup?email=`: one account by exact email, case ignored.
+     400 missing or malformed email, 403 a member who is not the owner, 404 an outsider or no account uses the email.
 2. `POST /api/lender/organizations/{organizationId}/members` `{"userId": ...}` (unchanged, 204).
 
-Both lookups match the exact email, case ignored, and find an account only once its owner has signed in to GeoZentra
-at least once (the account row is created on the first call). The lender lookup is under `/api/lender/**` (lender or
-admin role).
+Accounts are found only once their owner has signed in to GeoZentra at least once (the account row is created on the
+first call). Both routes are under `/api/lender/**` (lender or admin role); the owner check is in
+`LenderOrganizationServiceImpl`, and neither locks the organization. The search reads the membership of the accounts
+it found in one query (`LenderOrganizationMemberRepository.findByOrganizationIdAndUserIdIn`).
 
-The lender lookup deliberately has no suggestions: with "starts with" matching, any organization owner could list
-other users' names and emails a few letters at a time. Suggestions are for admins only.
+Until 2026-11-27 suggestions were for admins only. Since then an organization owner, that is any lender who created an
+organization, can list other users' names and emails a few letters at a time, as an admin can.
 
 ## Admin user search
 

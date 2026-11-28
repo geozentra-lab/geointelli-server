@@ -3,7 +3,8 @@ package com.geointelli.ai.property.service.util;
 import java.util.Locale;
 
 /**
- * Text typed in the admin user search (GET /api/admin/users/search): matches the start of an email or a name.
+ * Text typed in the admin user search (GET /api/admin/users/search) or the lender organization owner's search
+ * (GET /api/lender/organizations/{organizationId}/members/search): matches the start of an email or a name.
  * "Starts with" is a range on the lowercase search columns of V53, which sort by code point (collation "C"): the
  * values starting with {@code prefix} are those from {@code prefix} (included) to {@link #upperBound} (excluded).
  */
