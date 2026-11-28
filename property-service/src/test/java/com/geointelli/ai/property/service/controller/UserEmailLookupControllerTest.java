@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.controller;
 
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -32,7 +33,10 @@ import com.geointelli.ai.property.service.service.LenderOrganizationService;
 import com.geointelli.ai.property.service.service.RealtorLicenseVerificationService;
 import com.geointelli.ai.property.service.service.UserService;
 
-/** HTTP binding of the two email lookups and the admin search; the route rules are in SecurityPolicyTest. */
+/**
+ * HTTP binding of the two email lookups and the two searches (admin, lender organization owner); the route rules are
+ * in SecurityPolicyTest.
+ */
 class UserEmailLookupControllerTest {
     private final UserService users = mock(UserService.class);
     private final RealtorLicenseVerificationService licenses = mock(RealtorLicenseVerificationService.class);
@@ -127,5 +131,50 @@ class UserEmailLookupControllerTest {
                     "Only the organization owner may manage members"));
         mvc.perform(get("/api/lender/organizations/11/members/lookup").param("email", "colleague@bank.example"))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ownerGetsSuggestionsWithMembershipAsTheAuthenticatedActorTenByDefault() throws Exception {
+        when(organizations.searchMembers(7L, 10L, "cle", 10)).thenReturn(List.of(
+            new LenderMemberLookupDTO(8L, "clement@bank.example", "Clement", "Rey", true),
+            new LenderMemberLookupDTO(9L, "cleo@bank.example", "Cleo", "Banks", false)));
+        when(organizations.searchMembers(7L, 10L, "cle", 3)).thenReturn(List.of());
+
+        mvc.perform(get("/api/lender/organizations/10/members/search").param("q", "cle"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].userId").value(8))
+            .andExpect(jsonPath("$[0].member").value(true))
+            .andExpect(jsonPath("$[1].userId").value(9))
+            .andExpect(jsonPath("$[1].email").value("cleo@bank.example"))
+            .andExpect(jsonPath("$[1].firstName").value("Cleo"))
+            .andExpect(jsonPath("$[1].lastName").value("Banks"))
+            .andExpect(jsonPath("$[1].member").value(false))
+            .andExpect(jsonPath("$[1].keycloakUserId").doesNotExist());
+        mvc.perform(get("/api/lender/organizations/10/members/search").param("q", "cle").param("size", "3"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void ownerSearchErrors() throws Exception {
+        mvc.perform(get("/api/lender/organizations/10/members/search")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/lender/organizations/10/members/search").param("q", "cle").param("size", "many"))
+            .andExpect(status().isBadRequest());
+        when(organizations.searchMembers(7L, 10L, "c", 10))
+            .thenThrow(new IllegalArgumentException("q must have at least 2 characters"));
+        mvc.perform(get("/api/lender/organizations/10/members/search").param("q", "c"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("q must have at least 2 characters"));
+        when(organizations.searchMembers(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(11L),
+                anyString(), anyInt())).thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the organization owner may manage members"));
+        mvc.perform(get("/api/lender/organizations/11/members/search").param("q", "cle"))
+            .andExpect(status().isForbidden());
+        when(organizations.searchMembers(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(12L),
+                anyString(), anyInt())).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Organization not found"));
+        mvc.perform(get("/api/lender/organizations/12/members/search").param("q", "cle"))
+            .andExpect(status().isNotFound());
     }
 }

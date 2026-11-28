@@ -1,7 +1,9 @@
 package com.geointelli.ai.property.service.service.impl;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,8 +16,10 @@ import com.geointelli.ai.property.service.entity.User;
 import com.geointelli.ai.property.service.repository.LenderOrganizationMemberRepository;
 import com.geointelli.ai.property.service.repository.LenderOrganizationRepository;
 import com.geointelli.ai.property.service.repository.UserRepository;
+import com.geointelli.ai.property.service.repository.UserRepository.SuggestionRow;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
 import com.geointelli.ai.property.service.util.UserEmails;
+import com.geointelli.ai.property.service.util.UserSearch;
 import lombok.RequiredArgsConstructor;
 
 /** Serializes membership changes and application writes for each organization, across application instances. */
@@ -76,6 +80,26 @@ public class LenderOrganizationServiceImpl implements LenderOrganizationService 
         boolean member = organization.getOwnerUserId().equals(user.getId())
             || memberships.existsByOrganizationIdAndUserId(organizationId, user.getId());
         return new LenderMemberLookupDTO(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName(), member);
+    }
+
+    /** The admin search's query and rules, then the membership of the accounts found, in one more query. */
+    @Override
+    @Transactional(readOnly = true)
+    public List<LenderMemberLookupDTO> searchMembers(Long actor, Long organizationId, String q, int size) {
+        LenderOrganization organization = requireOwner(actor, organizationId, false);
+        String prefix = UserSearch.prefix(q);
+        List<SuggestionRow> rows =
+            users.searchByPrefix(prefix, UserSearch.upperBound(prefix), UserSearch.size(size));
+        if (rows.isEmpty()) return List.of();
+        Set<Long> members = new HashSet<>();
+        members.add(organization.getOwnerUserId());
+        for (LenderOrganizationMember membership : memberships.findByOrganizationIdAndUserIdIn(organizationId,
+                rows.stream().map(SuggestionRow::getId).toList()))
+            members.add(membership.getUserId());
+        return rows.stream()
+            .map(row -> new LenderMemberLookupDTO(row.getId(), row.getEmail(), row.getFirstName(), row.getLastName(),
+                members.contains(row.getId())))
+            .toList();
     }
 
     @Override

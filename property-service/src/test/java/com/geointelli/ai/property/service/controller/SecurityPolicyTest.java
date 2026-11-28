@@ -102,7 +102,8 @@ class SecurityPolicyTest {
             "GET,/api/dashboards/investor,investor", "GET,/api/dashboards/investor/opportunities,investor",
             "GET,/api/dashboards/investor/income-expenses-returns,investor", "POST,/api/scenarios/7/calculate,investor",
             "GET,/api/dashboards/lender/application-pipeline,lender",
-            "GET,/api/lender/organizations/7/members/lookup?email=a@b.co,lender" })
+            "GET,/api/lender/organizations/7/members/lookup?email=a@b.co,lender",
+            "GET,/api/lender/organizations/7/members/search?q=da,lender" })
     void professionalFeatureRequiresItsOwnRoleOrAdmin(String method, String path, String role) throws Exception {
         mvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
         mvc.perform(request(HttpMethod.valueOf(method), path).header("Authorization", "Bearer user"))

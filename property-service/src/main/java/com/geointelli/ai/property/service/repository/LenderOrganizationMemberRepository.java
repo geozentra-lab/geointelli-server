@@ -1,5 +1,6 @@
 package com.geointelli.ai.property.service.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,6 +9,8 @@ import com.geointelli.ai.property.service.entity.LenderOrganizationMember;
 public interface LenderOrganizationMemberRepository extends JpaRepository<LenderOrganizationMember, Long> {
     boolean existsByOrganizationIdAndUserId(Long organizationId, Long userId);
     Optional<LenderOrganizationMember> findByOrganizationIdAndUserId(Long organizationId, Long userId);
+    /** Memberships of the organization held by any of these users, in one query (the owner has no row here). */
+    List<LenderOrganizationMember> findByOrganizationIdAndUserIdIn(Long organizationId, Collection<Long> userIds);
     List<LenderOrganizationMember> findByOrganizationIdOrderByUserId(Long organizationId);
     List<LenderOrganizationMember> findByUserIdOrderByOrganizationId(Long userId);
 }
