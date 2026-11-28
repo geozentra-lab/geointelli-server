@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -42,7 +43,7 @@ public class AdminDataQualityControllerTest {
         summary.setEntityType("SALE");
         summary.setSource("sales");
         summary.setDescription(DataQualityRule.SALE_DUPLICATE.getDescription());
-        summary.setIssueCount(1);
+        summary.setIssueCount(1L);
 
         DataQualityReportDTO report = new DataQualityReportDTO();
         report.setGeneratedAt(Instant.parse("2026-11-08T10:00:00Z"));
@@ -117,6 +118,55 @@ public class AdminDataQualityControllerTest {
             mockMvc.perform(get(URL).param("size", "101"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("size must be between 1 and 100"));
+        }
+
+        @Test
+        @DisplayName("While the first count runs, then return 200 at once with calculating, null counts and the reason")
+        void whenFirstCountRunning_thenReturnCalculatingWithoutCounts() throws Exception {
+            // Arrange
+            DataQualityReportDTO report = report();
+            report.setGeneratedAt(null);
+            report.setCalculating(true);
+            report.getSummary().get(0).setIssueCount(null);
+            report.getSummary().get(0).setUnavailableReason("Being counted in the background; refresh in a few minutes");
+            when(dataQualityService.getReport(null, 0, 20)).thenReturn(report);
+
+            // Act & Assert
+            mockMvc.perform(get(URL))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.calculating").value(true))
+                    .andExpect(jsonPath("$.generatedAt").isEmpty())
+                    .andExpect(jsonPath("$.summary[0].issueCount").isEmpty())
+                    .andExpect(jsonPath("$.summary[0].unavailableReason")
+                            .value("Being counted in the background; refresh in a few minutes"));
+        }
+
+        @Test
+        @DisplayName("When a counted rule has a count, then unavailableReason is absent")
+        void whenRuleHasCount_thenNoUnavailableReason() throws Exception {
+            // Arrange
+            when(dataQualityService.getReport(null, 0, 20)).thenReturn(report());
+
+            // Act & Assert
+            mockMvc.perform(get(URL))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.calculating").value(false))
+                    .andExpect(jsonPath("$.summary[0].unavailableReason").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("When the issue page is not read within its time limit, then return 503 with a clear message")
+        void whenIssuePageTimesOut_thenReturn503() throws Exception {
+            // Arrange
+            when(dataQualityService.getReport(DataQualityRule.LOT_SIZE_CONFLICT, 0, 20))
+                    .thenThrow(new QueryTimeoutException("canceling statement due to statement timeout"));
+
+            // Act & Assert
+            mockMvc.perform(get(URL).param("rule", "LOT_SIZE_CONFLICT"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.status").value(503))
+                    .andExpect(jsonPath("$.message").value("The issues of this rule took too long to read and the "
+                            + "request was stopped. Please try again later."));
         }
 
         @Test
