@@ -17,6 +17,7 @@ import com.geointelli.ai.property.service.dto.LenderOrganizationDTO;
 import com.geointelli.ai.property.service.dto.LenderOrganizationRequest;
 import com.geointelli.ai.property.service.service.CurrentUserService;
 import com.geointelli.ai.property.service.service.LenderOrganizationService;
+import com.geointelli.ai.property.service.util.UserSearch;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -62,8 +63,22 @@ public class LenderOrganizationController {
         return organizations.lookupMember(actor(), organizationId, email);
     }
 
+    @GetMapping("/{organizationId}/members/search")
+    @Operation(summary = "Suggest users to add while typing", description = "Owner only. The same accounts, in the "
+        + "same order, as the admin search GET /api/admin/users/search: email, full name (\"first last\") or last name "
+        + "starts with q, case ignored; surrounding spaces are removed and inner runs of spaces count as one. At most "
+        + "size entries (default 10, at most 25), by email (accounts without one last), newest row of each email "
+        + "only; an empty array when nothing matches. Each entry is {userId, email, firstName, lastName, member} as "
+        + "in GET /members/lookup: userId goes into the add-member call, member is true for the owner and current "
+        + "members. The person must have signed in to GeoZentra at least once. 400 q missing, under 2 or over 254 "
+        + "characters, size outside 1 to 25; 403 member who is not the owner; 404 outsider.")
+    public List<LenderMemberLookupDTO> searchMembers(@PathVariable Long organizationId, @RequestParam String q,
+            @RequestParam(defaultValue = "" + UserSearch.DEFAULT_SIZE) int size) {
+        return organizations.searchMembers(actor(), organizationId, q, size);
+    }
+
     @PostMapping("/{organizationId}/members")
-    @Operation(summary = "Grant access to an existing user", description = "Owner only. Body: userId (find it by email with GET /members/lookup). Repeating the same grant returns 204 without duplicating membership.")
+    @Operation(summary = "Grant access to an existing user", description = "Owner only. Body: userId (find it with GET /members/search while typing, or by exact email with GET /members/lookup). Repeating the same grant returns 204 without duplicating membership.")
     public ResponseEntity<Void> addMember(@PathVariable Long organizationId, @RequestBody LenderMemberRequest request) {
         Long actor = actor();
         if (request == null) throw new IllegalArgumentException("Request body is required");

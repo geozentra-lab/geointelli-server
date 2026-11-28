@@ -17,6 +17,14 @@ public interface LenderOrganizationService {
      * the email.
      */
     LenderMemberLookupDTO lookupMember(Long actor, Long organizationId, String email);
+    /**
+     * Owner only: suggestions while the owner types, so they can add a member. The same accounts in the same order as
+     * the admin search ({@link UserService#search}: email, full name or last name starts with {@code q}, case
+     * ignored, newest row of each email only), each with {@code member} true when it is already the owner or a
+     * member. 400 for {@code q} under 2 or over 254 characters or {@code size} outside 1 to 25, 403 for a member who is
+     * not the owner, 404 for an outsider.
+     */
+    List<LenderMemberLookupDTO> searchMembers(Long actor, Long organizationId, String q, int size);
     void removeMember(Long actor, Long organizationId, Long userId);
     /** Verifies membership. Writers lock the organization and recheck access until their transaction commits. */
     LenderOrganization requireAccess(Long actor, Long organizationId, boolean lock);
