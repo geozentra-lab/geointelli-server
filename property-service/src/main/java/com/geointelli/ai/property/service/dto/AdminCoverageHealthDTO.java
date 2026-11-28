@@ -42,7 +42,8 @@ public record AdminCoverageHealthDTO(
             @Schema(description = "AVAILABLE or UNAVAILABLE", example = AVAILABLE) String status,
             @Schema(description = "When the rule counts were calculated (UTC)")
             @JsonFormat(shape = JsonFormat.Shape.STRING) Instant generatedAt,
-            @Schema(description = "Issues over all rules; null when unavailable", example = "352") Long totalIssues,
+            @Schema(description = "Issues over all rules; null when unavailable or when a rule has no count "
+                    + "(see rules[].unavailableReason)", example = "352") Long totalIssues,
             @Schema(description = "Issues per rule") List<DataQualityRuleSummaryDTO> rules,
             @Schema(description = "Why the block is unavailable; null otherwise") String reason) {}
 
