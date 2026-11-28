@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -36,12 +37,13 @@ import java.util.function.Supplier;
 
 /**
  * Builds the dashboard without making the caller wait for the expensive counts. The data-quality scan (SCRUM-189)
- * and the coverage counts read whole tables (about two minutes on 580,000 properties), so they are kept in memory
- * as one snapshot, each with its own time, and recalculated on a background thread once the snapshot is older than
- * {@code admin.coverage-health.refresh-seconds}. A request returns the snapshot it finds at once; before the first
- * snapshot exists, quality and coverage are UNAVAILABLE with the reason that they are being calculated. Provider
- * health reads a few rows per provider and is always read live. Nothing runs while nobody asks for the dashboard,
- * and only one refresh runs at a time.
+ * and the coverage counts read whole tables (about two minutes on 580,000 properties). The quality block is taken on
+ * each request from the counts the data-quality service keeps in memory and recalculates in the background
+ * (SCRUM-206), so it never waits for a recount. The coverage counts are kept here as one snapshot with its time and
+ * recalculated on a background thread once it is older than {@code admin.coverage-health.refresh-seconds}. A request
+ * returns what it finds at once; before the first count exists, quality and coverage are UNAVAILABLE with the reason
+ * that they are being calculated. Provider health reads a few rows per provider and is always read live. Nothing
+ * runs while nobody asks for the dashboard, and only one coverage refresh runs at a time.
  */
 @Service
 @Slf4j
@@ -61,11 +63,11 @@ public class AdminCoverageHealthServiceImpl implements AdminCoverageHealthServic
     private final Clock clock;
     private final Executor refresher;
     private final AtomicBoolean refreshing = new AtomicBoolean();
-    /** Last quality and coverage blocks with the time they were read; null until the first refresh ends. */
+    /** Last coverage block with the time it was read; null until the first refresh ends. */
     private volatile Snapshot snapshot;
 
-    /** Quality and coverage as read at {@code takenAt}. */
-    record Snapshot(Quality quality, Coverage coverage, Instant takenAt) {
+    /** Coverage as read at {@code takenAt}. */
+    record Snapshot(Coverage coverage, Instant takenAt) {
     }
 
     @Autowired
@@ -111,9 +113,7 @@ public class AdminCoverageHealthServiceImpl implements AdminCoverageHealthServic
             // a refresh that ran on the calling thread (tests) is already visible; a background one is not yet
             current = snapshot;
         }
-        Quality quality = current == null
-                ? new Quality(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(), CALCULATING)
-                : current.quality();
+        Quality quality = quality();
         Coverage coverage = current == null
                 ? new Coverage(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(), CALCULATING)
                 : current.coverage();
@@ -130,7 +130,7 @@ public class AdminCoverageHealthServiceImpl implements AdminCoverageHealthServic
                 try {
                     refresh();
                 } catch (RuntimeException e) {
-                    log.warn("Coverage and quality could not be refreshed ({})", e.getClass().getSimpleName());
+                    log.warn("Coverage could not be refreshed ({})", e.getClass().getSimpleName());
                 } finally {
                     refreshing.set(false);
                 }
@@ -141,40 +141,44 @@ public class AdminCoverageHealthServiceImpl implements AdminCoverageHealthServic
     }
 
     /**
-     * Reads quality and coverage now. A block whose records cannot be read keeps its last good value, with its own
-     * older time, rather than replacing it with an error; without a good value it is UNAVAILABLE.
+     * Reads coverage now. When its records cannot be read, it keeps its last good value, with its older time, rather
+     * than replacing it with an error; without a good value it is UNAVAILABLE.
      */
     void refresh() {
         Snapshot previous = snapshot;
         Instant takenAt = clock.instant();
-        Quality quality = quality();
-        if (quality == null) {
-            quality = previous != null && AdminCoverageHealthDTO.AVAILABLE.equals(previous.quality().status())
-                    ? previous.quality()
-                    : new Quality(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(),
-                            "Data-quality findings could not be read");
-        }
-        // the quality scan can take minutes, so the coverage counts get their own time
-        Coverage coverage = coverage(clock.instant());
+        Coverage coverage = coverage(takenAt);
         if (coverage == null) {
             coverage = previous != null && AdminCoverageHealthDTO.AVAILABLE.equals(previous.coverage().status())
                     ? previous.coverage()
                     : new Coverage(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(),
                             "Coverage counts could not be read");
         }
-        snapshot = new Snapshot(quality, coverage, takenAt);
+        snapshot = new Snapshot(coverage, takenAt);
     }
 
-    /** Rule counts of the data-quality scan, the summary only; null when they cannot be read. */
+    /**
+     * Rule counts of the data-quality scan, the summary only, as the data-quality service keeps them; it answers at
+     * once and recounts in the background (SCRUM-206). UNAVAILABLE before the first count ends or when the report
+     * cannot be read. The total is null when a rule has no count, never a partial sum.
+     */
     private Quality quality() {
         DataQualityReportDTO report;
         try {
             report = dataQualityService.getReport(null, 0, 1);
-        } catch (DataAccessException e) {
-            return null;
+        } catch (DataAccessException | TransactionException e) {
+            return new Quality(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(),
+                    "Data-quality findings could not be read");
         }
-        long totalIssues = 0;
+        if (report.getGeneratedAt() == null) {
+            return new Quality(AdminCoverageHealthDTO.UNAVAILABLE, null, null, List.of(), CALCULATING);
+        }
+        Long totalIssues = 0L;
         for (DataQualityRuleSummaryDTO rule : report.getSummary()) {
+            if (rule.getIssueCount() == null) {
+                totalIssues = null;
+                break;
+            }
             totalIssues += rule.getIssueCount();
         }
         return new Quality(AdminCoverageHealthDTO.AVAILABLE, report.getGeneratedAt(), totalIssues,
